@@ -5,6 +5,8 @@ pre {
   margin: 0;
 }
 table.markdown {
+  max-width: 8.5in;
+
   border-spacing: 0;
 }
 table.markdown td {
