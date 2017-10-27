@@ -4,34 +4,29 @@ body {
 pre {
   margin: 0;
 }
+table.markdown {
+  border-spacing: 0;
+}
+table.markdown td {
+  padding: 0.1em 0.25em;
+
+  vertical-align: top;
+}
 .line {
-  position: relative;
-
-  clear: both;
-
-  box-sizing: border-box;
-  min-height: 1.65em; /* 1em * 1.45 line-height + 2 * 0.1 padding */
-  padding: 0.1em 0;
-  padding-left: 5rem;
-
+  font-family: 'SF Mono', 'Inconsolata', monospace;
+}
+.line td {
   border-bottom: solid 0.5px #eee;
 
-  font-family: 'SF Mono', 'Inconsolata', monospace;
   white-space: pre-wrap;
 }
-.line:before {
-  position: absolute;
-  left: 0;
+.line-number {
+  min-width: 3em;
+  padding-right: 0.5em !important;
 
-  display: block;
-
-  width: 4em;
-
-  color: #333;
-  font-weight: bold;
+  color: #aaa;
   text-align: right;
-
-  content: attr(data-line) '.';
-
-  background: #eee;
+}
+.line-number:before {
+  content: attr(data-line-number) '.';
 }

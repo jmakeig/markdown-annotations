@@ -7,182 +7,184 @@
   <script src="annotate.js" type="text/javascript"></script>
 </head>
 <body>
-<article class="markdown">
-<pre id="L1" class="line" data-line="1">---</pre>
-<pre id="L2" class="line" data-line="2">title: MarkLogic Consolidated Vision</pre>
-<pre id="L3" class="line" data-line="3">author:</pre>
-<pre id="L4" class="line" data-line="4">- Justin Makeig</pre>
-<pre id="L5" class="line" data-line="5">history: |</pre>
-<pre id="L6" class="line" data-line="6">&#10;</pre>
-<pre id="L7" class="line" data-line="7">  * **2017-10-23** (@jmakeig): Solicited feedback from @dgorbet, @jpasqua, @arosenbaum, and @jclark on the intro corporate strategy section</pre>
-<pre id="L8" class="line" data-line="8">  * **2017-10-20** (@jmakeig): Initial draft workshopped with @dgorbet. Next steps:</pre>
-<pre id="L9" class="line" data-line="9">&#10;</pre>
-<pre id="L10" class="line" data-line="10">      1. Clean up headings to reflect customer benefit</pre>
-<pre id="L11" class="line" data-line="11">      1. Add one or two paragraphs to each heading to explain. The point is to have a discussion, not implement (yet)</pre>
-<pre id="L12" class="line" data-line="12">      1. Circulate a draft to PM 2017-10-23</pre>
-<pre id="L13" class="line" data-line="13">      1. Get feedback in PM staff 2017-10-24</pre>
-<pre id="L14" class="line" data-line="14">      </pre>
-<pre id="L15" class="line" data-line="15">...</pre>
-<pre id="L16" class="line" data-line="16">&#10;</pre>
-<pre id="L17" class="line" data-line="17">MarkLogic’s strategy is to sell enterprise software licenses to named accounts in specific verticals and geographies: Financial Services, Insurance, Media, Pharmaceutical and Life Sciences, State and Local Government, and Intelligence and Law Enforcement in the United States, Western Europe, and APAC.</pre>
-<pre id="L18" class="line" data-line="18">&#10;</pre>
-<pre id="L19" class="line" data-line="19">Our approach is to “land and expand”, where we enter a large organization with small, relatively quick wins to demonstrate value in order to convince them to grow their overall MarkLogic footprint. Reference selling is key to this approach: </pre>
-<pre id="L20" class="line" data-line="20">&#10;</pre>
-<pre id="L21" class="line" data-line="21">  1. By establishing internal champions with demonstrated success, selling within an organization is easier than entering new organizations  </pre>
-<pre id="L22" class="line" data-line="22">  1. There are additive benefits of having more MarkLogic throughout an organization that we can capture</pre>
-<pre id="L23" class="line" data-line="23">&#10;</pre>
-<pre id="L24" class="line" data-line="24">Our early customers sought disruption, for example publishers that needed to digitize or go out of business. These customers were looking for a technology solution that they could use to differentiate themselves. As visionaries, they were able to map MarkLogic’s technology to their problems and valued our unorthodox approach. However, our next wave of customers is significantly more conservative. They are looking to modernize their infrastructure, often as the result of increasing regulatory oversight, *without* disrupting their business. They want to do just enough to solve their looming siloed data problems, not re-platform.</pre>
-<pre id="L25" class="line" data-line="25">&#10;</pre>
-<pre id="L26" class="line" data-line="26">Our sales will continue to be mostly direct. However, our engagement with customers does not end at the time of sale. MarkLogic Consulting helps customers and partners implement solutions with MarkLogic in order to sell licenses. Growing our consulting business is not an end in itself, but is a means for increasing the amount and the velocity of license sales. As a result, self-sufficiency for our customers and partners is a key goal of our consulting efforts.</pre>
-<pre id="L27" class="line" data-line="27">&#10;</pre>
-<pre id="L28" class="line" data-line="28">Large systems integrator partners are critical to our ability to scale. They are the boots already on the ground in most all our target markets. We need to empower them to be able to implement and ultimately sell MarkLogic to *their* customers without heroic efforts from our Consulting or Alliances organization. </pre>
-<pre id="L29" class="line" data-line="29">&#10;</pre>
-<pre id="L30" class="line" data-line="30">## The Best Way to Integrate Data from Silos {#silos}</pre>
-<pre id="L31" class="line" data-line="31">&#10;</pre>
-<pre id="L32" class="line" data-line="32">The primary focus of MarkLogic’s sales and product strategy is *data integration*. Data integration is the process of combining data in order to do something more with it together than was possible in isolation. The two primary advantages of integrated data—the end state of data integration—are:</pre>
-<pre id="L33" class="line" data-line="33">&#10;</pre>
-<pre id="L34" class="line" data-line="34">  * **360º View:** A more complete picture of an organization’s operations by triangulating and relating core concepts, like Customer or Product, from the different aspects captured in siloed systems</pre>
-<pre id="L35" class="line" data-line="35">  * **Governance:** Centralized management and enforcement of security, privacy, quality, availability, chain of custody, retention, etc. in order to reduce risk and meet regulatory and legal obligations.</pre>
-<pre id="L36" class="line" data-line="36">&#10;</pre>
-<pre id="L37" class="line" data-line="37">We differentiate our approach along three principal dimensions:</pre>
-<pre id="L38" class="line" data-line="38">&#10;</pre>
-<pre id="L39" class="line" data-line="39">  1. Decreased time to value</pre>
-<pre id="L40" class="line" data-line="40">  1. Improved agility to manage changes</pre>
-<pre id="L41" class="line" data-line="41">  1. Provable governance</pre>
-<pre id="L42" class="line" data-line="42">&#10;</pre>
-<pre id="L43" class="line" data-line="43">MarkLogic’s approach to data integration manifests itself as a *data hub*. A data hub is an architecture that brings together data from different places, in different formats, with different meanings, and of varying quality. A hub allows a data architect, who is familiar with the processes and policies of his organization, to harmonize the definitions of data that drives these policies and the rules that govern it, such that downstream applications do not need to know how to implement this logic themselves. These definitions and rules should be expected to change significantly over time and may vary across the applications in which the data is used, according to the data’s “fitness for purpose”. </pre>
-<pre id="L44" class="line" data-line="44">&#10;</pre>
-<pre id="L45" class="line" data-line="45">A data hub is generally not the system of record for the data it integrates. For example, MarkLogic would not replace the front-end trading systems at an investment bank. However, it provides the most reliable way to make decisions that span data from different systems of record over time, even as those systems change or go away completely.</pre>
-<pre id="L46" class="line" data-line="46">&#10;</pre>
-<pre id="L47" class="line" data-line="47">Data integration in MarkLogic is a continuous cycle. It is never “done”, but rather a virtuous feedback loop of: </pre>
-<pre id="L48" class="line" data-line="48">&#10;</pre>
-<pre id="L49" class="line" data-line="49">  1. Exposing domain-specific APIs for operations or analytics in bulk or real-time according to governance policies</pre>
-<pre id="L50" class="line" data-line="50">  1. Getting data and its metadata from upstream systems and capturing its lineage as it is moved</pre>
-<pre id="L51" class="line" data-line="51">  1. Figuring out what that data is and how it relates to existing data and validating against existing governance rules</pre>
-<pre id="L52" class="line" data-line="52">  1. Just-in-time modeling of the canonical concepts that underlie the data and the rules that govern them, not necessarily dependent on how the data was sourced</pre>
-<pre id="L53" class="line" data-line="53">  1. Mapping raw data to canonical forms, materializing as appropriate for efficient query and governance</pre>
-<pre id="L54" class="line" data-line="54">  1. Mapping internal models to external models for sharing as APIs</pre>
-<pre id="L55" class="line" data-line="55">&#10;</pre>
-<pre id="L56" class="line" data-line="56">The entire cycle (or sub-cycles) is constantly repeated. As a data architect adds more context to the data, the database becomes “smarter”. In other words, an architect should be able to express the intent of his policies and a MarkLogic data hub will optimize the implementation of those policies. For example, he might designate an `SSN` property of a person to be personally identifiable (PII), according to a regulation. Because he has already declared how to apply security and redaction policy to all PII data in a particular context, his `SSN` data is automatically secured. He can look up which data is PII and show over time who has had access. He can provide heuristics of what SSN data looks like and the data hub can automatically alert him if it sees SSN data that is not secured. </pre>
-<pre id="L57" class="line" data-line="57">&#10;</pre>
-<pre id="L58" class="line" data-line="58">The data hub architecture is not something that we have invented in this planning cycle. It is a solution that has evolved in multiple customer and prospect engagements and leverages almost all of our existing technology stack: A data hub is operational and thus must be secure and highly available; Assessing quality over ill defined data necessarily requires the flexibility of search; Semantics is the best way to express and query complex relationships among data; etc. </pre>
-<pre id="L59" class="line" data-line="59">&#10;</pre>
-<pre id="L60" class="line" data-line="60">### Understand the Value of a Data Hub {#understand}</pre>
-<pre id="L61" class="line" data-line="61">&#10;</pre>
-<pre id="L62" class="line" data-line="62">The most important aspect of us being successful selling data integration is for our customers to be able to understand that value that MarkLogic brings to their data integration problems and how they might be able to apply those, given their existing constraints (e.g. budget, developer skills, capacity for change).</pre>
-<pre id="L63" class="line" data-line="63">&#10;</pre>
-<pre id="L64" class="line" data-line="64">#### Understand How to Solve Common Data Integration Problems {#solve-problems}</pre>
-<pre id="L65" class="line" data-line="65">&#10;</pre>
-<pre id="L66" class="line" data-line="66">MarkLogic provides many different ways to solve data integration problems. However, it is not apparent to non-expert users how to map their problems to the capabilities that MarkLogic offers. </pre>
-<pre id="L67" class="line" data-line="67">&#10;</pre>
-<pre id="L68" class="line" data-line="68">We need to be able to communicate to developers *and* business users which problems MarkLogic is good at solving and how to assemble capabilities into  solutions. This must be conveyed consistently in all of our communications, from API and UI design to documentation to training materials to SE demos. </pre>
-<pre id="L69" class="line" data-line="69">&#10;</pre>
-<pre id="L70" class="line" data-line="70">  1. Map her problems to the use cases that we support.</pre>
-<pre id="L71" class="line" data-line="71">  1. Find those use cases, using her own terminology, in our technical collateral (documentation, demos, recipes, snippets, videos, OSS projects, etc.)</pre>
-<pre id="L72" class="line" data-line="72">  1. Translate those examples to her actual environment and constraints.</pre>
-<pre id="L73" class="line" data-line="73">&#10;</pre>
-<pre id="L74" class="line" data-line="74">&#10;</pre>
-<pre id="L75" class="line" data-line="75">#### Demonstrate the Value of Our Approach {#demo}</pre>
-<pre id="L76" class="line" data-line="76">&#10;</pre>
-<pre id="L77" class="line" data-line="77">We need to be able to demonstrate the value of our data integration approach without having to ramp up a bespoke application for each use case. When determining which tools (especially GUI) we ship as product and/or promote broadly, this should be a key part of the calculus: Will this reduce that time and one-off effort it takes to demonstrate our data integration story? Today, we often sell the sizzle of BI dashboards and faceted search browser apps in demos, rather than the actual value we add in data integration. This sets the wrong expectations and undersells our actual benefit. (“Can you put the logo in the upper left corner?” or “Can I add another facet?” rather than “How do I validate Encounters only in the context of Quality of care?” or “How do I map my data to the push service that I route through my ESB?”) We may need to stand up an Angular (or React or Aurelia) app to show a customer-specific workflow, but that should be the exception, not the rule. The (whole) product needs to arm sales with general tools that can provide a compelling stroll through the data integration process visually, for an architect or developer, or even a business user, making our sales process much less reliant on custom demos.</pre>
-<pre id="L78" class="line" data-line="78">&#10;</pre>
-<pre id="L79" class="line" data-line="79">To accomplish that, users need to be able to touch and feel their data as it relates to their actual needs. For business users, this means integration with BI and reporting tools that don’t require any coding to use. For developers, data scientists, and MarkLogic SEs, however, we should provide a way to quickly sketch up and share data analysis *code* that tells a story with real data and compelling visuals without having to stand up a full application.</pre>
-<pre id="L80" class="line" data-line="80">&#10;</pre>
-<pre id="L81" class="line" data-line="81">### Use a Data Hub {#use}</pre>
-<pre id="L82" class="line" data-line="82">&#10;</pre>
-<pre id="L83" class="line" data-line="83">A MarkLogic data hub is primarily *operational*, meaning it is used for running a business, rather than just observing a business. This differentiates a data hub from a data warehouse, because an operational application is a living breathing thing with real-time updates and data, metadata, and policy constantly changing. </pre>
-<pre id="L84" class="line" data-line="84">&#10;</pre>
-<pre id="L85" class="line" data-line="85">At the highest level, we must provide precise access to high-quality, governed data to downstream consumers, in the environment in which they work. This targets three primary audiences, in descending order of priority:</pre>
-<pre id="L86" class="line" data-line="86">&#10;</pre>
-<pre id="L87" class="line" data-line="87">#### Application Architects with APIs {#apis}</pre>
-<pre id="L88" class="line" data-line="88">&#10;</pre>
-<pre id="L89" class="line" data-line="89">MarkLogic can be integrated into a customer’s environment in many different ways. This flexibility is both powerful and confusing. Most of our big (by revenue—land—and potential—expand) customers integrate with MarkLogic via APIs. The end user interface may be a UI several infrastructure, and org boundaries, away from MarkLogic. Or it may not be a GUI app at all: In a big enterprise MarkLogic likely feeds Hadoop, EDW, or ESB, where the data is used in a different downstream process. </pre>
-<pre id="L90" class="line" data-line="90">&#10;</pre>
-<pre id="L91" class="line" data-line="91">We need to reorient how we position MarkLogic in an architecture. We should embrace microservices and SOA and lead with that as the primary way the a customer would integrate MarkLogic in a production data hub. End users probably do not interact directly with a MarkLogic data hub, but the MarkLogic data hub makes those interactions better. </pre>
-<pre id="L92" class="line" data-line="92">&#10;</pre>
-<pre id="L93" class="line" data-line="93">#### Business Analysts in BI Tools {#bi}</pre>
-<pre id="L94" class="line" data-line="94">&#10;</pre>
-<pre id="L95" class="line" data-line="95">It is imperative that a MarkLogic be able to integrate with the tools that business analysts use today to make and verify decisions. A data hub needs to provide precise access to high-quality, governed data to mainstream BI and reporting tools, such as Tableau or Power BI. Today, those tools mostly work with tabular data via SQL. </pre>
-<pre id="L96" class="line" data-line="96">&#10;</pre>
-<pre id="L97" class="line" data-line="97">#### Data Scientists in Analytics Tools {#analytics}</pre>
-<pre id="L98" class="line" data-line="98">&#10;</pre>
-<pre id="L99" class="line" data-line="99">Increasingly, organizations rely on sophisticated statistics and machine learning to run their businesses. However, these algorithms are only as good and trustworthy as the data that underlie them. These users will be able to rely on a MarkLogic data hub to provide precise, governed data for their analytics environments, such as Spark, R, and Python. </pre>
-<pre id="L100" class="line" data-line="100">&#10;</pre>
-<pre id="L101" class="line" data-line="101">Like with BI or end-user applications, MarkLogic will not *be* the analytics platform, but rather to make the analytics platform that our customers’ data scientists are already using today (and tomorrow) better and more trustworthy, by being able to easily extract precise, governed data from their operational data hub. </pre>
-<pre id="L102" class="line" data-line="102">&#10;</pre>
-<pre id="L103" class="line" data-line="103">### Build a Data Hub {#build}</pre>
-<pre id="L104" class="line" data-line="104">&#10;</pre>
-<pre id="L105" class="line" data-line="105">In the near-term, we need to demonstrate and document the capabilities that are already available today to solve end-to-end data integration problems. We need to make it possible for a developer to go from our marketing to production code on her own. This means being able to </pre>
-<pre id="L106" class="line" data-line="106">&#10;</pre>
-<pre id="L107" class="line" data-line="107">1. Map her problems to the use cases that we support.</pre>
-<pre id="L108" class="line" data-line="108">1. Find those use cases, using her own terminology, in our technical collateral (documentation, demos, recipes, snippets, videos, OSS projects, etc.)</pre>
-<pre id="L109" class="line" data-line="109">1. Translate those examples to her actual environment and constraints.</pre>
-<pre id="L110" class="line" data-line="110">1. Extend (or narrow) when the fit isn’t exact.</pre>
-<pre id="L111" class="line" data-line="111">1. Verify that what she did works—on her laptop and in production.</pre>
-<pre id="L112" class="line" data-line="112">1. Recognize and fix performance problems at scale.</pre>
-<pre id="L113" class="line" data-line="113">&#10;</pre>
-<pre id="L114" class="line" data-line="114">Our tools and techniques also need to catch up to the fact that our customers are not primarily building two-tiered faceted search applications anymore. We have added additional capabilities around semantic and relational data. However, these feel bolted on, creating (ironic) silos. </pre>
-<pre id="L115" class="line" data-line="115">&#10;</pre>
-<pre id="L116" class="line" data-line="116">> “Is my app a search app? Semantic? Relational? How do I know?”  </pre>
-<pre id="L117" class="line" data-line="117">> ”What if I need to do some of each? Do I have to learn them all?”   </pre>
-<pre id="L118" class="line" data-line="118">> “What if I choose wrong? How do I even know if I’ve chosen wrong?”  </pre>
-<pre id="L119" class="line" data-line="119">&#10;</pre>
-<pre id="L120" class="line" data-line="120">Developers should be presented with single way to access the core data operations of the database: Filter, join, map, group (reduce), order, limit, project (select), update, etc. As with SQL in relational databases, they should be able to express their intent and the database should optimize their query based on the changing context in which it operates. Moving performance critical “data logic” between clients or even between an E-node an external application should be mostly copy paste. The concepts and performance strategies of MakrLogic queries should be the same, no matter what is executing the query. For example, a user should be able to paste and example from the docs into Query Console, edit to her needs, and then paste into Java (or Node or Python) and only change the _syntax_ of the code, not the core _semantics_.</pre>
-<pre id="L121" class="line" data-line="121">&#10;</pre>
-<pre id="L122" class="line" data-line="122">#### Reduce Idiosyncratic Coding for Common Capabilities {#lo-code}</pre>
-<pre id="L123" class="line" data-line="123">&#10;</pre>
-<pre id="L124" class="line" data-line="124"> Finally, the fastest and most reliable code is the code you do not write at all. MarkLogic should be able to provide more capabilities to developers with less custom coding. In particular, we should provide orchestration for the two primary use cases for custom code today:</pre>
-<pre id="L125" class="line" data-line="125">&#10;</pre>
-<pre id="L126" class="line" data-line="126">  1. Upstream “ETL” processing, such as mapping, harmonizing, and transformation</pre>
-<pre id="L127" class="line" data-line="127">  1. Downstream delivery, starting with HTTP data services served out of MarkLogic’s built-in HTTP server.</pre>
-<pre id="L128" class="line" data-line="128">&#10;</pre>
-<pre id="L129" class="line" data-line="129">We also need to think less about full-blown applications, and more about small, single-purpose pieces of code that are easy to write, reason, and test and tools to weave them together. [Amazon’s Lambda](https://aws.amazon.com/lambda/), for example, provides a “low-code” way to implement a specific piece of functionality without having to think about the wiring, marshalling, deployment, etc. that make applications difficult. A lambda is a magical JavaScript function in the cloud. We should move in this direction for building ETL processes and data services, allowing users to focus on small, specific tasks and have the platform figure out how make them available securely, leveraging the capabilities of the cloud platform on which they are deployed.</pre>
-<pre id="L130" class="line" data-line="130">&#10;</pre>
-<pre id="L131" class="line" data-line="131">#### Establish best practices and preferred dev tools {#best-practices}</pre>
-<pre id="L132" class="line" data-line="132">&#10;</pre>
-<pre id="L133" class="line" data-line="133">We need to tell users how to integrate MarkLogic into a modern software development process, not just how to use MarkLogic. The pragmatist and conservative developers that we need to reach do not know how to test their MarkLogic code and may not even have formal testing in the rest of their stack. We need help these teams not only to properly implement MarkLogic, but how MarkLogic fits into a modern and proven development workflow. This includes testing, configuration management, source control, security best practices, deployment and continuous integration, etc. Our products and methodologies will reinforce these best practices.</pre>
-<pre id="L134" class="line" data-line="134">&#10;</pre>
-<pre id="L135" class="line" data-line="135">Provide specific recommendations of tools and techniques when a development team looks to us for guidance. Capture this in Consulting methodology that we can enforce.</pre>
-<pre id="L136" class="line" data-line="136">&#10;</pre>
-<pre id="L137" class="line" data-line="137">  - Application architecture best practices, starting with SOA and microservices.</pre>
-<pre id="L138" class="line" data-line="138">  - Deploying code and configuration, including diffing and rollback (see also Operations vision)</pre>
-<pre id="L139" class="line" data-line="139">  - Source code control, especially for modules that are deployed to a database</pre>
-<pre id="L140" class="line" data-line="140">  - Editing code: inline API docs/suggestions, lint, pretty, specific IDE integration</pre>
-<pre id="L141" class="line" data-line="141">  - Testing: unit, integration, continuous</pre>
-<pre id="L142" class="line" data-line="142">  - Debugging</pre>
-<pre id="L143" class="line" data-line="143">  - Tracing and fixing performance problems (see also Operations vision)</pre>
-<pre id="L144" class="line" data-line="144">  - Documentation</pre>
-<pre id="L145" class="line" data-line="145">&#10;</pre>
-<pre id="L146" class="line" data-line="146">### Deploy and Operate a Data Hub {#operate}</pre>
-<pre id="L147" class="line" data-line="147">&#10;</pre>
-<pre id="L148" class="line" data-line="148">#### Smart data hub {#smart}</pre>
-<pre id="L149" class="line" data-line="149">&#10;</pre>
-<pre id="L150" class="line" data-line="150">As a data architect provides more definitions and rules, the database automatically gets “smarter” in implementing those rules and overall governance. The primary mode of interacting with a “smart” data hub is by expressing intent, rather than implementation. A smart data hub also allows an architect to manage key aspects of the data integration process without having to write and deploy code. The most important and common aspects can be affected by UI or configuration, not imperative programming.</pre>
-<pre id="L151" class="line" data-line="151">&#10;</pre>
-<pre id="L152" class="line" data-line="152">#### Remove Performance Frustration {#performance-frustration}</pre>
-<pre id="L153" class="line" data-line="153">&#10;</pre>
-<pre id="L154" class="line" data-line="154">##### Empower developers {#empower-dev}</pre>
-<pre id="L155" class="line" data-line="155">&#10;</pre>
-<pre id="L156" class="line" data-line="156">Allow developers to proactively understand what their code is doing so they can write better queries, reducing risk and time to success.</pre>
-<pre id="L157" class="line" data-line="157">&#10;</pre>
-<pre id="L158" class="line" data-line="158">##### Enterprise Ops {#enterprise-ops}</pre>
-<pre id="L159" class="line" data-line="159">&#10;</pre>
-<pre id="L160" class="line" data-line="160">  - Including “proper” monitoring</pre>
-<pre id="L161" class="line" data-line="161">&#10;</pre>
-<pre id="L162" class="line" data-line="162">#### Autonomous Operations {#autonomous-ops}</pre>
-<pre id="L163" class="line" data-line="163">&#10;</pre>
-<pre id="L164" class="line" data-line="164">In the future, databases will be deployed as managed services. </pre>
-<pre id="L165" class="line" data-line="165">&#10;</pre>
-<pre id="L166" class="line" data-line="166">##### Improve Deployment Tooling {#deploy}</pre>
-<pre id="L167" class="line" data-line="167">&#10;</pre>
-<pre id="L168" class="line" data-line="168">##### Enable Cloud Elasticity {#cloud}</pre>
-<pre id="L169" class="line" data-line="169">&#10;</pre>
-<pre id="L170" class="line" data-line="170">  - Cloud for prod (and eventually *aaS)</pre>
-<pre id="L171" class="line" data-line="171">  - Containers for dev</pre>
-<pre id="L172" class="line" data-line="172">&#10;</pre>
-<pre id="L173" class="line" data-line="173">### Overall Consistency and User Feedback {#other}</pre>
-<pre id="L174" class="line" data-line="174">&#10;</pre>
-<pre id="L175" class="line" data-line="175">Assert our brand of agility, power, and trust throughout our customer-facing experiences, including UI, docs, training, demos.</pre>
-</article>
+<table class="markdown">
+<tbody>
+<tr class="line"><td id="L1" class="line-number" data-line-number="1"></td><td>---</td></tr>
+<tr class="line"><td id="L2" class="line-number" data-line-number="2"></td><td>title: MarkLogic Consolidated Vision</td></tr>
+<tr class="line"><td id="L3" class="line-number" data-line-number="3"></td><td>author:</td></tr>
+<tr class="line"><td id="L4" class="line-number" data-line-number="4"></td><td>- Justin Makeig</td></tr>
+<tr class="line"><td id="L5" class="line-number" data-line-number="5"></td><td>history: |</td></tr>
+<tr class="line"><td id="L6" class="line-number" data-line-number="6"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L7" class="line-number" data-line-number="7"></td><td>  * **2017-10-23** (@jmakeig): Solicited feedback from @dgorbet, @jpasqua, @arosenbaum, and @jclark on the intro corporate strategy section</td></tr>
+<tr class="line"><td id="L8" class="line-number" data-line-number="8"></td><td>  * **2017-10-20** (@jmakeig): Initial draft workshopped with @dgorbet. Next steps:</td></tr>
+<tr class="line"><td id="L9" class="line-number" data-line-number="9"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L10" class="line-number" data-line-number="10"></td><td>      1. Clean up headings to reflect customer benefit</td></tr>
+<tr class="line"><td id="L11" class="line-number" data-line-number="11"></td><td>      1. Add one or two paragraphs to each heading to explain. The point is to have a discussion, not implement (yet)</td></tr>
+<tr class="line"><td id="L12" class="line-number" data-line-number="12"></td><td>      1. Circulate a draft to PM 2017-10-23</td></tr>
+<tr class="line"><td id="L13" class="line-number" data-line-number="13"></td><td>      1. Get feedback in PM staff 2017-10-24</td></tr>
+<tr class="line"><td id="L14" class="line-number" data-line-number="14"></td><td>      </td></tr>
+<tr class="line"><td id="L15" class="line-number" data-line-number="15"></td><td>...</td></tr>
+<tr class="line"><td id="L16" class="line-number" data-line-number="16"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L17" class="line-number" data-line-number="17"></td><td>MarkLogic’s strategy is to sell enterprise software licenses to named accounts in specific verticals and geographies: Financial Services, Insurance, Media, Pharmaceutical and Life Sciences, State and Local Government, and Intelligence and Law Enforcement in the United States, Western Europe, and APAC.</td></tr>
+<tr class="line"><td id="L18" class="line-number" data-line-number="18"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L19" class="line-number" data-line-number="19"></td><td>Our approach is to “land and expand”, where we enter a large organization with small, relatively quick wins to demonstrate value in order to convince them to grow their overall MarkLogic footprint. Reference selling is key to this approach: </td></tr>
+<tr class="line"><td id="L20" class="line-number" data-line-number="20"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L21" class="line-number" data-line-number="21"></td><td>  1. By establishing internal champions with demonstrated success, selling within an organization is easier than entering new organizations  </td></tr>
+<tr class="line"><td id="L22" class="line-number" data-line-number="22"></td><td>  1. There are additive benefits of having more MarkLogic throughout an organization that we can capture</td></tr>
+<tr class="line"><td id="L23" class="line-number" data-line-number="23"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L24" class="line-number" data-line-number="24"></td><td>Our early customers sought disruption, for example publishers that needed to digitize or go out of business. These customers were looking for a technology solution that they could use to differentiate themselves. As visionaries, they were able to map MarkLogic’s technology to their problems and valued our unorthodox approach. However, our next wave of customers is significantly more conservative. They are looking to modernize their infrastructure, often as the result of increasing regulatory oversight, *without* disrupting their business. They want to do just enough to solve their looming siloed data problems, not re-platform.</td></tr>
+<tr class="line"><td id="L25" class="line-number" data-line-number="25"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L26" class="line-number" data-line-number="26"></td><td>Our sales will continue to be mostly direct. However, our engagement with customers does not end at the time of sale. MarkLogic Consulting helps customers and partners implement solutions with MarkLogic in order to sell licenses. Growing our consulting business is not an end in itself, but is a means for increasing the amount and the velocity of license sales. As a result, self-sufficiency for our customers and partners is a key goal of our consulting efforts.</td></tr>
+<tr class="line"><td id="L27" class="line-number" data-line-number="27"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L28" class="line-number" data-line-number="28"></td><td>Large systems integrator partners are critical to our ability to scale. They are the boots already on the ground in most all our target markets. We need to empower them to be able to implement and ultimately sell MarkLogic to *their* customers without heroic efforts from our Consulting or Alliances organization. </td></tr>
+<tr class="line"><td id="L29" class="line-number" data-line-number="29"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L30" class="line-number" data-line-number="30"></td><td>## The Best Way to Integrate Data from Silos {#silos}</td></tr>
+<tr class="line"><td id="L31" class="line-number" data-line-number="31"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L32" class="line-number" data-line-number="32"></td><td>The primary focus of MarkLogic’s sales and product strategy is *data integration*. Data integration is the process of combining data in order to do something more with it together than was possible in isolation. The two primary advantages of integrated data—the end state of data integration—are:</td></tr>
+<tr class="line"><td id="L33" class="line-number" data-line-number="33"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L34" class="line-number" data-line-number="34"></td><td>  * **360º View:** A more complete picture of an organization’s operations by triangulating and relating core concepts, like Customer or Product, from the different aspects captured in siloed systems</td></tr>
+<tr class="line"><td id="L35" class="line-number" data-line-number="35"></td><td>  * **Governance:** Centralized management and enforcement of security, privacy, quality, availability, chain of custody, retention, etc. in order to reduce risk and meet regulatory and legal obligations.</td></tr>
+<tr class="line"><td id="L36" class="line-number" data-line-number="36"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L37" class="line-number" data-line-number="37"></td><td>We differentiate our approach along three principal dimensions:</td></tr>
+<tr class="line"><td id="L38" class="line-number" data-line-number="38"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L39" class="line-number" data-line-number="39"></td><td>  1. Decreased time to value</td></tr>
+<tr class="line"><td id="L40" class="line-number" data-line-number="40"></td><td>  1. Improved agility to manage changes</td></tr>
+<tr class="line"><td id="L41" class="line-number" data-line-number="41"></td><td>  1. Provable governance</td></tr>
+<tr class="line"><td id="L42" class="line-number" data-line-number="42"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L43" class="line-number" data-line-number="43"></td><td>MarkLogic’s approach to data integration manifests itself as a *data hub*. A data hub is an architecture that brings together data from different places, in different formats, with different meanings, and of varying quality. A hub allows a data architect, who is familiar with the processes and policies of his organization, to harmonize the definitions of data that drives these policies and the rules that govern it, such that downstream applications do not need to know how to implement this logic themselves. These definitions and rules should be expected to change significantly over time and may vary across the applications in which the data is used, according to the data’s “fitness for purpose”. </td></tr>
+<tr class="line"><td id="L44" class="line-number" data-line-number="44"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L45" class="line-number" data-line-number="45"></td><td>A data hub is generally not the system of record for the data it integrates. For example, MarkLogic would not replace the front-end trading systems at an investment bank. However, it provides the most reliable way to make decisions that span data from different systems of record over time, even as those systems change or go away completely.</td></tr>
+<tr class="line"><td id="L46" class="line-number" data-line-number="46"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L47" class="line-number" data-line-number="47"></td><td>Data integration in MarkLogic is a continuous cycle. It is never “done”, but rather a virtuous feedback loop of: </td></tr>
+<tr class="line"><td id="L48" class="line-number" data-line-number="48"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L49" class="line-number" data-line-number="49"></td><td>  1. Exposing domain-specific APIs for operations or analytics in bulk or real-time according to governance policies</td></tr>
+<tr class="line"><td id="L50" class="line-number" data-line-number="50"></td><td>  1. Getting data and its metadata from upstream systems and capturing its lineage as it is moved</td></tr>
+<tr class="line"><td id="L51" class="line-number" data-line-number="51"></td><td>  1. Figuring out what that data is and how it relates to existing data and validating against existing governance rules</td></tr>
+<tr class="line"><td id="L52" class="line-number" data-line-number="52"></td><td>  1. Just-in-time modeling of the canonical concepts that underlie the data and the rules that govern them, not necessarily dependent on how the data was sourced</td></tr>
+<tr class="line"><td id="L53" class="line-number" data-line-number="53"></td><td>  1. Mapping raw data to canonical forms, materializing as appropriate for efficient query and governance</td></tr>
+<tr class="line"><td id="L54" class="line-number" data-line-number="54"></td><td>  1. Mapping internal models to external models for sharing as APIs</td></tr>
+<tr class="line"><td id="L55" class="line-number" data-line-number="55"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L56" class="line-number" data-line-number="56"></td><td>The entire cycle (or sub-cycles) is constantly repeated. As a data architect adds more context to the data, the database becomes “smarter”. In other words, an architect should be able to express the intent of his policies and a MarkLogic data hub will optimize the implementation of those policies. For example, he might designate an `SSN` property of a person to be personally identifiable (PII), according to a regulation. Because he has already declared how to apply security and redaction policy to all PII data in a particular context, his `SSN` data is automatically secured. He can look up which data is PII and show over time who has had access. He can provide heuristics of what SSN data looks like and the data hub can automatically alert him if it sees SSN data that is not secured. </td></tr>
+<tr class="line"><td id="L57" class="line-number" data-line-number="57"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L58" class="line-number" data-line-number="58"></td><td>The data hub architecture is not something that we have invented in this planning cycle. It is a solution that has evolved in multiple customer and prospect engagements and leverages almost all of our existing technology stack: A data hub is operational and thus must be secure and highly available; Assessing quality over ill defined data necessarily requires the flexibility of search; Semantics is the best way to express and query complex relationships among data; etc. </td></tr>
+<tr class="line"><td id="L59" class="line-number" data-line-number="59"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L60" class="line-number" data-line-number="60"></td><td>### Understand the Value of a Data Hub {#understand}</td></tr>
+<tr class="line"><td id="L61" class="line-number" data-line-number="61"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L62" class="line-number" data-line-number="62"></td><td>The most important aspect of us being successful selling data integration is for our customers to be able to understand that value that MarkLogic brings to their data integration problems and how they might be able to apply those, given their existing constraints (e.g. budget, developer skills, capacity for change).</td></tr>
+<tr class="line"><td id="L63" class="line-number" data-line-number="63"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L64" class="line-number" data-line-number="64"></td><td>#### Understand How to Solve Common Data Integration Problems {#solve-problems}</td></tr>
+<tr class="line"><td id="L65" class="line-number" data-line-number="65"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L66" class="line-number" data-line-number="66"></td><td>MarkLogic provides many different ways to solve data integration problems. However, it is not apparent to non-expert users how to map their problems to the capabilities that MarkLogic offers. </td></tr>
+<tr class="line"><td id="L67" class="line-number" data-line-number="67"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L68" class="line-number" data-line-number="68"></td><td>We need to be able to communicate to developers *and* business users which problems MarkLogic is good at solving and how to assemble capabilities into  solutions. This must be conveyed consistently in all of our communications, from API and UI design to documentation to training materials to SE demos. </td></tr>
+<tr class="line"><td id="L69" class="line-number" data-line-number="69"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L70" class="line-number" data-line-number="70"></td><td>  1. Map her problems to the use cases that we support.</td></tr>
+<tr class="line"><td id="L71" class="line-number" data-line-number="71"></td><td>  1. Find those use cases, using her own terminology, in our technical collateral (documentation, demos, recipes, snippets, videos, OSS projects, etc.)</td></tr>
+<tr class="line"><td id="L72" class="line-number" data-line-number="72"></td><td>  1. Translate those examples to her actual environment and constraints.</td></tr>
+<tr class="line"><td id="L73" class="line-number" data-line-number="73"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L74" class="line-number" data-line-number="74"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L75" class="line-number" data-line-number="75"></td><td>#### Demonstrate the Value of Our Approach {#demo}</td></tr>
+<tr class="line"><td id="L76" class="line-number" data-line-number="76"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L77" class="line-number" data-line-number="77"></td><td>We need to be able to demonstrate the value of our data integration approach without having to ramp up a bespoke application for each use case. When determining which tools (especially GUI) we ship as product and/or promote broadly, this should be a key part of the calculus: Will this reduce that time and one-off effort it takes to demonstrate our data integration story? Today, we often sell the sizzle of BI dashboards and faceted search browser apps in demos, rather than the actual value we add in data integration. This sets the wrong expectations and undersells our actual benefit. (“Can you put the logo in the upper left corner?” or “Can I add another facet?” rather than “How do I validate Encounters only in the context of Quality of care?” or “How do I map my data to the push service that I route through my ESB?”) We may need to stand up an Angular (or React or Aurelia) app to show a customer-specific workflow, but that should be the exception, not the rule. The (whole) product needs to arm sales with general tools that can provide a compelling stroll through the data integration process visually, for an architect or developer, or even a business user, making our sales process much less reliant on custom demos.</td></tr>
+<tr class="line"><td id="L78" class="line-number" data-line-number="78"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L79" class="line-number" data-line-number="79"></td><td>To accomplish that, users need to be able to touch and feel their data as it relates to their actual needs. For business users, this means integration with BI and reporting tools that don’t require any coding to use. For developers, data scientists, and MarkLogic SEs, however, we should provide a way to quickly sketch up and share data analysis *code* that tells a story with real data and compelling visuals without having to stand up a full application.</td></tr>
+<tr class="line"><td id="L80" class="line-number" data-line-number="80"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L81" class="line-number" data-line-number="81"></td><td>### Use a Data Hub {#use}</td></tr>
+<tr class="line"><td id="L82" class="line-number" data-line-number="82"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L83" class="line-number" data-line-number="83"></td><td>A MarkLogic data hub is primarily *operational*, meaning it is used for running a business, rather than just observing a business. This differentiates a data hub from a data warehouse, because an operational application is a living breathing thing with real-time updates and data, metadata, and policy constantly changing. </td></tr>
+<tr class="line"><td id="L84" class="line-number" data-line-number="84"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L85" class="line-number" data-line-number="85"></td><td>At the highest level, we must provide precise access to high-quality, governed data to downstream consumers, in the environment in which they work. This targets three primary audiences, in descending order of priority:</td></tr>
+<tr class="line"><td id="L86" class="line-number" data-line-number="86"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L87" class="line-number" data-line-number="87"></td><td>#### Application Architects with APIs {#apis}</td></tr>
+<tr class="line"><td id="L88" class="line-number" data-line-number="88"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L89" class="line-number" data-line-number="89"></td><td>MarkLogic can be integrated into a customer’s environment in many different ways. This flexibility is both powerful and confusing. Most of our big (by revenue—land—and potential—expand) customers integrate with MarkLogic via APIs. The end user interface may be a UI several infrastructure, and org boundaries, away from MarkLogic. Or it may not be a GUI app at all: In a big enterprise MarkLogic likely feeds Hadoop, EDW, or ESB, where the data is used in a different downstream process. </td></tr>
+<tr class="line"><td id="L90" class="line-number" data-line-number="90"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L91" class="line-number" data-line-number="91"></td><td>We need to reorient how we position MarkLogic in an architecture. We should embrace microservices and SOA and lead with that as the primary way the a customer would integrate MarkLogic in a production data hub. End users probably do not interact directly with a MarkLogic data hub, but the MarkLogic data hub makes those interactions better. </td></tr>
+<tr class="line"><td id="L92" class="line-number" data-line-number="92"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L93" class="line-number" data-line-number="93"></td><td>#### Business Analysts in BI Tools {#bi}</td></tr>
+<tr class="line"><td id="L94" class="line-number" data-line-number="94"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L95" class="line-number" data-line-number="95"></td><td>It is imperative that a MarkLogic be able to integrate with the tools that business analysts use today to make and verify decisions. A data hub needs to provide precise access to high-quality, governed data to mainstream BI and reporting tools, such as Tableau or Power BI. Today, those tools mostly work with tabular data via SQL. </td></tr>
+<tr class="line"><td id="L96" class="line-number" data-line-number="96"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L97" class="line-number" data-line-number="97"></td><td>#### Data Scientists in Analytics Tools {#analytics}</td></tr>
+<tr class="line"><td id="L98" class="line-number" data-line-number="98"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L99" class="line-number" data-line-number="99"></td><td>Increasingly, organizations rely on sophisticated statistics and machine learning to run their businesses. However, these algorithms are only as good and trustworthy as the data that underlie them. These users will be able to rely on a MarkLogic data hub to provide precise, governed data for their analytics environments, such as Spark, R, and Python. </td></tr>
+<tr class="line"><td id="L100" class="line-number" data-line-number="100"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L101" class="line-number" data-line-number="101"></td><td>Like with BI or end-user applications, MarkLogic will not *be* the analytics platform, but rather to make the analytics platform that our customers’ data scientists are already using today (and tomorrow) better and more trustworthy, by being able to easily extract precise, governed data from their operational data hub. </td></tr>
+<tr class="line"><td id="L102" class="line-number" data-line-number="102"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L103" class="line-number" data-line-number="103"></td><td>### Build a Data Hub {#build}</td></tr>
+<tr class="line"><td id="L104" class="line-number" data-line-number="104"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L105" class="line-number" data-line-number="105"></td><td>In the near-term, we need to demonstrate and document the capabilities that are already available today to solve end-to-end data integration problems. We need to make it possible for a developer to go from our marketing to production code on her own. This means being able to </td></tr>
+<tr class="line"><td id="L106" class="line-number" data-line-number="106"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L107" class="line-number" data-line-number="107"></td><td>1. Map her problems to the use cases that we support.</td></tr>
+<tr class="line"><td id="L108" class="line-number" data-line-number="108"></td><td>1. Find those use cases, using her own terminology, in our technical collateral (documentation, demos, recipes, snippets, videos, OSS projects, etc.)</td></tr>
+<tr class="line"><td id="L109" class="line-number" data-line-number="109"></td><td>1. Translate those examples to her actual environment and constraints.</td></tr>
+<tr class="line"><td id="L110" class="line-number" data-line-number="110"></td><td>1. Extend (or narrow) when the fit isn’t exact.</td></tr>
+<tr class="line"><td id="L111" class="line-number" data-line-number="111"></td><td>1. Verify that what she did works—on her laptop and in production.</td></tr>
+<tr class="line"><td id="L112" class="line-number" data-line-number="112"></td><td>1. Recognize and fix performance problems at scale.</td></tr>
+<tr class="line"><td id="L113" class="line-number" data-line-number="113"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L114" class="line-number" data-line-number="114"></td><td>Our tools and techniques also need to catch up to the fact that our customers are not primarily building two-tiered faceted search applications anymore. We have added additional capabilities around semantic and relational data. However, these feel bolted on, creating (ironic) silos. </td></tr>
+<tr class="line"><td id="L115" class="line-number" data-line-number="115"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L116" class="line-number" data-line-number="116"></td><td>> “Is my app a search app? Semantic? Relational? How do I know?”  </td></tr>
+<tr class="line"><td id="L117" class="line-number" data-line-number="117"></td><td>> ”What if I need to do some of each? Do I have to learn them all?”   </td></tr>
+<tr class="line"><td id="L118" class="line-number" data-line-number="118"></td><td>> “What if I choose wrong? How do I even know if I’ve chosen wrong?”  </td></tr>
+<tr class="line"><td id="L119" class="line-number" data-line-number="119"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L120" class="line-number" data-line-number="120"></td><td>Developers should be presented with single way to access the core data operations of the database: Filter, join, map, group (reduce), order, limit, project (select), update, etc. As with SQL in relational databases, they should be able to express their intent and the database should optimize their query based on the changing context in which it operates. Moving performance critical “data logic” between clients or even between an E-node an external application should be mostly copy paste. The concepts and performance strategies of MakrLogic queries should be the same, no matter what is executing the query. For example, a user should be able to paste and example from the docs into Query Console, edit to her needs, and then paste into Java (or Node or Python) and only change the _syntax_ of the code, not the core _semantics_.</td></tr>
+<tr class="line"><td id="L121" class="line-number" data-line-number="121"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L122" class="line-number" data-line-number="122"></td><td>#### Reduce Idiosyncratic Coding for Common Capabilities {#lo-code}</td></tr>
+<tr class="line"><td id="L123" class="line-number" data-line-number="123"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L124" class="line-number" data-line-number="124"></td><td> Finally, the fastest and most reliable code is the code you do not write at all. MarkLogic should be able to provide more capabilities to developers with less custom coding. In particular, we should provide orchestration for the two primary use cases for custom code today:</td></tr>
+<tr class="line"><td id="L125" class="line-number" data-line-number="125"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L126" class="line-number" data-line-number="126"></td><td>  1. Upstream “ETL” processing, such as mapping, harmonizing, and transformation</td></tr>
+<tr class="line"><td id="L127" class="line-number" data-line-number="127"></td><td>  1. Downstream delivery, starting with HTTP data services served out of MarkLogic’s built-in HTTP server.</td></tr>
+<tr class="line"><td id="L128" class="line-number" data-line-number="128"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L129" class="line-number" data-line-number="129"></td><td>We also need to think less about full-blown applications, and more about small, single-purpose pieces of code that are easy to write, reason, and test and tools to weave them together. [Amazon’s Lambda](https://aws.amazon.com/lambda/), for example, provides a “low-code” way to implement a specific piece of functionality without having to think about the wiring, marshalling, deployment, etc. that make applications difficult. A lambda is a magical JavaScript function in the cloud. We should move in this direction for building ETL processes and data services, allowing users to focus on small, specific tasks and have the platform figure out how make them available securely, leveraging the capabilities of the cloud platform on which they are deployed.</td></tr>
+<tr class="line"><td id="L130" class="line-number" data-line-number="130"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L131" class="line-number" data-line-number="131"></td><td>#### Establish best practices and preferred dev tools {#best-practices}</td></tr>
+<tr class="line"><td id="L132" class="line-number" data-line-number="132"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L133" class="line-number" data-line-number="133"></td><td>We need to tell users how to integrate MarkLogic into a modern software development process, not just how to use MarkLogic. The pragmatist and conservative developers that we need to reach do not know how to test their MarkLogic code and may not even have formal testing in the rest of their stack. We need help these teams not only to properly implement MarkLogic, but how MarkLogic fits into a modern and proven development workflow. This includes testing, configuration management, source control, security best practices, deployment and continuous integration, etc. Our products and methodologies will reinforce these best practices.</td></tr>
+<tr class="line"><td id="L134" class="line-number" data-line-number="134"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L135" class="line-number" data-line-number="135"></td><td>Provide specific recommendations of tools and techniques when a development team looks to us for guidance. Capture this in Consulting methodology that we can enforce.</td></tr>
+<tr class="line"><td id="L136" class="line-number" data-line-number="136"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L137" class="line-number" data-line-number="137"></td><td>  - Application architecture best practices, starting with SOA and microservices.</td></tr>
+<tr class="line"><td id="L138" class="line-number" data-line-number="138"></td><td>  - Deploying code and configuration, including diffing and rollback (see also Operations vision)</td></tr>
+<tr class="line"><td id="L139" class="line-number" data-line-number="139"></td><td>  - Source code control, especially for modules that are deployed to a database</td></tr>
+<tr class="line"><td id="L140" class="line-number" data-line-number="140"></td><td>  - Editing code: inline API docs/suggestions, lint, pretty, specific IDE integration</td></tr>
+<tr class="line"><td id="L141" class="line-number" data-line-number="141"></td><td>  - Testing: unit, integration, continuous</td></tr>
+<tr class="line"><td id="L142" class="line-number" data-line-number="142"></td><td>  - Debugging</td></tr>
+<tr class="line"><td id="L143" class="line-number" data-line-number="143"></td><td>  - Tracing and fixing performance problems (see also Operations vision)</td></tr>
+<tr class="line"><td id="L144" class="line-number" data-line-number="144"></td><td>  - Documentation</td></tr>
+<tr class="line"><td id="L145" class="line-number" data-line-number="145"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L146" class="line-number" data-line-number="146"></td><td>### Deploy and Operate a Data Hub {#operate}</td></tr>
+<tr class="line"><td id="L147" class="line-number" data-line-number="147"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L148" class="line-number" data-line-number="148"></td><td>#### Smart data hub {#smart}</td></tr>
+<tr class="line"><td id="L149" class="line-number" data-line-number="149"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L150" class="line-number" data-line-number="150"></td><td>As a data architect provides more definitions and rules, the database automatically gets “smarter” in implementing those rules and overall governance. The primary mode of interacting with a “smart” data hub is by expressing intent, rather than implementation. A smart data hub also allows an architect to manage key aspects of the data integration process without having to write and deploy code. The most important and common aspects can be affected by UI or configuration, not imperative programming.</td></tr>
+<tr class="line"><td id="L151" class="line-number" data-line-number="151"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L152" class="line-number" data-line-number="152"></td><td>#### Remove Performance Frustration {#performance-frustration}</td></tr>
+<tr class="line"><td id="L153" class="line-number" data-line-number="153"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L154" class="line-number" data-line-number="154"></td><td>##### Empower developers {#empower-dev}</td></tr>
+<tr class="line"><td id="L155" class="line-number" data-line-number="155"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L156" class="line-number" data-line-number="156"></td><td>Allow developers to proactively understand what their code is doing so they can write better queries, reducing risk and time to success.</td></tr>
+<tr class="line"><td id="L157" class="line-number" data-line-number="157"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L158" class="line-number" data-line-number="158"></td><td>##### Enterprise Ops {#enterprise-ops}</td></tr>
+<tr class="line"><td id="L159" class="line-number" data-line-number="159"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L160" class="line-number" data-line-number="160"></td><td>  - Including “proper” monitoring</td></tr>
+<tr class="line"><td id="L161" class="line-number" data-line-number="161"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L162" class="line-number" data-line-number="162"></td><td>#### Autonomous Operations {#autonomous-ops}</td></tr>
+<tr class="line"><td id="L163" class="line-number" data-line-number="163"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L164" class="line-number" data-line-number="164"></td><td>In the future, databases will be deployed as managed services. </td></tr>
+<tr class="line"><td id="L165" class="line-number" data-line-number="165"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L166" class="line-number" data-line-number="166"></td><td>##### Improve Deployment Tooling {#deploy}</td></tr>
+<tr class="line"><td id="L167" class="line-number" data-line-number="167"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L168" class="line-number" data-line-number="168"></td><td>##### Enable Cloud Elasticity {#cloud}</td></tr>
+<tr class="line"><td id="L169" class="line-number" data-line-number="169"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L170" class="line-number" data-line-number="170"></td><td>  - Cloud for prod (and eventually *aaS)</td></tr>
+<tr class="line"><td id="L171" class="line-number" data-line-number="171"></td><td>  - Containers for dev</td></tr>
+<tr class="line"><td id="L172" class="line-number" data-line-number="172"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L173" class="line-number" data-line-number="173"></td><td>### Overall Consistency and User Feedback {#other}</td></tr>
+<tr class="line"><td id="L174" class="line-number" data-line-number="174"></td><td>&#10;</td></tr>
+<tr class="line"><td id="L175" class="line-number" data-line-number="175"></td><td>Assert our brand of agility, power, and trust throughout our customer-facing experiences, including UI, docs, training, demos.</td></tr>
+</tbody>
+</table>
 </body>
 </html>
