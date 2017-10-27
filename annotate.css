@@ -1,6 +1,9 @@
 body {
   line-height: 1.45;
 }
+pre {
+  margin: 0;
+}
 .line {
   position: relative;
 
