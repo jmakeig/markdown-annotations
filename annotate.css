@@ -1,5 +1,6 @@
 body {
-  line-height: 1.45;
+  font-size: 10pt;
+  line-height: 1.55;
 }
 pre {
   margin: 0;
@@ -30,10 +31,8 @@ table.markdown {
   color: #aaa;
   text-align: right;
 }
-.list-item9 {
-  padding-left: 13ch;
-
-  text-indent: -13ch;
+.heading {
+  font-weight: bold;
 }
 .line-number:before {
   content: attr(data-line) '.';

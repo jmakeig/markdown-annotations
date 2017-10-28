@@ -145,11 +145,17 @@ function renderMarkdown(md, processors = []) {
     num.dataset.line = index + 1;
     row.appendChild(num);
     const content = document.createElement('td');
+
     const listMatcher = /^(\s+)(\*|\-|\d+\.) /; // matches list items
     const matches = line.match(listMatcher);
     if (matches) {
       const indent = matches[1].length + matches[2].length + 1;
       content.style = `padding-left: ${indent}ch; text-indent: -${indent}ch;`;
+    }
+
+    const headingMatcher = /^#+ /;
+    if (line.match(headingMatcher)) {
+      content.classList.add('heading');
     }
     const text = document.createTextNode('' === line ? '\n' : line);
     content.appendChild(text);
