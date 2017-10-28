@@ -65,6 +65,12 @@ Fingerstache hammock bicycle rights cliche tousled freegan. Sartorial tousled ko
 
 Sartorial kogi meditation gastropub, ethical shabby chic paleo asymmetrical franzen live-edge pug. Viral blog chambray bitters, tofu shabby chic kitsch pitchfork. IPhone slow-carb twee keffiyeh edison bulb. Cornhole street art biodiesel, wayfarers messenger bag farm-to-table VHS. Readymade pour-over gentrify, celiac gastropub beard gochujang waistcoat sustainable salvia. Next level shaman snackwave roof party typewriter schlitz deep v fashion axe hell of ramps salvia YOLO skateboard copper mug. Cold-pressed yuccie distillery hot chicken celiac chambray cray adaptogen intelligentsia godard next level. Twee pork belly everyday carry tumeric, hammock pug swag hell of disrupt vaporware sriracha lo-fi. Leggings chia master cleanse vegan. 8-bit kale chips chartreuse, irony flexitarian taiyaki cardigan dreamcatcher organic narwhal post-ironic shaman meggings heirloom echo park.
 
+  11. Squid drinking vinegar chambray enamel pin. Meh tumblr everyday carry, helvetica migas direct trade cardigan marfa. 
+    111. Try-hard authentic XOXO shaman polaroid pork belly. Helvetica blue bottle photo booth messenger bag, direct trade portland trust fund affogato. 
+      1111. Tattooed cred tumblr paleo adaptogen semiotics YOLO forage vexillologist mumblecore snackwave venmo listicle four loko mustache. 
+        11111. 8-bit chillwave selvage etsy wolf organic tattooed keffiyeh viral jianbing skateboard tote bag deep v artisan. Poke venmo normcore put a bird on it bespoke succulents tote bag la croix pitchfork glossier. Jianbing taxidermy raclette salvia next level asymmetrical, shaman palo santo vexillologist listicle woke cronut. Craft beer succulents pop-up ugh, cray keytar ennui gluten-free tacos food truck truffaut.
+
+
 Pickled typewriter la croix chicharrones church-key air plant hell of you probably haven't heard of them waistcoat bushwick. Tbh VHS vinyl yr taiyaki cronut 90's kale chips literally woke. Literally hammock vinyl banjo crucifix narwhal selfies DIY vexillologist keytar. Fixie etsy literally, gluten-free beard leggings biodiesel. Kombucha blue bottle thundercats authentic green juice. Lyft church-key air plant tousled tbh. Stumptown marfa raclette next level pabst. Vice freegan aesthetic kombucha single-origin coffee, poke blue bottle irony sustainable mixtape actually hashtag gastropub literally enamel pin. Listicle keffiyeh hella direct trade beard, heirloom salvia normcore seitan. Yuccie +1 put a bird on it pour-over celiac. Gluten-free single-origin coffee leggings mumblecore irony copper mug before they sold out plaid brunch iceland.
 
 ## Mlkshk Deep v. Umami
@@ -142,14 +148,10 @@ function renderMarkdown(md, processors = []) {
     const listMatcher = /^(\s+)(\*|\-|\d+\.) /; // matches list items
     const matches = line.match(listMatcher);
     if (matches) {
-      // Why is this so difficult to figure out?
-      let indent = matches[1].length / 2 * 3 + matches[2].length * 2;
-      if (/^\s+(\*|\-)/.test(line)) indent++;
+      const indent = matches[1].length + matches[2].length + 1;
       content.style = `padding-left: ${indent}ch; text-indent: -${indent}ch;`;
     }
-    const text = document.createTextNode(
-      ('' === line ? '\n' : line).replace(/ /g, '・')
-    );
+    const text = document.createTextNode('' === line ? '\n' : line);
     content.appendChild(text);
     row.appendChild(content);
     fragment.appendChild(row);
