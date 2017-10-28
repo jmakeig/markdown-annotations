@@ -34,6 +34,9 @@ table.markdown {
 .heading {
   font-weight: bold;
 }
+.quote {
+  font-style: italic;
+}
 .line-number:before {
   content: attr(data-line) '.';
 }

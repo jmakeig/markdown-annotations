@@ -146,7 +146,7 @@ function renderMarkdown(md, processors = []) {
     row.appendChild(num);
     const content = document.createElement('td');
 
-    const listMatcher = /^(\s+)(\*|\-|\d+\.) /; // matches list items
+    const listMatcher = /^(\s*)(\*|\-|\d+\.|>) /; // matches list items and quotes
     const matches = line.match(listMatcher);
     if (matches) {
       const indent = matches[1].length + matches[2].length + 1;
@@ -157,6 +157,12 @@ function renderMarkdown(md, processors = []) {
     if (line.match(headingMatcher)) {
       content.classList.add('heading');
     }
+    
+    const quoteMatcher = /^>+ /;
+    if (line.match(quoteMatcher)) {
+      content.classList.add('quote');
+    }
+    
     const text = document.createTextNode('' === line ? '\n' : line);
     content.appendChild(text);
     row.appendChild(content);
