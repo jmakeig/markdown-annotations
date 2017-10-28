@@ -23,9 +23,27 @@ Knausgaard ugh XOXO flannel pok pok marfa pork belly sustainable cronut la croix
   * Semiotics echo park 
   * iPhone post-ironic tacos banh mi. 
   
-Heirloom roof party godard letterpress ramps butcher single-origin coffee. Scenester glossier food truck poke lomo, blue bottle godard art party chartreuse fingerstache tumblr humblebrag wayfarers pickled. Squid drinking vinegar chambray enamel pin. Meh tumblr everyday carry, helvetica migas direct trade cardigan marfa. Try-hard authentic XOXO shaman polaroid pork belly. Helvetica blue bottle photo booth messenger bag, direct trade portland trust fund affogato. Tattooed cred tumblr paleo adaptogen semiotics YOLO forage vexillologist mumblecore snackwave venmo listicle four loko mustache. 8-bit chillwave selvage etsy wolf organic tattooed keffiyeh viral jianbing skateboard tote bag deep v artisan. Poke venmo normcore put a bird on it bespoke succulents tote bag la croix pitchfork glossier. Jianbing taxidermy raclette salvia next level asymmetrical, shaman palo santo vexillologist listicle woke cronut. Craft beer succulents pop-up ugh, cray keytar ennui gluten-free tacos food truck truffaut.
+Heirloom roof party godard letterpress ramps butcher single-origin coffee. Scenester glossier food truck poke lomo, blue bottle godard art party chartreuse fingerstache tumblr humblebrag wayfarers pickled. 
+
+  1. Squid drinking vinegar chambray enamel pin. Meh tumblr everyday carry, helvetica migas direct trade cardigan marfa. 
+    1. Try-hard authentic XOXO shaman polaroid pork belly. Helvetica blue bottle photo booth messenger bag, direct trade portland trust fund affogato. 
+      1. Tattooed cred tumblr paleo adaptogen semiotics YOLO forage vexillologist mumblecore snackwave venmo listicle four loko mustache. 
+        1. 8-bit chillwave selvage etsy wolf organic tattooed keffiyeh viral jianbing skateboard tote bag deep v artisan. Poke venmo normcore put a bird on it bespoke succulents tote bag la croix pitchfork glossier. Jianbing taxidermy raclette salvia next level asymmetrical, shaman palo santo vexillologist listicle woke cronut. Craft beer succulents pop-up ugh, cray keytar ennui gluten-free tacos food truck truffaut.
 
 Literally unicorn pork belly, pabst hell of tbh ramps cred. Brooklyn neutra intelligentsia artisan chartreuse. Truffaut kale chips air plant, whatever +1 etsy pitchfork distillery butcher next level locavore chia. Disrupt squid tumblr chia migas. YOLO kitsch man bun vice polaroid gentrify quinoa irony narwhal. YOLO fixie beard slow-carb actually artisan kale chips tofu meditation meh coloring book pitchfork air plant food truck dreamcatcher. Hell of celiac tousled cornhole, microdosing green juice whatever occupy pour-over. Celiac fanny pack scenester drinking vinegar tumeric copper mug succulents street art. Vape XOXO tote bag pitchfork cardigan actually hoodie kale chips photo booth craft beer. Mlkshk try-hard cred, synth kogi +1 single-origin coffee enamel pin literally snackwave four dollar toast. Raclette enamel pin hella sartorial celiac man bun copper mug squid. Godard beard gochujang, roof party poutine shabby chic etsy iceland. Swag palo santo readymade la croix.
+
+  * Squid drinking vinegar chambray enamel pin. Meh tumblr everyday carry, helvetica migas direct trade cardigan marfa. 
+    - Try-hard authentic XOXO shaman polaroid pork belly. Helvetica blue bottle photo booth messenger bag, direct trade portland trust fund affogato. 
+      * Tattooed cred tumblr paleo adaptogen semiotics YOLO forage vexillologist mumblecore snackwave venmo listicle four loko mustache. 
+        - 8-bit chillwave selvage etsy wolf organic tattooed keffiyeh viral jianbing skateboard tote bag deep v artisan. Poke venmo normcore put a bird on it bespoke succulents tote bag la croix pitchfork glossier. Jianbing taxidermy raclette salvia next level asymmetrical, shaman palo santo vexillologist listicle woke cronut. Craft beer succulents pop-up ugh, cray keytar ennui gluten-free tacos food truck truffaut.
+
+Some text
+        
+   1. Squid drinking vinegar chambray enamel pin. Meh tumblr everyday carry, helvetica migas direct trade cardigan marfa. 
+    11. Try-hard authentic XOXO shaman polaroid pork belly. Helvetica blue bottle photo booth messenger bag, direct trade portland trust fund affogato. 
+      111. Tattooed cred tumblr paleo adaptogen semiotics YOLO forage vexillologist mumblecore snackwave venmo listicle four loko mustache. 
+        1111. 8-bit chillwave selvage etsy wolf organic tattooed keffiyeh viral jianbing skateboard tote bag deep v artisan. Poke venmo normcore put a bird on it bespoke succulents tote bag la croix pitchfork glossier. Jianbing taxidermy raclette salvia next level asymmetrical, shaman palo santo vexillologist listicle woke cronut. Craft beer succulents pop-up ugh, cray keytar ennui gluten-free tacos food truck truffaut.
+
 
 ## Yuccie Craft Beer
 
@@ -44,7 +62,10 @@ Tattooed tilde direct trade raw denim unicorn adaptogen authentic pitchfork air 
 
 ## Fanny Pack Tote Bag {#tote}
 
-Vinyl af, ramps selvage chia ugh fashion axe master cleanse. Tote bag taiyaki PBR&B chicharrones four dollar toast cray tousled palo santo. Listicle asymmetrical af aesthetic. Sriracha asymmetrical fashion axe VHS pug XOXO synth biodiesel pitchfork. Lo-fi truffaut blue bottle mixtape, scenester ramps poutine. Yr godard pickled, lo-fi asymmetrical keytar chillwave shoreditch. Kitsch gluten-free lumbersexual thundercats seitan keffiyeh iPhone drinking vinegar ramps bicycle rights 3 wolf moon twee quinoa. Bespoke bitters vinyl normcore squid. Four dollar toast banjo vexillologist skateboard sartorial drinking vinegar organic chambray unicorn authentic tousled next level williamsburg. Direct trade master cleanse trust fund drinking vinegar literally tofu, hoodie keytar vice try-hard everyday carry plaid cardigan cray. Butcher kale chips palo santo jianbing. Banjo stumptown portland normcore squid activated charcoal church-key farm-to-table slow-carb snackwave hexagon truffaut.
+  * Vinyl af, ramps selvage chia ugh fashion axe master cleanse. Tote bag taiyaki PBR&B chicharrones four dollar toast cray tousled palo santo. Listicle asymmetrical af aesthetic. Sriracha asymmetrical fashion axe VHS pug XOXO synth biodiesel pitchfork. Lo-fi truffaut blue bottle mixtape, scenester ramps poutine. 
+  * Yr godard pickled, lo-fi asymmetrical keytar chillwave shoreditch. Kitsch gluten-free lumbersexual thundercats seitan keffiyeh iPhone drinking vinegar ramps bicycle rights 3 wolf moon twee quinoa. Bespoke bitters vinyl normcore squid. Four dollar toast banjo vexillologist skateboard sartorial drinking vinegar organic chambray unicorn authentic tousled next level williamsburg. 
+    * Direct trade master cleanse trust fund drinking vinegar literally tofu, hoodie keytar vice try-hard everyday. 
+    * Carry plaid cardigan cray. Butcher kale chips palo santo jianbing. Banjo stumptown portland normcore squid activated charcoal church-key farm-to-table slow-carb snackwave hexagon truffaut.
 
 Fingerstache hammock bicycle rights cliche tousled freegan. Sartorial tousled kombucha cliche. Authentic single-origin coffee activated charcoal, occupy raclette hot chicken +1 unicorn farm-to-table post-ironic cray. Adaptogen thundercats mumblecore actually ennui, man bun bespoke. Chia cliche kitsch edison bulb tilde, normcore intelligentsia vape shoreditch farm-to-table organic selfies authentic. Tattooed beard scenester kitsch, distillery cray venmo cronut aesthetic. Humblebrag roof party vape lomo, 90's portland skateboard mumblecore messenger bag fam tofu hammock tote bag aesthetic. Marfa aesthetic direct trade kombucha. Portland godard hoodie selvage, enamel pin quinoa mixtape wolf hexagon iceland. Cray biodiesel fam, post-ironic leggings tattooed subway tile cornhole bitters dreamcatcher raw denim VHS etsy letterpress viral.
 
@@ -113,7 +134,7 @@ Drinking vinegar YOLO swag, pabst cardigan 90's occupy hexagon plaid schlitz pok
  * @param {string} md  - Markdown
  * @returns {DocumentFragment}
  */
-function renderMarkdown(md) {
+function renderMarkdown(md, processors = []) {
   const fragment = document.createDocumentFragment();
   if (!md) return fragment;
   const lines = md.split(/\n/);
@@ -126,7 +147,18 @@ function renderMarkdown(md) {
     num.dataset.line = index + 1;
     row.appendChild(num);
     const content = document.createElement('td');
-    const text = document.createTextNode('' === line ? '\n' : line);
+    const listMatcher = /^(\s+)(\*|\-|\d+\.) /;
+    const matches = line.match(listMatcher);
+    console.dir(matches);
+    if (matches) {
+      // Why is this so difficult to figure out?
+      let indent = matches[1].length / 2 * 3 + matches[2].length * 2;
+      if (/^\s+(\*|\-)/.test(line)) indent++;
+      content.style = `background: #ddd; padding-left: ${indent}ch; text-indent: -${indent}ch;`;
+    }
+    const text = document.createTextNode(
+      ('' === line ? '\n' : line).replace(/ /g, '・')
+    );
     content.appendChild(text);
     row.appendChild(content);
     fragment.appendChild(row);
