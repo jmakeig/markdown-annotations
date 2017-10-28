@@ -9,8 +9,9 @@ table.markdown {
 
   border-spacing: 0;
 }
-table.markdown td {
+.line td {
   padding: 0.1em 0.25em;
+  padding-left: 0;
 
   vertical-align: top;
 }
@@ -28,6 +29,11 @@ table.markdown td {
 
   color: #aaa;
   text-align: right;
+}
+.list-item9 {
+  padding-left: 13ch;
+
+  text-indent: -13ch;
 }
 .line-number:before {
   content: attr(data-line) '.';
