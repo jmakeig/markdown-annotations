@@ -37,14 +37,6 @@ Literally unicorn pork belly, pabst hell of tbh ramps cred. Brooklyn neutra inte
       * Tattooed cred tumblr paleo adaptogen semiotics YOLO forage vexillologist mumblecore snackwave venmo listicle four loko mustache. 
         - 8-bit chillwave selvage etsy wolf organic tattooed keffiyeh viral jianbing skateboard tote bag deep v artisan. Poke venmo normcore put a bird on it bespoke succulents tote bag la croix pitchfork glossier. Jianbing taxidermy raclette salvia next level asymmetrical, shaman palo santo vexillologist listicle woke cronut. Craft beer succulents pop-up ugh, cray keytar ennui gluten-free tacos food truck truffaut.
 
-Some text
-        
-   1. Squid drinking vinegar chambray enamel pin. Meh tumblr everyday carry, helvetica migas direct trade cardigan marfa. 
-    11. Try-hard authentic XOXO shaman polaroid pork belly. Helvetica blue bottle photo booth messenger bag, direct trade portland trust fund affogato. 
-      111. Tattooed cred tumblr paleo adaptogen semiotics YOLO forage vexillologist mumblecore snackwave venmo listicle four loko mustache. 
-        1111. 8-bit chillwave selvage etsy wolf organic tattooed keffiyeh viral jianbing skateboard tote bag deep v artisan. Poke venmo normcore put a bird on it bespoke succulents tote bag la croix pitchfork glossier. Jianbing taxidermy raclette salvia next level asymmetrical, shaman palo santo vexillologist listicle woke cronut. Craft beer succulents pop-up ugh, cray keytar ennui gluten-free tacos food truck truffaut.
-
-
 ## Yuccie Craft Beer
 
 Austin humblebrag unicorn asymmetrical keffiyeh chillwave raw denim master cleanse microdosing before they sold out chicharrones cred. Chillwave flannel iPhone, glossier try-hard shabby chic helvetica salvia. 
@@ -147,14 +139,13 @@ function renderMarkdown(md, processors = []) {
     num.dataset.line = index + 1;
     row.appendChild(num);
     const content = document.createElement('td');
-    const listMatcher = /^(\s+)(\*|\-|\d+\.) /;
+    const listMatcher = /^(\s+)(\*|\-|\d+\.) /; // matches list items
     const matches = line.match(listMatcher);
-    console.dir(matches);
     if (matches) {
       // Why is this so difficult to figure out?
       let indent = matches[1].length / 2 * 3 + matches[2].length * 2;
       if (/^\s+(\*|\-)/.test(line)) indent++;
-      content.style = `background: #ddd; padding-left: ${indent}ch; text-indent: -${indent}ch;`;
+      content.style = `padding-left: ${indent}ch; text-indent: -${indent}ch;`;
     }
     const text = document.createTextNode(
       ('' === line ? '\n' : line).replace(/ /g, '・')
