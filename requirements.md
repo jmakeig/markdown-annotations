@@ -1,4 +1,4 @@
-# MarkDown Annotations
+# Markdown Annotations
 
 As and *reviewer*, I want to be able to get a copy of a document from version control and mark it up with inline comments in order to provide feedback to the editor and other reviewers. 
 
