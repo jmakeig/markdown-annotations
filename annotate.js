@@ -292,16 +292,14 @@ store.subscribe(render, STATE);
 
 document.addEventListener('DOMContentLoaded', evt => {
   render();
-  document.querySelector('.tools #Annotate').addEventListener('click', evt => {
-    store.dispatch({
-      type: START_ANNOTATION,
-      range: getRange(document.getSelection()),
-    });
-  });
-  document
-    .querySelector('.tools #SaveAnnotation')
-    .addEventListener('click', evt => {
-      console.log('SaveAnnotation');
+  document.addEventListener('click', evt => {
+    if (evt.target && evt.target.matches('#Annotate')) {
+      store.dispatch({
+        type: START_ANNOTATION,
+        range: getRange(document.getSelection()),
+      });
+    }
+    if (evt.target && evt.target.matches('#SaveAnnotation')) {
       store.dispatch({
         type: SAVE_ANNOTATION_INTENT,
         annotation: {
@@ -309,17 +307,16 @@ document.addEventListener('DOMContentLoaded', evt => {
           comment: document.querySelector('#Comment').value,
         },
       });
-    });
-  document.querySelector('.tools #Comment').addEventListener(
-    'input',
-    debounce(evt => {
+    }
+  });
+
+  document.addEventListener('input', evt => {
+    // TODO: Debounce
+    if (evt.target && evt.target.matches('#Comment')) {
       console.log('#Comment => change', evt.target.value);
-      store.dispatch({
-        type: CHANGE_COMMENT,
-        comment: evt.target.value,
-      });
-    }, 250)
-  );
+      store.dispatch({ type: CHANGE_COMMENT, comment: evt.target.value });
+    }
+  });
 });
 
 /**
