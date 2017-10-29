@@ -295,9 +295,29 @@ function render() {
   // Need to get the state from the global store itself.
   const state = store.getState();
   console.log('render', state);
-  document
-    .querySelector('tbody')
-    .appendChild(renderMarkdown(state.model.content));
+  replaceChildren(
+    renderMarkdown(state.model.content),
+    document.querySelector('tbody')
+  );
+}
+
+/**
+ * Replaces the entire contents of `oldNode` with `newChild`.
+ * It’s generally advisable to use a `DocumentFragment` for the
+ * the replacement.
+ * 
+ * @param {Node|DocumentFragment} newChild 
+ * @param {Node} oldNode 
+ * @returns {Node}  - The new parent wrapper
+ */
+function replaceChildren(newChild, oldNode) {
+  if (!oldNode) return;
+  const tmpParent = document.createElement(oldNode.tagName);
+  if (newChild) {
+    tmpParent.appendChild(newChild);
+  }
+  oldNode.parentNode.replaceChild(tmpParent, oldNode);
+  return tmpParent;
 }
 
 document.addEventListener('DOMContentLoaded', evt => {
