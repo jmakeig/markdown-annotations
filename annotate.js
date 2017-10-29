@@ -261,8 +261,17 @@ function reducer(state, action) {
       tmp2.ui = Object.assign({}, tmp2.ui);
       tmp2.ui.comment = action.comment;
       return tmp2;
-    // case SAVE_ANNOTATION_INTENT:
-
+    case SAVE_ANNOTATION_INTENT:
+      const tmp3 = Object.assign({}, state);
+      tmp3.model = Object.assign({}, state.model);
+      tmp3.model.annotations = [...tmp3.model.annotations];
+      const annotation = Object.assign({}, action.annotation, {
+        user: state.ui.user,
+        range: state.ui.currentRange,
+      });
+      tmp3.model.annotations.push(annotation);
+      tmp3.model.annotations.sort((a, b) => a.timestamp < b.timestamp);
+      return tmp3;
     default:
       return STATE;
   }
@@ -290,8 +299,6 @@ function render() {
     .querySelector('tbody')
     .appendChild(renderMarkdown(state.model.content));
 }
-
-
 
 document.addEventListener('DOMContentLoaded', evt => {
   render();
