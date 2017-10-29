@@ -1,4 +1,14 @@
+const state = {
+  //currentRange: {
+  //   "start": { "row": 54, "column": 23 },
+  //   "end": { "line": 56, "column": 4 }
+  // }
+};
 const model = {
+  user: 'jmakeig',
+  annotations: [],
+  href: 'https://github.com/…',
+  commit: 'SHA',
   content: `---
 title: MarkLogic Consolidated Vision
 author:
@@ -140,9 +150,9 @@ function renderMarkdown(md, processors = []) {
     const row = document.createElement('tr');
     row.classList.add('line');
     const num = document.createElement('td');
+    num.dataset.line = index + 1;
     num.id = `L${index + 1}`;
     num.classList.add('line-number');
-    num.dataset.line = index + 1;
     row.appendChild(num);
     const content = document.createElement('td');
 
@@ -157,12 +167,12 @@ function renderMarkdown(md, processors = []) {
     if (line.match(headingMatcher)) {
       content.classList.add('heading');
     }
-    
+
     const quoteMatcher = /^>+ /;
     if (line.match(quoteMatcher)) {
       content.classList.add('quote');
     }
-    
+
     const text = document.createTextNode('' === line ? '\n' : line);
     content.appendChild(text);
     row.appendChild(content);
@@ -171,21 +181,94 @@ function renderMarkdown(md, processors = []) {
   return fragment;
 }
 
-function getLineNumber(node) {
-  if (node) return node.parentNode.dataset.line;
+/**
+ * Given a Selection, determine the range, where
+ * `start` is always before `end`, regardless 
+ * from which direction the selection was made.
+ * 
+ * @param {Selection} selection 
+ * @returns {Object} 
+ */
+function getRange(selection) {
+  if (!selection) return;
+  const anchor = {
+    row: getLineNumber(selection.anchorNode),
+    column: selection.anchorOffset,
+  };
+  const focus = {
+    row: getLineNumber(selection.focusNode),
+    column: selection.focusOffset,
+  };
+  if (
+    anchor.row < focus.row ||
+    (anchor.row === focus.row && anchor.column <= focus.column)
+  ) {
+    return {
+      start: anchor,
+      end: focus,
+    };
+  } else {
+    return {
+      start: focus,
+      end: anchor,
+    };
+  }
 }
-document.addEventListener('selectionchange', evt => {
-  const sel = document.getSelection();
-  console.log(sel.toString());
-  console.dir(
-    `Line ${getLineNumber(
-      sel.anchorNode
-    )}  ${sel.anchorOffset}, Line ${getLineNumber(
-      sel.focusNode
-    )} ${sel.focusOffset}`
-  );
-});
 
-document.addEventListener('DOMContentLoaded', evt =>
-  document.querySelector('tbody').appendChild(renderMarkdown(model.content))
-);
+/**
+ * Given a Node, such as from a Selection anchor or focus, 
+ * return the logical line number from the rendered Markdown.
+ * This is not general purpose. It makes lots of assumptions 
+ * about how the Markdown is rendered in `renderMarkdown()`.
+ * 
+ * @param {Node} node - Part of the rendered Markdown
+ * @returns {Number} - The line number of the original 
+ *                     Markdown document
+ */
+function getLineNumber(node) {
+  if (node) {
+    // Ugly, brittle
+    return Number(
+      node.parentNode.parentNode.querySelector('.line-number').dataset.line
+    );
+  }
+}
+// document.addEventListener('selectionchange', evt => {
+//   const sel = document.getSelection();
+//   console.dir(
+//     `Line ${getLineNumber(
+//       sel.anchorNode
+//     )}  ${sel.anchorOffset}, Line ${getLineNumber(
+//       sel.focusNode
+//     )} ${sel.focusOffset}`
+//   );
+// });
+
+const START_ANNOTATION = 'START_ANNOTATION';
+
+function reducer(state, action) {
+  console.log(action.type);
+  switch (action.type) {
+    case START_ANNOTATION:
+      console.dir(action.range);
+  }
+}
+const store = Redux.createStore(reducer);
+
+function render(state) {
+  console.log('render');
+}
+render();
+store.subscribe(render);
+
+// store.dispatch({ type: 'INCREMENT' })
+
+document.addEventListener('DOMContentLoaded', evt => {
+  document.querySelector('tbody').appendChild(renderMarkdown(model.content));
+  document.querySelector('.tools #Annotate').addEventListener('click', evt => {
+    store.dispatch({
+      type: START_ANNOTATION,
+      range: getRange(document.getSelection()),
+    });
+  });
+});
