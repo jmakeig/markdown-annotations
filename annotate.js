@@ -1,12 +1,12 @@
 const STATE = {
   ui: {
+    user: 'jmakeig',
     //currentRange: {
     //   "start": { "row": 54, "column": 23 },
     //   "end": { "line": 56, "column": 4 }
     // }
   },
   model: {
-    user: 'jmakeig',
     annotations: [],
     href: 'https://github.com/…',
     commit: 'SHA',
@@ -237,6 +237,8 @@ function getLineNumber(node) {
 }
 
 const START_ANNOTATION = 'START_ANNOTATION';
+const CHANGE_COMMENT = 'CHANGE_COMMENT';
+const SAVE_ANNOTATION_INTENT = 'SAVE_ANNOTATION_INTENT';
 
 /**
  * Redux reducer. Make sure nothing mutates the
@@ -254,6 +256,13 @@ function reducer(state, action) {
       tmp.ui = Object.assign({}, tmp.ui);
       tmp.ui.currentRange = action.range;
       return tmp;
+    case CHANGE_COMMENT:
+      const tmp2 = Object.assign({}, state);
+      tmp2.ui = Object.assign({}, tmp2.ui);
+      tmp2.ui.comment = action.comment;
+      return tmp2;
+    // case SAVE_ANNOTATION_INTENT:
+
     default:
       return STATE;
   }
@@ -273,7 +282,7 @@ function render() {
   // It’s odd that the state isn’t passed to the subscriber.
   // Need to get the state from the global store itself.
   const state = store.getState();
-  console.log('render');
+  console.log('render', state);
   document
     .querySelector('tbody')
     .appendChild(renderMarkdown(state.model.content));
@@ -289,4 +298,47 @@ document.addEventListener('DOMContentLoaded', evt => {
       range: getRange(document.getSelection()),
     });
   });
+  document
+    .querySelector('.tools #SaveAnnotation')
+    .addEventListener('click', evt => {
+      console.log('SaveAnnotation');
+      store.dispatch({
+        type: SAVE_ANNOTATION_INTENT,
+        annotation: {
+          timestamp: new Date().toISOString(),
+          comment: document.querySelector('#Comment').value,
+        },
+      });
+    });
+  document.querySelector('.tools #Comment').addEventListener(
+    'input',
+    debounce(evt => {
+      console.log('#Comment => change', evt.target.value);
+      store.dispatch({
+        type: CHANGE_COMMENT,
+        comment: evt.target.value,
+      });
+    }, 250)
+  );
 });
+
+// <https://davidwalsh.name/javascript-debounce-function>
+// Returns a function, that, as long as it continues to be invoked, will not
+// be triggered. The function will be called after it stops being called for
+// N milliseconds. If `immediate` is passed, trigger the function on the
+// leading edge, instead of the trailing.
+function debounce(func, wait = 500, immediate = false) {
+  var timeout;
+  return function() {
+    var context = this,
+      args = arguments;
+    var later = function() {
+      timeout = null;
+      if (!immediate) func.apply(context, args);
+    };
+    var callNow = immediate && !timeout;
+    clearTimeout(timeout);
+    timeout = setTimeout(later, wait);
+    if (callNow) func.apply(context, args);
+  };
+}
