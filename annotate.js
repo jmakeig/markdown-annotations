@@ -1,4 +1,4 @@
-const state = {
+const STATE = {
   ui: {
     //currentRange: {
     //   "start": { "row": 54, "column": 23 },
@@ -235,38 +235,54 @@ function getLineNumber(node) {
     );
   }
 }
-// document.addEventListener('selectionchange', evt => {
-//   const sel = document.getSelection();
-//   console.dir(
-//     `Line ${getLineNumber(
-//       sel.anchorNode
-//     )}  ${sel.anchorOffset}, Line ${getLineNumber(
-//       sel.focusNode
-//     )} ${sel.focusOffset}`
-//   );
-// });
 
 const START_ANNOTATION = 'START_ANNOTATION';
 
+/**
+ * Redux reducer. Make sure nothing mutates the
+ * state in-place.
+ * 
+ * @param {Object} state 
+ * @param {Object} action 
+ * @returns {Object} 
+ */
 function reducer(state, action) {
-  console.log(action.type);
   switch (action.type) {
     case START_ANNOTATION:
-      console.dir(action.range);
+      // FIXME: Immutable hack
+      const tmp = Object.assign({}, state);
+      tmp.ui = Object.assign({}, tmp.ui);
+      tmp.ui.currentRange = action.range;
+      return tmp;
+    default:
+      return STATE;
   }
 }
-const store = Redux.createStore(reducer);
 
-function render(state) {
+const store = Redux.createStore(
+  reducer,
+  Redux.applyMiddleware(store => next => action => {
+    console.log('Dispatching', action);
+    const result = next(action);
+    console.log('Next state', store.getState());
+    return result;
+  })
+);
+
+function render() {
+  // It’s odd that the state isn’t passed to the subscriber.
+  // Need to get the state from the global store itself.
+  const state = store.getState();
   console.log('render');
+  document
+    .querySelector('tbody')
+    .appendChild(renderMarkdown(state.model.content));
 }
-render();
-store.subscribe(render);
 
-// store.dispatch({ type: 'INCREMENT' })
+store.subscribe(render, STATE);
 
 document.addEventListener('DOMContentLoaded', evt => {
-  document.querySelector('tbody').appendChild(renderMarkdown(state.model.content));
+  render();
   document.querySelector('.tools #Annotate').addEventListener('click', evt => {
     store.dispatch({
       type: START_ANNOTATION,
