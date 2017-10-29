@@ -278,6 +278,9 @@ const store = Redux.createStore(
   })
 );
 
+store.subscribe(render, STATE);
+store.delayedDispatch = debounce(store.dispatch, 500);
+
 function render() {
   // It’s odd that the state isn’t passed to the subscriber.
   // Need to get the state from the global store itself.
@@ -288,7 +291,7 @@ function render() {
     .appendChild(renderMarkdown(state.model.content));
 }
 
-store.subscribe(render, STATE);
+
 
 document.addEventListener('DOMContentLoaded', evt => {
   render();
@@ -313,8 +316,10 @@ document.addEventListener('DOMContentLoaded', evt => {
   document.addEventListener('input', evt => {
     // TODO: Debounce
     if (evt.target && evt.target.matches('#Comment')) {
-      console.log('#Comment => change', evt.target.value);
-      store.dispatch({ type: CHANGE_COMMENT, comment: evt.target.value });
+      store.delayedDispatch({
+        type: CHANGE_COMMENT,
+        comment: evt.target.value,
+      });
     }
   });
 });
