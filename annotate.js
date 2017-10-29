@@ -1,15 +1,16 @@
 const state = {
-  //currentRange: {
-  //   "start": { "row": 54, "column": 23 },
-  //   "end": { "line": 56, "column": 4 }
-  // }
-};
-const model = {
-  user: 'jmakeig',
-  annotations: [],
-  href: 'https://github.com/…',
-  commit: 'SHA',
-  content: `---
+  ui: {
+    //currentRange: {
+    //   "start": { "row": 54, "column": 23 },
+    //   "end": { "line": 56, "column": 4 }
+    // }
+  },
+  model: {
+    user: 'jmakeig',
+    annotations: [],
+    href: 'https://github.com/…',
+    commit: 'SHA',
+    content: `---
 title: MarkLogic Consolidated Vision
 author:
 - Justin Makeig
@@ -134,6 +135,7 @@ Glossier cloud bread tacos, twee jean shorts vape whatever literally locavore wo
 Taiyaki raclette hexagon, tumblr put a bird on it microdosing deep v 8-bit ethical banjo paleo next level. Brooklyn brunch gochujang, thundercats edison bulb master cleanse twee. Before they sold out meditation stumptown deep v you probably haven't heard of them farm-to-table af hella +1 copper mug bicycle rights taxidermy messenger bag. Cronut echo park quinoa banh mi semiotics keytar. Irony tilde brunch fixie. Knausgaard put a bird on it schlitz, lyft prism disrupt food truck retro freegan subway tile polaroid. Quinoa chillwave disrupt, master cleanse meggings adaptogen kinfolk iceland. Everyday carry chartreuse vape prism lo-fi. Microdosing taxidermy sartorial squid selfies, bitters kinfolk.
 
 Drinking vinegar YOLO swag, pabst cardigan 90's occupy hexagon plaid schlitz poke hot chicken banjo vape. Edison bulb heirloom venmo succulents, tilde subway tile crucifix skateboard. Vape YOLO activated charcoal craft beer ennui seitan distillery. Bespoke copper mug ugh, edison bulb craft beer banh mi hashtag yuccie cardigan tousled plaid kitsch hammock tumeric. Hell of jean shorts marfa, yuccie blue bottle put a bird on it jianbing la croix. Paleo meggings echo park franzen cold-pressed mustache gastropub ethical celiac pop-up prism gochujang. Salvia keffiyeh chillwave taxidermy. Ethical pitchfork tilde cliche polaroid beard. Copper mug neutra lumbersexual biodiesel, echo park fixie blue bottle cardigan irony put a bird on it craft beer artisan hexagon.`,
+  },
 };
 
 /**
@@ -264,7 +266,7 @@ store.subscribe(render);
 // store.dispatch({ type: 'INCREMENT' })
 
 document.addEventListener('DOMContentLoaded', evt => {
-  document.querySelector('tbody').appendChild(renderMarkdown(model.content));
+  document.querySelector('tbody').appendChild(renderMarkdown(state.model.content));
   document.querySelector('.tools #Annotate').addEventListener('click', evt => {
     store.dispatch({
       type: START_ANNOTATION,
