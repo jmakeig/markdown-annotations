@@ -31,7 +31,7 @@ When an annotation is created it’s given a timestamp for the time at which it 
 
 When the user is done annotating a document, she saves her annotations. This serializes the annotations array in the global state and concatenates it to the raw Markdown string. 
 
-The browser commits a new version to a branch. If her original request came from a PR branch, the commit should go to the PR branch. If it came from a non-PR branch, it should be committed to a new branch starting from the original SHA.
+The browser [commits](https://developer.github.com/v3/git/commits/#create-a-commit) a new version to a branch. If her original request came from a PR branch, the commit should go to the PR branch. If it came from a non-PR branch, it should be committed to a new branch starting from the original SHA.
 
   * Can this be done from the browser?
 
