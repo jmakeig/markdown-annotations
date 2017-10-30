@@ -11,19 +11,23 @@ table.markdown {
 
   border-spacing: 0;
 }
-.line td {
-  padding: 0.1em 0.25em;
-  padding-left: 0;
-
-  vertical-align: top;
-}
 .line {
   font-family: 'SF Mono', 'Inconsolata', monospace;
 }
 .line td {
+  padding: 0.1em 0.25em;
+  padding-left: 0;
+
   border-bottom: solid 0.5px #eee;
 
+  vertical-align: top;
   white-space: pre-wrap;
+}
+.line td.content {
+  border-right: solid 4px transparent;
+}
+.line.has-annotation td.content {
+  border-right: solid 4px rgba(255, 255, 0, 0.5);
 }
 .line-number {
   min-width: 3em;
@@ -66,4 +70,8 @@ table.markdown {
 
   font-size: 12pt;
   line-height: 1.45;
+}
+
+.highlighted-range {
+  background: rgba(255, 255, 0, 0.5);
 }

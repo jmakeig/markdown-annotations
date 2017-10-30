@@ -1,4 +1,4 @@
-const STATE = {
+const INITIAL_STATE = {
   ui: {
     isRendering: false,
     user: 'jmakeig',
@@ -13,14 +13,9 @@ author:
 - Justin Makeig
 history: |
   
-  * **2017-10-23** (@jmakeig): Solicited feedback from @dgorbet, @jpasqua, @arosenbaum, and @jclark on the intro corporate strategy section
-  * **2017-10-20** (@jmakeig): Initial draft workshopped with @dgorbet. Next steps:
-  
-      1. Clean up headings to reflect customer benefit
-      1. Add one or two paragraphs to each heading to explain. The point is to have a discussion, not implement (yet)
-      1. Circulate a draft to PM 2017-10-23
-      1. Get feedback in PM staff 2017-10-24
-      
+  * Things
+  * Stuff
+
 ...
 
 # Nausgaard ugh XOXO {#nausgaard}
@@ -136,24 +131,26 @@ Drinking vinegar YOLO swag, pabst cardigan 90's occupy hexagon plaid schlitz pok
 };
 
 /**
- * Renders Markdown string as HTML table rows.
+ * Renders Markdown string as HTML table rows. Does not touch the live DOM. 
  * 
  * @param {string} md  - Markdown
  * @returns {DocumentFragment}
  */
-function renderMarkdown(md, processors = []) {
+function renderMarkdown(md, annotations = [], processors = []) {
   const fragment = document.createDocumentFragment();
   if (!md) return fragment;
   const lines = md.split(/\n/);
   lines.map((line, index) => {
     const row = document.createElement('tr');
     row.classList.add('line');
+    row.dataset.line = index + 1;
+    row.id = `L${index + 1}`;
     const num = document.createElement('td');
-    num.dataset.line = index + 1;
-    num.id = `L${index + 1}`;
     num.classList.add('line-number');
+    num.dataset.line = index + 1;
     row.appendChild(num);
     const content = document.createElement('td');
+    content.classList.add('content');
 
     const listMatcher = /^(\s*)(\*|\-|\d+\.|>) /; // matches list items and quotes
     const matches = line.match(listMatcher);
@@ -172,65 +169,22 @@ function renderMarkdown(md, processors = []) {
       content.classList.add('quote');
     }
 
-    const text = document.createTextNode('' === line ? '\n' : line);
-    content.appendChild(text);
+    const markup = document.createDocumentFragment();
+    if (
+      annotations.some(
+        ann =>
+          index + 1 >= ann.range.start.row && index + 1 <= ann.range.end.row
+      )
+    ) {
+      row.classList.add('has-annotation');
+    }
+    markup.appendChild(document.createTextNode('' === line ? '\n' : line));
+
+    content.appendChild(markup);
     row.appendChild(content);
     fragment.appendChild(row);
   });
   return fragment;
-}
-
-/**
- * Given a Selection, determine the range, where
- * `start` is always before `end`, regardless 
- * from which direction the selection was made.
- * 
- * @param {Selection} selection 
- * @returns {Object} 
- */
-function getRange(selection) {
-  if (!selection) return;
-  const anchor = {
-    row: getLineNumber(selection.anchorNode),
-    column: selection.anchorOffset,
-  };
-  const focus = {
-    row: getLineNumber(selection.focusNode),
-    column: selection.focusOffset,
-  };
-  if (
-    anchor.row < focus.row ||
-    (anchor.row === focus.row && anchor.column <= focus.column)
-  ) {
-    return {
-      start: anchor,
-      end: focus,
-    };
-  } else {
-    return {
-      start: focus,
-      end: anchor,
-    };
-  }
-}
-
-/**
- * Given a Node, such as from a Selection anchor or focus, 
- * return the logical line number from the rendered Markdown.
- * This is not general purpose. It makes lots of assumptions 
- * about how the Markdown is rendered in `renderMarkdown()`.
- * 
- * @param {Node} node - Part of the rendered Markdown
- * @returns {Number} - The line number of the original 
- *                     Markdown document
- */
-function getLineNumber(node) {
-  if (node) {
-    // Ugly, brittle
-    return Number(
-      node.parentNode.parentNode.querySelector('.line-number').dataset.line
-    );
-  }
 }
 
 const START_ANNOTATION = 'START_ANNOTATION';
@@ -242,9 +196,9 @@ const SAVE_ANNOTATION_RECEIPT = 'SAVE_ANNOTATION_RECEIPT';
  * Redux reducer. Make sure nothing mutates the
  * state in-place.
  * 
- * @param {Object} state 
+ * @param {Object} state - current state
  * @param {Object} action 
- * @returns {Object} 
+ * @returns {Object} - new state
  */
 function reducer(state, action) {
   switch (action.type) {
@@ -275,6 +229,8 @@ function reducer(state, action) {
         }
         return false;
       });
+      tmp3.ui.comment = '';
+      tmp3.ui.currentRange = undefined;
       return tmp3;
     case SAVE_ANNOTATION_RECEIPT:
       const tmp4 = Object.assign({}, state);
@@ -284,7 +240,7 @@ function reducer(state, action) {
       };
       return tmp4;
     default:
-      return STATE;
+      return INITIAL_STATE;
   }
 }
 
@@ -298,9 +254,14 @@ const store = Redux.createStore(
   })
 );
 
-store.subscribe(render, STATE);
+store.subscribe(render, INITIAL_STATE);
 store.delayedDispatch = debounce(store.dispatch, 500);
 
+/**
+ * Render global state to the live DOM.
+ * 
+ * @return {undefined}
+ */
 function render() {
   // It’s odd that the state isn’t passed to the subscriber.
   // Need to get the state from the global store itself.
@@ -310,13 +271,72 @@ function render() {
 
   console.log('render', state);
   replaceChildren(
-    renderMarkdown(state.model.content),
+    renderMarkdown(state.model.content, state.model.annotations),
     document.querySelector('tbody')
   );
+  renderRange(state.ui.currentRange);
+  renderAnnotations(state.model.annotations);
 
   document.querySelector('#Comment').value = state.ui.comment || '';
-
   state.ui.isRendering = false;
+}
+
+/**
+ * Assumes the Markdown DOM has been rendered. Works on the live DOM.
+ * Probably should make this async for lots of annotations.
+ * 
+ * @param {Array<Annotation>} annotations 
+ * @return undefined
+ */
+function renderAnnotations(annotations) {
+  // Highlight annotations. Requires that DOM is already committed above
+  for (const ann of annotations) {
+    console.log(ann);
+    renderRange(ann.range);
+  }
+}
+
+/**
+ * 
+ * @param {Object} range - `{ start: { row: number, column: number}, end: { row: number, column: number} }`
+ * @return {undefined}
+ */
+function renderRange(range) {
+  if (!range) return;
+  const r = rangeFromOffsets(
+    document.querySelector(`#L${range.start.row}>td.content`),
+    range.start.column,
+    document.querySelector(`#L${range.end.row}>td.content`),
+    range.end.column
+  );
+  highlightRange(r);
+}
+
+/**
+ * Slices a string into `rng.length + 1` slices, with the number contents
+ * of `rng` as the zero-based boundaries.
+ * 
+ * @param {string} str - the input string
+ * @param {Array<number>} rng - the 
+ * @returns {Array<string>} - the substrings
+ */
+function slices(str, rng) {
+  if (!str || '' === str) return str;
+  if (!Array.isArray(rng) || rng.length < 1) return str;
+  if (rng.some(r => !Number.isInteger(r) || r < 0)) {
+    throw new TypeError('Boundaries must be positive integers');
+  }
+  const ranges = rng.sort((a, b) => a > b);
+  return [
+    ...ranges.reduce(
+      (slices, current, index, r) => [
+        ...slices,
+        str.substring(r[index - 1], current),
+      ],
+      []
+    ),
+    str.substring(ranges[ranges.length - 1]),
+  ];
 }
 
 /**
@@ -341,12 +361,6 @@ function replaceChildren(newChild, oldNode) {
 document.addEventListener('DOMContentLoaded', evt => {
   render();
   document.addEventListener('click', evt => {
-    if (evt.target && evt.target.matches('#Annotate')) {
-      store.dispatch({
-        type: START_ANNOTATION,
-        range: getRange(document.getSelection()),
-      });
-    }
     if (evt.target && evt.target.matches('#SaveAnnotation')) {
       store.dispatch({
         type: SAVE_ANNOTATION_INTENT,
@@ -372,6 +386,21 @@ document.addEventListener('DOMContentLoaded', evt => {
         type: CHANGE_COMMENT,
         comment: evt.target.value,
       });
+    }
+  });
+
+  let isSelecting = false;
+  document.addEventListener('selectionchange', evt => {
+    isSelecting = !window.getSelection().isCollapsed;
+  });
+  document.addEventListener('mouseup', evt => {
+    if (isSelecting) {
+      const selection = window.getSelection();
+      store.dispatch({
+        type: START_ANNOTATION,
+        range: getRange(selection),
+      });
+      isSelecting = false;
     }
   });
 });
@@ -403,4 +432,179 @@ function debounce(func, wait = 500, immediate = false) {
     timeout = setTimeout(later, wait);
     if (callNow) func.apply(context, args);
   };
+}
+
+/**
+ * The number of characters from the start of the parent node
+ * to the child node, flattening all intervening children, 
+ * plus the offset in the child node.
+ * 
+ * @example <div>ab<a>cd<a>ef</a>f</a>gh</div>
+ *          textOffsetFromNode(div, a[1], 1) // 5 = 'ab' + 'cd' + 1
+ * 
+ * @param {Node} parent 
+ * @param {Node} child 
+ * @param {number} [childOffset = 0]
+ */
+function textOffsetFromNode(parent, child, childOffset = 0) {
+  if (!parent) return;
+  if (!child) return offset;
+
+  const iter = document.createNodeIterator(parent, NodeFilter.SHOW_TEXT);
+
+  let node;
+  let offset = 0;
+  while (iter.nextNode()) {
+    node = iter.referenceNode;
+    if (node === child) {
+      return offset + childOffset;
+    }
+    if (Node.TEXT_NODE === node.nodeType) {
+      offset += node.textContent.length;
+    }
+  }
+  throw new Error(
+    `Couldn’t find ${String(child)} as a child of ${String(parent)}`
+  );
+}
+
+/**
+ * Given a node, find its parent line number, 
+ * delegating to `getLine()`.
+ * 
+ * @param {Node} node 
+ * @param {string} [matcher = 'tr.line']
+ * @return {number}
+ */
+function getLineNumber(node, matcher = 'tr.line') {
+  return parseInt(getLine(node, matcher).dataset.line, 10);
+}
+
+/**
+ * Given a node, find its parent line.
+ * 
+ * @param {Node} node 
+ * @param {string} [matcher = 'tr.line']
+ */
+function getLine(node, matcher = 'tr.line') {
+  do {
+    if (node.matches && node.matches(matcher)) {
+      return node;
+    }
+  } while ((node = node.parentNode));
+  return undefined;
+}
+
+/**
+ * Given a `Selection`, determine the `Range`, where
+ * `start` is always before `end`, regardless 
+ * from which direction the selection was made.
+ * 
+ * @param {Selection} selection 
+ * @returns {Object} - `{ start: number, end: number };
+ */
+function getRange(selection) {
+  if (!selection) return;
+  if (!(selection instanceof Selection))
+    throw new TypeError(String(selection.constructor.name));
+  const anchor = {
+    row: getLineNumber(selection.anchorNode),
+    column:
+      textOffsetFromNode(
+        getLine(selection.anchorNode),
+        selection.anchorNode,
+        selection.anchorOffset
+      ) + 0, // ?
+  };
+  const focus = {
+    row: getLineNumber(selection.focusNode),
+    column:
+      textOffsetFromNode(
+        getLine(selection.focusNode),
+        selection.focusNode,
+        selection.focusOffset
+      ) + 0, // ?
+  };
+  if (
+    anchor.row < focus.row ||
+    (anchor.row === focus.row && anchor.column <= focus.column)
+  ) {
+    return {
+      start: anchor,
+      end: focus,
+    };
+  } else {
+    return {
+      start: focus,
+      end: anchor,
+    };
+  }
+}
+
+/**
+ * 
+ * @param {Node} parentStart 
+ * @param {number} start 
+ * @param {Node} parentEnd 
+ * @param {number} end 
+ * @return {Range} 
+ */
+function rangeFromOffsets(
+  parentStart,
+  start = 0,
+  parentEnd = parentStart,
+  end = 0
+) {
+  const range = document.createRange();
+  const s = nodeFromTextOffset(parentStart, start);
+  const e = nodeFromTextOffset(parentEnd, end);
+
+  range.setStart(childTextNodeOrSelf(s.node), s.offset);
+  range.setEnd(childTextNodeOrSelf(e.node), e.offset);
+
+  return range;
+}
+
+/**
+ * 
+ * @param {Node} parent 
+ * @param {number} offset 
+ * @return {Object} - `{ node: Node, offset: number }`
+ */
+function nodeFromTextOffset(parent, offset = 0) {
+  if (!parent) return;
+  const iter = document.createNodeIterator(parent, NodeFilter.SHOW_TEXT);
+
+  let counter = 0;
+  let node;
+  let last;
+  // Find the start node (could we somehow skip this seemingly needless search?)
+  while (counter < offset && iter.nextNode()) {
+    node = iter.referenceNode;
+    if (node.nodeType === Node.TEXT_NODE) {
+      last = offset - counter;
+      counter += node.textContent.length;
+    }
+  }
+  return { node: node, offset: last };
+}
+
+/**
+ * Descendent-or-self until you get a `TextNode`
+ * 
+ * @param {Node} node 
+ * @return {TextNode} - Or `undefined` if there are not text 
+ *                      children, e.g. `<br/>`
+ */
+function childTextNodeOrSelf(node) {
+  if (!node) return;
+  if (!(node instanceof Node)) throw new TypeError(node.constructor.name);
+
+  if (Node.TEXT_NODE === node.nodeType) {
+    return node;
+  }
+  if (node.firstChild) {
+    return childTextNodeOrSelf(node.firstChild);
+  }
+  return undefined;
 }
