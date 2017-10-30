@@ -5,15 +5,23 @@
   <meta charset="utf-8">
   <title>Markdown</title>
   <link rel="stylesheet" href="annotate.css" />
+  <script src="https://unpkg.com/redux@latest/dist/redux.min.js"></script>
   <script src="annotate.js" type="text/javascript"></script>
 </head>
 
 <body>
   <table class="markdown">
-    <tbody>
-
-    </tbody>
+    <tbody></tbody>
   </table>
+  <div class="tools">
+    <button id="Annotate">Annotate</button>
+    <div>
+      <textarea id="Comment"></textarea>
+    </div>
+    <div>
+      <button id="SaveAnnotation">Save</button>
+    </div>
+  </div>
 </body>
 
 </html>

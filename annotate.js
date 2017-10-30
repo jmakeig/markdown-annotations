@@ -1,5 +1,13 @@
-const model = {
-  content: `---
+const STATE = {
+  ui: {
+    isRendering: false,
+    user: 'jmakeig',
+  },
+  model: {
+    annotations: [],
+    href: 'https://github.com/…',
+    commit: 'SHA',
+    content: `---
 title: MarkLogic Consolidated Vision
 author:
 - Justin Makeig
@@ -124,6 +132,7 @@ Glossier cloud bread tacos, twee jean shorts vape whatever literally locavore wo
 Taiyaki raclette hexagon, tumblr put a bird on it microdosing deep v 8-bit ethical banjo paleo next level. Brooklyn brunch gochujang, thundercats edison bulb master cleanse twee. Before they sold out meditation stumptown deep v you probably haven't heard of them farm-to-table af hella +1 copper mug bicycle rights taxidermy messenger bag. Cronut echo park quinoa banh mi semiotics keytar. Irony tilde brunch fixie. Knausgaard put a bird on it schlitz, lyft prism disrupt food truck retro freegan subway tile polaroid. Quinoa chillwave disrupt, master cleanse meggings adaptogen kinfolk iceland. Everyday carry chartreuse vape prism lo-fi. Microdosing taxidermy sartorial squid selfies, bitters kinfolk.
 
 Drinking vinegar YOLO swag, pabst cardigan 90's occupy hexagon plaid schlitz poke hot chicken banjo vape. Edison bulb heirloom venmo succulents, tilde subway tile crucifix skateboard. Vape YOLO activated charcoal craft beer ennui seitan distillery. Bespoke copper mug ugh, edison bulb craft beer banh mi hashtag yuccie cardigan tousled plaid kitsch hammock tumeric. Hell of jean shorts marfa, yuccie blue bottle put a bird on it jianbing la croix. Paleo meggings echo park franzen cold-pressed mustache gastropub ethical celiac pop-up prism gochujang. Salvia keffiyeh chillwave taxidermy. Ethical pitchfork tilde cliche polaroid beard. Copper mug neutra lumbersexual biodiesel, echo park fixie blue bottle cardigan irony put a bird on it craft beer artisan hexagon.`,
+  },
 };
 
 /**
@@ -140,9 +149,9 @@ function renderMarkdown(md, processors = []) {
     const row = document.createElement('tr');
     row.classList.add('line');
     const num = document.createElement('td');
+    num.dataset.line = index + 1;
     num.id = `L${index + 1}`;
     num.classList.add('line-number');
-    num.dataset.line = index + 1;
     row.appendChild(num);
     const content = document.createElement('td');
 
@@ -157,12 +166,12 @@ function renderMarkdown(md, processors = []) {
     if (line.match(headingMatcher)) {
       content.classList.add('heading');
     }
-    
+
     const quoteMatcher = /^>+ /;
     if (line.match(quoteMatcher)) {
       content.classList.add('quote');
     }
-    
+
     const text = document.createTextNode('' === line ? '\n' : line);
     content.appendChild(text);
     row.appendChild(content);
@@ -171,21 +180,227 @@ function renderMarkdown(md, processors = []) {
   return fragment;
 }
 
-function getLineNumber(node) {
-  if (node) return node.parentNode.dataset.line;
+/**
+ * Given a Selection, determine the range, where
+ * `start` is always before `end`, regardless 
+ * from which direction the selection was made.
+ * 
+ * @param {Selection} selection 
+ * @returns {Object} 
+ */
+function getRange(selection) {
+  if (!selection) return;
+  const anchor = {
+    row: getLineNumber(selection.anchorNode),
+    column: selection.anchorOffset,
+  };
+  const focus = {
+    row: getLineNumber(selection.focusNode),
+    column: selection.focusOffset,
+  };
+  if (
+    anchor.row < focus.row ||
+    (anchor.row === focus.row && anchor.column <= focus.column)
+  ) {
+    return {
+      start: anchor,
+      end: focus,
+    };
+  } else {
+    return {
+      start: focus,
+      end: anchor,
+    };
+  }
 }
-document.addEventListener('selectionchange', evt => {
-  const sel = document.getSelection();
-  console.log(sel.toString());
-  console.dir(
-    `Line ${getLineNumber(
-      sel.anchorNode
-    )}  ${sel.anchorOffset}, Line ${getLineNumber(
-      sel.focusNode
-    )} ${sel.focusOffset}`
+
+/**
+ * Given a Node, such as from a Selection anchor or focus, 
+ * return the logical line number from the rendered Markdown.
+ * This is not general purpose. It makes lots of assumptions 
+ * about how the Markdown is rendered in `renderMarkdown()`.
+ * 
+ * @param {Node} node - Part of the rendered Markdown
+ * @returns {Number} - The line number of the original 
+ *                     Markdown document
+ */
+function getLineNumber(node) {
+  if (node) {
+    // Ugly, brittle
+    return Number(
+      node.parentNode.parentNode.querySelector('.line-number').dataset.line
+    );
+  }
+}
+
+const START_ANNOTATION = 'START_ANNOTATION';
+const CHANGE_COMMENT = 'CHANGE_COMMENT';
+const SAVE_ANNOTATION_INTENT = 'SAVE_ANNOTATION_INTENT';
+const SAVE_ANNOTATION_RECEIPT = 'SAVE_ANNOTATION_RECEIPT';
+
+/**
+ * Redux reducer. Make sure nothing mutates the
+ * state in-place.
+ * 
+ * @param {Object} state 
+ * @param {Object} action 
+ * @returns {Object} 
+ */
+function reducer(state, action) {
+  switch (action.type) {
+    case START_ANNOTATION:
+      // FIXME: Immutable hack
+      const tmp = Object.assign({}, state);
+      tmp.ui = Object.assign({}, tmp.ui);
+      tmp.ui.currentRange = action.range;
+      return tmp;
+    case CHANGE_COMMENT:
+      const tmp2 = Object.assign({}, state);
+      tmp2.ui = Object.assign({}, tmp2.ui);
+      tmp2.ui.comment = action.comment;
+      return tmp2;
+    case SAVE_ANNOTATION_INTENT:
+      const tmp3 = Object.assign({}, state);
+      tmp3.model = Object.assign({}, state.model);
+      tmp3.model.annotations = [...tmp3.model.annotations];
+      const annotation = Object.assign({}, action.annotation, {
+        user: state.ui.user,
+        range: state.ui.currentRange,
+      });
+      tmp3.model.annotations.push(annotation);
+      tmp3.model.annotations.sort((a, b) => {
+        if (a.range.start.row > b.range.start.row) return true;
+        if (a.range.start.row === b.range.start.row) {
+          return a.range.start.column > b.range.start.column;
+        }
+        return false;
+      });
+      return tmp3;
+    case SAVE_ANNOTATION_RECEIPT:
+      const tmp4 = Object.assign({}, state);
+      tmp4.ui = {
+        isRendering: state.ui.isRendering,
+        user: state.ui.user,
+      };
+      return tmp4;
+    default:
+      return STATE;
+  }
+}
+
+const store = Redux.createStore(
+  reducer,
+  Redux.applyMiddleware(store => next => action => {
+    console.log('Dispatching', action);
+    const result = next(action);
+    console.log('Next state', store.getState());
+    return result;
+  })
+);
+
+store.subscribe(render, STATE);
+store.delayedDispatch = debounce(store.dispatch, 500);
+
+function render() {
+  // It’s odd that the state isn’t passed to the subscriber.
+  // Need to get the state from the global store itself.
+  const state = store.getState();
+
+  state.ui.isRendering = true;
+
+  console.log('render', state);
+  replaceChildren(
+    renderMarkdown(state.model.content),
+    document.querySelector('tbody')
   );
+
+  document.querySelector('#Comment').value = state.ui.comment || '';
+
+  state.ui.isRendering = false;
+}
+
+/**
+ * Replaces the entire contents of `oldNode` with `newChild`.
+ * It’s generally advisable to use a `DocumentFragment` for the
+ * the replacement.
+ * 
+ * @param {Node|DocumentFragment} newChild 
+ * @param {Node} oldNode 
+ * @returns {Node}  - The new parent wrapper
+ */
+function replaceChildren(newChild, oldNode) {
+  if (!oldNode) return;
+  const tmpParent = document.createElement(oldNode.tagName);
+  if (newChild) {
+    tmpParent.appendChild(newChild);
+  }
+  oldNode.parentNode.replaceChild(tmpParent, oldNode);
+  return tmpParent;
+}
+
+document.addEventListener('DOMContentLoaded', evt => {
+  render();
+  document.addEventListener('click', evt => {
+    if (evt.target && evt.target.matches('#Annotate')) {
+      store.dispatch({
+        type: START_ANNOTATION,
+        range: getRange(document.getSelection()),
+      });
+    }
+    if (evt.target && evt.target.matches('#SaveAnnotation')) {
+      store.dispatch({
+        type: SAVE_ANNOTATION_INTENT,
+        annotation: {
+          timestamp: new Date().toISOString(),
+          comment: document.querySelector('#Comment').value,
+        },
+      });
+      store.dispatch({
+        type: SAVE_ANNOTATION_RECEIPT,
+      });
+    }
+  });
+
+  document.addEventListener('input', evt => {
+    if (store.getState().ui.isRendering) {
+      evt.stopPropagation();
+      return;
+    }
+    // TODO: Debounce
+    if (evt.target && evt.target.matches('#Comment')) {
+      store.delayedDispatch({
+        type: CHANGE_COMMENT,
+        comment: evt.target.value,
+      });
+    }
+  });
 });
 
-document.addEventListener('DOMContentLoaded', evt =>
-  document.querySelector('tbody').appendChild(renderMarkdown(model.content))
-);
+/**
+ * Returns a function, that, as long as it continues to be invoked, will not
+ * be triggered. The function will be called after it stops being called for
+ * N milliseconds. If `immediate` is passed, trigger the function on the
+ * leading edge, instead of the trailing.
+ * 
+ * @see https://davidwalsh.name/javascript-debounce-function
+ * 
+ * @param {function} func 
+ * @param {number} [wait=500] 
+ * @param {boolean} [immediate=false] 
+ * @returns {function}
+ */
+function debounce(func, wait = 500, immediate = false) {
+  var timeout;
+  return function() {
+    var context = this,
+      args = arguments;
+    var later = function() {
+      timeout = null;
+      if (!immediate) func.apply(context, args);
+    };
+    var callNow = immediate && !timeout;
+    clearTimeout(timeout);
+    timeout = setTimeout(later, wait);
+    if (callNow) func.apply(context, args);
+  };
+}
