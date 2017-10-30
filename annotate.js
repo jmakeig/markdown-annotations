@@ -2,10 +2,6 @@ const STATE = {
   ui: {
     isRendering: false,
     user: 'jmakeig',
-    //currentRange: {
-    //   "start": { "row": 54, "column": 23 },
-    //   "end": { "line": 56, "column": 4 }
-    // }
   },
   model: {
     annotations: [],
@@ -272,7 +268,13 @@ function reducer(state, action) {
         range: state.ui.currentRange,
       });
       tmp3.model.annotations.push(annotation);
-      tmp3.model.annotations.sort((a, b) => a.timestamp < b.timestamp);
+      tmp3.model.annotations.sort((a, b) => {
+        if (a.range.start.row > b.range.start.row) return true;
+        if (a.range.start.row === b.range.start.row) {
+          return a.range.start.column > b.range.start.column;
+        }
+        return false;
+      });
       return tmp3;
     case SAVE_ANNOTATION_RECEIPT:
       const tmp4 = Object.assign({}, state);
