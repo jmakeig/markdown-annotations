@@ -1,5 +1,6 @@
 const STATE = {
   ui: {
+    isRendering: false,
     user: 'jmakeig',
     //currentRange: {
     //   "start": { "row": 54, "column": 23 },
@@ -239,6 +240,7 @@ function getLineNumber(node) {
 const START_ANNOTATION = 'START_ANNOTATION';
 const CHANGE_COMMENT = 'CHANGE_COMMENT';
 const SAVE_ANNOTATION_INTENT = 'SAVE_ANNOTATION_INTENT';
+const SAVE_ANNOTATION_RECEIPT = 'SAVE_ANNOTATION_RECEIPT';
 
 /**
  * Redux reducer. Make sure nothing mutates the
@@ -272,6 +274,13 @@ function reducer(state, action) {
       tmp3.model.annotations.push(annotation);
       tmp3.model.annotations.sort((a, b) => a.timestamp < b.timestamp);
       return tmp3;
+    case SAVE_ANNOTATION_RECEIPT:
+      const tmp4 = Object.assign({}, state);
+      tmp4.ui = {
+        isRendering: state.ui.isRendering,
+        user: state.ui.user,
+      };
+      return tmp4;
     default:
       return STATE;
   }
@@ -294,11 +303,18 @@ function render() {
   // It’s odd that the state isn’t passed to the subscriber.
   // Need to get the state from the global store itself.
   const state = store.getState();
+
+  state.ui.isRendering = true;
+
   console.log('render', state);
   replaceChildren(
     renderMarkdown(state.model.content),
     document.querySelector('tbody')
   );
+
+  document.querySelector('#Comment').value = state.ui.comment || '';
+
+  state.ui.isRendering = false;
 }
 
 /**
@@ -337,10 +353,17 @@ document.addEventListener('DOMContentLoaded', evt => {
           comment: document.querySelector('#Comment').value,
         },
       });
+      store.dispatch({
+        type: SAVE_ANNOTATION_RECEIPT,
+      });
     }
   });
 
   document.addEventListener('input', evt => {
+    if (store.getState().ui.isRendering) {
+      evt.stopPropagation();
+      return;
+    }
     // TODO: Debounce
     if (evt.target && evt.target.matches('#Comment')) {
       store.delayedDispatch({
