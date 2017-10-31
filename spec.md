@@ -1,6 +1,6 @@
 # Markdown Annotations
 
-A user logs in with her GitHub credentials. Her user name is stored in the global state. *This is a convenience, not a security measure. A user could modify this global state with her browser developer tools. The assumption is that she could also modify the state by changing the Markdown document directly in the git repository, for which she’ll necessarily have write access. * 
+A user logs in with her GitHub credentials. Her user name is stored in the global state. *This is a convenience, not a security measure. A user could modify this global state with her browser developer tools. The assumption is that she could also modify the state by changing the Markdown document directly in the git repository, for which she’ll necessarily have write access.* 
 
 A user specifies a git repository and the SHA of a commit for the document version that she wants to annotate. The browser app requests the raw Markdown text of that version from GitHub.
 
