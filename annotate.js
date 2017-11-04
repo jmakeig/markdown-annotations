@@ -4,7 +4,7 @@ const INITIAL_STATE = {
     user: 'jmakeig',
   },
   model: {
-    annotations: [],
+    annotations: null,
     href: 'https://github.com/…',
     commit: 'SHA',
     content: `---
@@ -129,6 +129,10 @@ Taiyaki raclette hexagon, tumblr put a bird on it microdosing deep v 8-bit ethic
 Drinking vinegar YOLO swag, pabst cardigan 90's occupy hexagon plaid schlitz poke hot chicken banjo vape. Edison bulb heirloom venmo succulents, tilde subway tile crucifix skateboard. Vape YOLO activated charcoal craft beer ennui seitan distillery. Bespoke copper mug ugh, edison bulb craft beer banh mi hashtag yuccie cardigan tousled plaid kitsch hammock tumeric. Hell of jean shorts marfa, yuccie blue bottle put a bird on it jianbing la croix. Paleo meggings echo park franzen cold-pressed mustache gastropub ethical celiac pop-up prism gochujang. Salvia keffiyeh chillwave taxidermy. Ethical pitchfork tilde cliche polaroid beard. Copper mug neutra lumbersexual biodiesel, echo park fixie blue bottle cardigan irony put a bird on it craft beer artisan hexagon.`,
   },
 };
+INITIAL_STATE.model.annotations = decorateAnnotations(
+  [],
+  INITIAL_STATE.ui.user
+);
 
 /**
  * Renders Markdown string as HTML table rows. Does not touch the live DOM. 
@@ -170,14 +174,6 @@ function renderMarkdown(md, annotations = [], processors = []) {
     }
 
     const markup = document.createDocumentFragment();
-    if (
-      annotations.some(
-        ann =>
-          index + 1 >= ann.range.start.row && index + 1 <= ann.range.end.row
-      )
-    ) {
-      row.classList.add('has-annotation');
-    }
     markup.appendChild(document.createTextNode('' === line ? '\n' : line));
 
     content.appendChild(markup);
@@ -188,10 +184,61 @@ function renderMarkdown(md, annotations = [], processors = []) {
 }
 
 const CHANGE_SELECTION = 'CHANGE_SELECTION';
-const START_ANNOTATION = 'START_ANNOTATION';
+const CANCEL_SELECTION = 'CANCEL_SELECTION';
+const NEW_ANNOTATION = ' NEW_ANNOTATION';
 const CHANGE_COMMENT = 'CHANGE_COMMENT';
 const SAVE_ANNOTATION_INTENT = 'SAVE_ANNOTATION_INTENT';
 const SAVE_ANNOTATION_RECEIPT = 'SAVE_ANNOTATION_RECEIPT';
+const EDIT_ANNOTATION = 'EDIT_ANNOTATION';
+const DELETE_ANNOTATION_INTENT = 'DELETE_ANNOTATION_INTENT';
+const DELETE_ANNOTATION_RECEIPT = 'DELETE_ANNOTATION_RECEIPT';
+const CANCEL_EDIT_ANNOTATION_RECEIPT = 'CANCEL_EDIT_ANNOTATION_RECEIPT';
+
+function decorateAnnotations(annotations = [], user) {
+  const array = [...annotations];
+  array.mine = function() {
+    if (!user) return this;
+    return this.filter(a => user === a.user);
+  };
+  array.findByID = function(id) {
+    return this.find(a => id === a.id);
+  };
+  array.upsert = function(annotation) {
+    if (!annotation) throw new ReferenceError(`Missing annotation`);
+    if (!annotation.id) throw new ReferenceError(`Missing annotation.id`);
+
+    const arr = [...this];
+    const existingIndex = arr.findIndex(a => annotation.id === a.id);
+    if (existingIndex > -1) {
+      arr.splice(existingIndex, 1);
+    }
+    arr.push(Object.assign({}, annotation));
+
+    const documentOrder = (a, b) => {
+      if (a.range.start.line > b.range.start.line) return true;
+      if (a.range.start.line === b.range.start.line) {
+        return a.range.start.column > b.range.start.column;
+      }
+      return false;
+    };
+    return decorateAnnotations(arr.sort(documentOrder), user);
+  };
+  array.delete = function(id) {
+    const arr = [...this];
+    const existingIndex = arr.findIndex(a => id === a.id);
+    if (existingIndex > -1) {
+      arr.splice(existingIndex, 1);
+    }
+    return decorateAnnotations(arr, user);
+  };
+  array.clearUnsaved = function() {
+    return decorateAnnotations(array.filter(a => !!a.timestamp));
+  };
+  array.toJSON = function() {
+    return this.filter(a => !a.isDirty);
+  };
+  return array;
+}
 
 /**
  * Redux reducer. Make sure nothing mutates the
@@ -209,57 +256,108 @@ function reducer(state, action) {
       tmp0.ui.position = action.position;
       tmp0.ui.selection = action.selection;
       return tmp0;
-    case START_ANNOTATION:
-      // FIXME: Immutable hack
+    case CANCEL_SELECTION:
+      const tmp7 = Object.assign({}, state);
+      tmp7.ui = Object.assign({}, tmp7.ui);
+      delete tmp7.ui.selection;
+      delete tmp7.ui.position;
+      return tmp7;
+    case NEW_ANNOTATION:
+      const id = uuidv4();
       const tmp = Object.assign({}, state);
       tmp.ui = Object.assign({}, tmp.ui);
-      tmp.ui.currentRange = {
-        start: {
-          row: state.ui.selection.start.row,
-          column: state.ui.selection.start.column,
-        },
-        end: {
-          row: state.ui.selection.end.row,
-          column: state.ui.selection.end.column,
-        },
-      };
       delete tmp.ui.selection;
       delete tmp.ui.position;
+      tmp.ui.activeAnnotationID = id;
+      tmp.model.annotations = decorateAnnotations(
+        state.model.annotations.clearUnsaved(),
+        tmp.ui.user
+      );
+      tmp.model.annotations = tmp.model.annotations.upsert({
+        isDirty: true,
+        id: id,
+        timestamp: null,
+        user: state.ui.user,
+        comment: '',
+        range: {
+          start: {
+            line: state.ui.selection.start.line,
+            column: state.ui.selection.start.column,
+          },
+          end: {
+            line: state.ui.selection.end.line,
+            column: state.ui.selection.end.column,
+          },
+        },
+      });
       return tmp;
-    case CHANGE_COMMENT:
-      const tmp2 = Object.assign({}, state);
-      tmp2.ui = Object.assign({}, state.ui);
-      tmp2.ui.comment = action.comment;
-      return tmp2;
     case SAVE_ANNOTATION_INTENT:
       const tmp3 = Object.assign({}, state);
       tmp3.model = Object.assign({}, state.model);
-      tmp3.model.annotations = [...tmp3.model.annotations];
-      const annotation = Object.assign({}, action.annotation, {
-        user: state.ui.user,
-        range: state.ui.currentRange,
-      });
-      tmp3.model.annotations.push(annotation);
-      tmp3.model.annotations.sort((a, b) => {
-        if (a.range.start.row > b.range.start.row) return true;
-        if (a.range.start.row === b.range.start.row) {
-          return a.range.start.column > b.range.start.column;
-        }
-        return false;
-      });
-      tmp3.ui.comment = '';
-      tmp3.ui.currentRange = undefined;
+      tmp3.model.annotations = state.model.annotations.upsert(
+        Object.assign(
+          {},
+          state.model.annotations.findByID(state.ui.activeAnnotationID),
+          {
+            timestamp: new Date().toISOString(),
+            comment: action.comment,
+          }
+        )
+      );
       return tmp3;
     case SAVE_ANNOTATION_RECEIPT:
       const tmp4 = Object.assign({}, state);
-      tmp4.ui = {
-        isRendering: state.ui.isRendering,
-        user: state.ui.user,
-      };
+      tmp4.model = Object.assign({}, state.model);
+      tmp4.model.annotations = decorateAnnotations(
+        state.model.annotations,
+        tmp4.ui.user
+      ).upsert(
+        Object.assign(
+          {},
+          // FIXME: This should be passed in the action
+          state.model.annotations.findByID(state.ui.activeAnnotationID)
+        )
+      );
+      delete tmp4.model.annotations.findByID(state.ui.activeAnnotationID)
+        .isDirty;
+      tmp4.ui = { isRendering: state.ui.isRendering, user: state.ui.user };
       return tmp4;
+    case EDIT_ANNOTATION:
+      const tmp5 = Object.assign({}, state);
+      tmp5.ui = Object.assign({}, state.ui);
+      tmp5.ui.activeAnnotationID = action.id;
+      return tmp5;
+    // case DELETE_ANNOTATION_INTENT:
+    case DELETE_ANNOTATION_RECEIPT:
+      const tmp6 = Object.assign({}, state);
+      tmp6.model = Object.assign({}, state.model);
+      tmp6.model.annotations = state.model.annotations.delete(
+        state.ui.activeAnnotationID
+      );
+      tmp6.ui = Object.assign({}, state.ui);
+      delete tmp6.ui.activeAnnotationID;
+      return tmp6;
+    case CANCEL_EDIT_ANNOTATION_RECEIPT:
+      const tmp8 = Object.assign({}, state);
+      tmp8.model = Object.assign({}, state.model);
+      tmp8.model.annotations = decorateAnnotations(
+        state.model.annotations.clearUnsaved(),
+        state.ui.user
+      );
+      tmp8.ui = Object.assign({}, state.ui);
+      delete tmp8.ui.activeAnnotationID;
+      return tmp8;
     default:
       return INITIAL_STATE;
   }
+}
+// <https://stackoverflow.com/a/2117523/563324>
+function uuidv4() {
+  return ([1e7] + -1e3 + -4e3 + -8e3 + -1e11).replace(/[018]/g, c =>
+    (c ^
+      (crypto.getRandomValues(new Uint8Array(1))[0] & (15 >> (c / 4)))
+    ).toString(16)
+  );
 }
 
 const store = Redux.createStore(
@@ -281,24 +379,25 @@ store.delayedDispatch = debounce(store.dispatch, 250);
  * @return {undefined}
  */
 function render() {
+  console.time('render');
   // It’s odd that the state isn’t passed to the subscriber.
   // Need to get the state from the global store itself.
   const state = store.getState();
 
   state.ui.isRendering = true;
 
-  console.log('render', state);
+  console.time('renderMarkdown');
   replaceChildren(
     renderMarkdown(state.model.content, state.model.annotations),
     document.querySelector('tbody')
   );
+  console.timeEnd('renderMarkdown');
   renderAnnotations(state.model.annotations);
 
-  if (state.ui.currentRange) {
-    renderRange(state.ui.currentRange);
-  }
-
-  document.querySelector('#Comment').value = state.ui.comment || '';
+  document.querySelector('#Comment').value = state.ui.activeAnnotationID
+    ? state.model.annotations.findByID(state.ui.activeAnnotationID).comment ||
+      ''
+    : '';
 
   const selAnn = document.querySelector('#SelectAnnotation');
   if (state.ui.position) {
@@ -313,22 +412,34 @@ function render() {
     selAnn.style.left = `-100px`;
   }
 
-  document.querySelector('#Comment').disabled = !state.ui.currentRange;
+  document.querySelector('#Comment').disabled = !state.ui.activeAnnotationID;
+
+  const active = state.model.annotations.findByID(state.ui.activeAnnotationID);
   document.querySelector('#SaveAnnotation').disabled =
-    !state.ui.currentRange || !state.ui.comment || !state.ui.comment.length > 0;
+    !active || document.querySelector('#Comment').value.length === 0;
+  document.querySelector('#DeleteAnnotation').disabled = !active;
+
+  // FIXME: This is ugly and brittle
+  if (!active || !active.timestamp) {
+    console.log('hide delete');
+    document.querySelector('#DeleteAnnotation').style.display = 'none';
+  } else {
+    document.querySelector('#DeleteAnnotation').style.display = 'unset';
+  }
+  document.querySelector('#CancelEditAnnotation').disabled = !active;
 
   state.ui.isRendering = false;
+  console.timeEnd('render');
 }
 
 function restoreSelection(range) {
   if (!range) return;
   const r = rangeFromOffsets(
-    document.querySelector(`#L${range.start.row}>td.content`),
+    document.querySelector(`#L${range.start.line}>td.content`),
     range.start.column,
-    document.querySelector(`#L${range.end.row}>td.content`),
+    document.querySelector(`#L${range.end.line}>td.content`),
     range.end.column
   );
-  console.log(r);
   const selection = window.getSelection();
   selection.removeAllRanges();
   selection.addRange(r);
@@ -342,53 +453,40 @@ function restoreSelection(range) {
  * @return undefined
  */
 function renderAnnotations(annotations) {
+  const state = store.getState();
   // Highlight annotations. Requires that DOM is already committed above
-  for (const ann of annotations) {
-    renderRange(ann.range);
+  for (const annotation of annotations) {
+    renderAnnotation(
+      annotation,
+      state.model.annotations.mine().some(a => annotation.id === a.id),
+      state.ui.activeAnnotationID === annotation.id
+    );
   }
 }
 
-/**
- * 
- * @param {Object} range - `{ start: { row: number, column: number}, end: { row: number, column: number} }`
- * @return {undefined}
- */
-function renderRange(range) {
-  if (!range) return;
+function renderAnnotation(annotation, isMine = false, isActive = false) {
+  if (!annotation) return;
   const r = rangeFromOffsets(
-    document.querySelector(`#L${range.start.row}>td.content`),
-    range.start.column,
-    document.querySelector(`#L${range.end.row}>td.content`),
-    range.end.column
+    document.querySelector(`#L${annotation.range.start.line}>td.content`),
+    annotation.range.start.column,
+    document.querySelector(`#L${annotation.range.end.line}>td.content`),
+    annotation.range.end.column
   );
-  highlightRange(r);
-}
-
-/**
- * Slices a string into `rng.length + 1` slices, with the number contents
- * of `rng` as the zero-based boundaries.
- * 
- * @param {string} str - the input string
- * @param {Array<number>} rng - the 
- * @returns {Array<string>} - the substrings
- */
-function slices(str, rng) {
-  if (!str || '' === str) return str;
-  if (!Array.isArray(rng) || rng.length < 1) return str;
-  if (rng.some(r => !Number.isInteger(r) || r < 0)) {
-    throw new TypeError('Boundaries must be positive integers');
-  }
-  const ranges = rng.sort((a, b) => a > b);
-  return [
-    ...ranges.reduce(
-      (slices, current, index, r) => [
-        ...slices,
-        str.substring(r[index - 1], current),
-      ],
-      []
-    ),
-    str.substring(ranges[ranges.length - 1]),
-  ];
+  highlightRange(r, () => {
+    const span = document.createElement('span');
+    span.classList.add('annotation');
+    span.dataset.annotationId = annotation.id;
+    if (isMine) {
+      span.classList.add('mine');
+    }
+    if (isActive) {
+      span.classList.add('active');
+    }
+    span.style.backgroundColor = `rgba(${new ColorHash()
+      .rgb(annotation.user)
+      .join(', ')}, 0.5)`;
+    return span;
+  });
 }
 
 /**
@@ -413,23 +511,47 @@ function replaceChildren(newChild, oldNode) {
 document.addEventListener('DOMContentLoaded', evt => {
   render();
   document.addEventListener('click', evt => {
+    console.log('evt.target.classList', evt.target.classList);
     if (evt.target && evt.target.matches('#SaveAnnotation')) {
       store.dispatch({
         type: SAVE_ANNOTATION_INTENT,
-        annotation: {
-          timestamp: new Date().toISOString(),
-          comment: document.querySelector('#Comment').value,
-        },
+        comment: document.querySelector('#Comment').value,
       });
       store.dispatch({
         type: SAVE_ANNOTATION_RECEIPT,
       });
     }
-    if (evt.target && evt.target.matches('#SelectAnnotation>button')) {
-      console.log('starting annotation…');
+    if (evt.target && evt.target.matches('#DeleteAnnotation')) {
       store.dispatch({
-        type: START_ANNOTATION,
+        type: DELETE_ANNOTATION_RECEIPT,
       });
+    }
+    if (evt.target && evt.target.matches('#CancelEditAnnotation')) {
+      store.dispatch({ type: CANCEL_EDIT_ANNOTATION_RECEIPT });
+    }
+    if (evt.target && evt.target.matches('#SelectAnnotation>button')) {
+      store.dispatch({
+        type: NEW_ANNOTATION,
+      });
+      const commentEl = document.querySelector('#Comment');
+      commentEl.focus();
+      commentEl.setSelectionRange(
+        commentEl.value.length,
+        commentEl.value.length
+      );
+    }
+    if (evt.target.matches('.annotation.mine')) {
+      const annotationEl = evt.target;
+      store.dispatch({
+        type: EDIT_ANNOTATION,
+        id: annotationEl.dataset.annotationId,
+      });
+      const commentEl = document.querySelector('#Comment');
+      commentEl.focus();
+      commentEl.setSelectionRange(
+        commentEl.value.length,
+        commentEl.value.length
+      );
     }
   });
 
@@ -438,12 +560,13 @@ document.addEventListener('DOMContentLoaded', evt => {
       evt.stopPropagation();
       return;
     }
-    // TODO: Debounce
+    const state = store.getState();
     if (evt.target && evt.target.matches('#Comment')) {
-      store.delayedDispatch({
-        type: CHANGE_COMMENT,
-        comment: evt.target.value,
-      });
+      const active = state.model.annotations.findByID(
+        state.ui.activeAnnotationID
+      );
+      document.querySelector('#SaveAnnotation').disabled =
+        !active || document.querySelector('#Comment').value.length === 0;
     }
   });
 
@@ -459,6 +582,10 @@ document.addEventListener('DOMContentLoaded', evt => {
         position: { x: evt.pageX, y: evt.pageY },
       });
       isSelecting = false;
+    } else {
+      if (store.getState().ui.selection) {
+        store.dispatch({ type: CANCEL_SELECTION });
+      }
     }
   });
 });
@@ -507,7 +634,7 @@ function debounce(func, wait = 500, immediate = false) {
 function textOffsetFromNode(parent, child, childOffset = 0) {
   if (!parent) return;
   if (!child) return offset;
-
+  // console.log('textOffsetFromNode', parent, child, childOffset);
   const iter = document.createNodeIterator(parent, NodeFilter.SHOW_TEXT);
 
   let node;
@@ -566,26 +693,25 @@ function getRange(selection) {
   if (!(selection instanceof Selection))
     throw new TypeError(String(selection.constructor.name));
   const anchor = {
-    row: getLineNumber(selection.anchorNode),
-    column:
-      textOffsetFromNode(
-        getLine(selection.anchorNode),
-        selection.anchorNode,
-        selection.anchorOffset
-      ) + 0, // ?
+    line: getLineNumber(selection.anchorNode),
+    column: textOffsetFromNode(
+      getLine(selection.anchorNode),
+      selection.anchorNode,
+      selection.anchorOffset
+    ),
   };
   const focus = {
-    row: getLineNumber(selection.focusNode),
-    column:
-      textOffsetFromNode(
-        getLine(selection.focusNode),
-        selection.focusNode,
-        selection.focusOffset
-      ) + 0, // ?
+    line: getLineNumber(selection.focusNode),
+    column: textOffsetFromNode(
+      getLine(selection.focusNode),
+      selection.focusNode,
+      selection.focusOffset
+    ),
   };
+  // console.log('getRange', anchor, focus);
   if (
-    anchor.row < focus.row ||
-    (anchor.row === focus.row && anchor.column <= focus.column)
+    anchor.line < focus.line ||
+    (anchor.line === focus.line && anchor.column <= focus.column)
   ) {
     return {
       start: anchor,
@@ -613,10 +739,11 @@ function rangeFromOffsets(
   parentEnd = parentStart,
   end = 0
 ) {
+  // console.log('rangeFromOffsets', parentStart, start, parentEnd, end);
   const range = document.createRange();
   const s = nodeFromTextOffset(parentStart, start);
   const e = nodeFromTextOffset(parentEnd, end);
-
+  // console.log('rangeFromOffsets#nodeFromTextOffset', s, e);
   range.setStart(childTextNodeOrSelf(s.node), s.offset);
   range.setEnd(childTextNodeOrSelf(e.node), e.offset);
 
@@ -631,16 +758,18 @@ function rangeFromOffsets(
  */
 function nodeFromTextOffset(parent, offset = 0) {
   if (!parent) return;
+  // console.log('nodeFromTextOffset', parent, offset);
+
   const iter = document.createNodeIterator(parent, NodeFilter.SHOW_TEXT);
 
-  let counter = 0;
+  let counter = -1;
   let node;
   let last;
   // Find the start node (could we somehow skip this seemingly needless search?)
   while (counter < offset && iter.nextNode()) {
     node = iter.referenceNode;
     if (node.nodeType === Node.TEXT_NODE) {
-      last = offset - counter;
+      last = offset - counter - 1;
       counter += node.textContent.length;
     }
   }

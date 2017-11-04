@@ -55,6 +55,7 @@ table.markdown {
 
   padding: 0.25em;
 
+  border: solid 0.5px #ccc;
   border-radius: 0.5em;
   box-shadow: 5px 5px 10px 0 rgba(0,0,0,0.25);
 
@@ -87,6 +88,12 @@ table.markdown {
   line-height: 1.45;
 }
 
-.highlighted-range {
-  background: rgba(255, 255, 0, 0.5);
+.annotation {
+  /* background: rgba(255, 255, 0, 0.5); */
+}
+.annotation.active {
+  background: rgba(255, 255, 0, 0.5) !important; /* override the inline style */
+}
+.annotation.mine:hover {
+  cursor: pointer;
 }
