@@ -30,7 +30,6 @@
  * [1]: https://github.com/tilgovi/dom-anchor-text-position/blob/d110756ff00702f642daae570752be9595fc2a52/TextPositionAnchor.js
  */
 
-
 var highlightRange = (function() {
   // Wrap each text node in a given DOM Range with a <span class=[highLightClass]>.
   // Breaks start and/or end node if needed.
@@ -39,7 +38,10 @@ var highlightRange = (function() {
   // Parameters:
   // - rangeObject: a Range whose start and end containers are text nodes.
   // - highlightClass: the CSS class the text pieces in the range should get, defaults to 'highlighted-range'.
-  function highlightRange(rangeObject, highlightClass) {
+  function highlightRange(
+    rangeObject,
+    highlightCallback = () => document.createElement('span')
+  ) {
     // Ignore range if empty.
     if (rangeObject.collapsed) {
       return;
@@ -61,7 +63,7 @@ var highlightRange = (function() {
     // Highlight each node
     var highlights = [];
     for (nodeIdx in nodes) {
-      highlights.push(highlightNode(nodes[nodeIdx], highlightClass));
+      highlights.push(highlightNode(nodes[nodeIdx], highlightCallback));
     }
 
     // The rangeObject gets messed up by our DOM changes. Be kind and restore.
@@ -215,10 +217,9 @@ var highlightRange = (function() {
   }
 
   // Replace [node] with <span class=[highlightClass]>[node]</span>
-  function highlightNode(node, highlightClass) {
+  function highlightNode(node, highlightCallback) {
     // Create a highlight
-    var highlight = document.createElement('span');
-    highlight.classList.add(highlightClass);
+    var highlight = highlightCallback();
 
     // Wrap it around the text node
     node.parentNode.replaceChild(highlight, node);

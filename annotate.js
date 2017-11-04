@@ -308,7 +308,7 @@ function render() {
   renderAnnotations(state.model.annotations);
 
   if (state.ui.activeAnnotation) {
-    renderRange(state.ui.activeAnnotation.range);
+    renderAnnotation(state.ui.activeAnnotation, true);
   }
 
   document.querySelector('#Comment').value = state.ui.activeAnnotation
@@ -360,25 +360,28 @@ function restoreSelection(range) {
  */
 function renderAnnotations(annotations) {
   // Highlight annotations. Requires that DOM is already committed above
-  for (const ann of annotations) {
-    renderRange(ann.range);
+  for (const annotation of annotations) {
+    renderAnnotation(annotation);
   }
 }
 
-/**
- * 
- * @param {Object} range - `{ start: { row: number, column: number}, end: { row: number, column: number} }`
- * @return {undefined}
- */
-function renderRange(range) {
-  if (!range) return;
+function renderAnnotation(annotation, isActive = false) {
+  if (!annotation) return;
   const r = rangeFromOffsets(
-    document.querySelector(`#L${range.start.row}>td.content`),
-    range.start.column,
-    document.querySelector(`#L${range.end.row}>td.content`),
-    range.end.column
+    document.querySelector(`#L${annotation.range.start.row}>td.content`),
+    annotation.range.start.column,
+    document.querySelector(`#L${annotation.range.end.row}>td.content`),
+    annotation.range.end.column
   );
-  highlightRange(r);
+  highlightRange(r, () => {
+    const span = document.createElement('span');
+    span.classList.add('highlighted-range');
+    span.dataset.annotationId = annotation.id;
+    if (isActive) {
+      span.classList.add('active-annotation');
+    }
+    return span;
+  });
 }
 
 /**
