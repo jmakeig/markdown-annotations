@@ -46,6 +46,21 @@ table.markdown {
   content: attr(data-line) '.';
 }
 
+#SelectAnnotation {
+  position: absolute;
+  top: -10em;
+  left: -10em;
+
+  display: none;
+
+  padding: 0.25em;
+
+  border-radius: 0.5em;
+  box-shadow: 5px 5px 10px 0 rgba(0,0,0,0.25);
+
+  background: white;
+}
+
 
 
 .tools {

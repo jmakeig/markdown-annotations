@@ -187,6 +187,7 @@ function renderMarkdown(md, annotations = [], processors = []) {
   return fragment;
 }
 
+const CHANGE_SELECTION = 'CHANGE_SELECTION';
 const START_ANNOTATION = 'START_ANNOTATION';
 const CHANGE_COMMENT = 'CHANGE_COMMENT';
 const SAVE_ANNOTATION_INTENT = 'SAVE_ANNOTATION_INTENT';
@@ -202,15 +203,32 @@ const SAVE_ANNOTATION_RECEIPT = 'SAVE_ANNOTATION_RECEIPT';
  */
 function reducer(state, action) {
   switch (action.type) {
+    case CHANGE_SELECTION:
+      const tmp0 = Object.assign({}, state);
+      tmp0.ui = Object.assign({}, tmp0.ui);
+      tmp0.ui.position = action.position;
+      tmp0.ui.selection = action.selection;
+      return tmp0;
     case START_ANNOTATION:
       // FIXME: Immutable hack
       const tmp = Object.assign({}, state);
       tmp.ui = Object.assign({}, tmp.ui);
-      tmp.ui.currentRange = action.range;
+      tmp.ui.currentRange = {
+        start: {
+          row: state.ui.selection.start.row,
+          column: state.ui.selection.start.column,
+        },
+        end: {
+          row: state.ui.selection.end.row,
+          column: state.ui.selection.end.column,
+        },
+      };
+      delete tmp.ui.selection;
+      delete tmp.ui.position;
       return tmp;
     case CHANGE_COMMENT:
       const tmp2 = Object.assign({}, state);
-      tmp2.ui = Object.assign({}, tmp2.ui);
+      tmp2.ui = Object.assign({}, state.ui);
       tmp2.ui.comment = action.comment;
       return tmp2;
     case SAVE_ANNOTATION_INTENT:
@@ -255,7 +273,7 @@ const store = Redux.createStore(
 );
 
 store.subscribe(render, INITIAL_STATE);
-store.delayedDispatch = debounce(store.dispatch, 500);
+store.delayedDispatch = debounce(store.dispatch, 250);
 
 /**
  * Render global state to the live DOM.
@@ -274,11 +292,46 @@ function render() {
     renderMarkdown(state.model.content, state.model.annotations),
     document.querySelector('tbody')
   );
-  renderRange(state.ui.currentRange);
   renderAnnotations(state.model.annotations);
 
+  if (state.ui.currentRange) {
+    renderRange(state.ui.currentRange);
+  }
+
   document.querySelector('#Comment').value = state.ui.comment || '';
+
+  const selAnn = document.querySelector('#SelectAnnotation');
+  if (state.ui.position) {
+    selAnn.style.display = 'unset';
+    selAnn.style.top = `${state.ui.position.y}px`;
+    selAnn.style.left = `${state.ui.position.x}px`;
+    selAnn.querySelector('button').focus();
+    restoreSelection(state.ui.selection);
+  } else {
+    selAnn.style.display = 'none';
+    selAnn.style.top = `-100px`;
+    selAnn.style.left = `-100px`;
+  }
+
+  document.querySelector('#Comment').disabled = !state.ui.currentRange;
+  document.querySelector('#SaveAnnotation').disabled =
+    !state.ui.currentRange || !state.ui.comment || !state.ui.comment.length > 0;
+
   state.ui.isRendering = false;
+}
+
+function restoreSelection(range) {
+  if (!range) return;
+  const r = rangeFromOffsets(
+    document.querySelector(`#L${range.start.row}>td.content`),
+    range.start.column,
+    document.querySelector(`#L${range.end.row}>td.content`),
+    range.end.column
+  );
+  console.log(r);
+  const selection = window.getSelection();
+  selection.removeAllRanges();
+  selection.addRange(r);
 }
 
 /**
@@ -291,7 +344,6 @@ function render() {
 function renderAnnotations(annotations) {
   // Highlight annotations. Requires that DOM is already committed above
   for (const ann of annotations) {
-    console.log(ann);
     renderRange(ann.range);
   }
 }
@@ -373,6 +425,12 @@ document.addEventListener('DOMContentLoaded', evt => {
         type: SAVE_ANNOTATION_RECEIPT,
       });
     }
+    if (evt.target && evt.target.matches('#SelectAnnotation>button')) {
+      console.log('starting annotation…');
+      store.dispatch({
+        type: START_ANNOTATION,
+      });
+    }
   });
 
   document.addEventListener('input', evt => {
@@ -395,10 +453,10 @@ document.addEventListener('DOMContentLoaded', evt => {
   });
   document.addEventListener('mouseup', evt => {
     if (isSelecting) {
-      const selection = window.getSelection();
       store.dispatch({
-        type: START_ANNOTATION,
-        range: getRange(selection),
+        type: CHANGE_SELECTION,
+        selection: getRange(window.getSelection()),
+        position: { x: evt.pageX, y: evt.pageY },
       });
       isSelecting = false;
     }
