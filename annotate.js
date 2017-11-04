@@ -188,7 +188,7 @@ function renderMarkdown(md, annotations = [], processors = []) {
 }
 
 const CHANGE_SELECTION = 'CHANGE_SELECTION';
-const START_ANNOTATION = 'START_ANNOTATION';
+const NEW_ANNOTATION = ' NEW_ANNOTATION';
 const CHANGE_COMMENT = 'CHANGE_COMMENT';
 const SAVE_ANNOTATION_INTENT = 'SAVE_ANNOTATION_INTENT';
 const SAVE_ANNOTATION_RECEIPT = 'SAVE_ANNOTATION_RECEIPT';
@@ -209,18 +209,23 @@ function reducer(state, action) {
       tmp0.ui.position = action.position;
       tmp0.ui.selection = action.selection;
       return tmp0;
-    case START_ANNOTATION:
-      // FIXME: Immutable hack
+    case NEW_ANNOTATION:
       const tmp = Object.assign({}, state);
       tmp.ui = Object.assign({}, tmp.ui);
-      tmp.ui.currentRange = {
-        start: {
-          row: state.ui.selection.start.row,
-          column: state.ui.selection.start.column,
-        },
-        end: {
-          row: state.ui.selection.end.row,
-          column: state.ui.selection.end.column,
+      tmp.ui.activeAnnotation = {
+        id: uuidv4(),
+        timestamp: null,
+        user: state.ui.user,
+        comment: '',
+        range: {
+          start: {
+            row: state.ui.selection.start.row,
+            column: state.ui.selection.start.column,
+          },
+          end: {
+            row: state.ui.selection.end.row,
+            column: state.ui.selection.end.column,
+          },
         },
       };
       delete tmp.ui.selection;
@@ -229,16 +234,17 @@ function reducer(state, action) {
     case CHANGE_COMMENT:
       const tmp2 = Object.assign({}, state);
       tmp2.ui = Object.assign({}, state.ui);
-      tmp2.ui.comment = action.comment;
+      tmp2.ui.activeAnnotation.comment = action.comment;
       return tmp2;
     case SAVE_ANNOTATION_INTENT:
       const tmp3 = Object.assign({}, state);
       tmp3.model = Object.assign({}, state.model);
       tmp3.model.annotations = [...tmp3.model.annotations];
-      const annotation = Object.assign({}, action.annotation, {
-        user: state.ui.user,
-        range: state.ui.currentRange,
-      });
+      const annotation = Object.assign(
+        { timestamp: new Date().toISOString() },
+        state.ui.activeAnnotation,
+        action.annotation
+      );
       tmp3.model.annotations.push(annotation);
       tmp3.model.annotations.sort((a, b) => {
         if (a.range.start.row > b.range.start.row) return true;
@@ -247,8 +253,7 @@ function reducer(state, action) {
         }
         return false;
       });
-      tmp3.ui.comment = '';
-      tmp3.ui.currentRange = undefined;
+      tmp3.ui.activeAnnotation = undefined;
       return tmp3;
     case SAVE_ANNOTATION_RECEIPT:
       const tmp4 = Object.assign({}, state);
@@ -260,6 +265,14 @@ function reducer(state, action) {
     default:
       return INITIAL_STATE;
   }
+}
+// <https://stackoverflow.com/a/2117523/563324>
+function uuidv4() {
+  return ([1e7] + -1e3 + -4e3 + -8e3 + -1e11).replace(/[018]/g, c =>
+    (c ^
+      (crypto.getRandomValues(new Uint8Array(1))[0] & (15 >> (c / 4)))
+    ).toString(16)
+  );
 }
 
 const store = Redux.createStore(
@@ -294,11 +307,13 @@ function render() {
   );
   renderAnnotations(state.model.annotations);
 
-  if (state.ui.currentRange) {
-    renderRange(state.ui.currentRange);
+  if (state.ui.activeAnnotation) {
+    renderRange(state.ui.activeAnnotation.range);
   }
 
-  document.querySelector('#Comment').value = state.ui.comment || '';
+  document.querySelector('#Comment').value = state.ui.activeAnnotation
+    ? state.ui.activeAnnotation.comment || ''
+    : '';
 
   const selAnn = document.querySelector('#SelectAnnotation');
   if (state.ui.position) {
@@ -313,9 +328,11 @@ function render() {
     selAnn.style.left = `-100px`;
   }
 
-  document.querySelector('#Comment').disabled = !state.ui.currentRange;
+  document.querySelector('#Comment').disabled = !state.ui.activeAnnotation;
   document.querySelector('#SaveAnnotation').disabled =
-    !state.ui.currentRange || !state.ui.comment || !state.ui.comment.length > 0;
+    !state.ui.activeAnnotation ||
+    !state.ui.activeAnnotation.comment ||
+    !state.ui.activeAnnotation.comment.length > 0;
 
   state.ui.isRendering = false;
 }
@@ -428,7 +445,7 @@ document.addEventListener('DOMContentLoaded', evt => {
     if (evt.target && evt.target.matches('#SelectAnnotation>button')) {
       console.log('starting annotation…');
       store.dispatch({
-        type: START_ANNOTATION,
+        type: NEW_ANNOTATION,
       });
     }
   });
