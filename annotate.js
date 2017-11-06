@@ -192,6 +192,7 @@ const NEW_ANNOTATION = ' NEW_ANNOTATION';
 const CHANGE_COMMENT = 'CHANGE_COMMENT';
 const SAVE_ANNOTATION_INTENT = 'SAVE_ANNOTATION_INTENT';
 const SAVE_ANNOTATION_RECEIPT = 'SAVE_ANNOTATION_RECEIPT';
+const SELECT_ANNOTATION = 'SELECT_ANNOTATION';
 
 /**
  * Redux reducer. Make sure nothing mutates the
@@ -245,6 +246,17 @@ function reducer(state, action) {
         state.ui.activeAnnotation,
         action.annotation
       );
+      // console.log(
+      //   annotation.id,
+      //   tmp3.model.annotations.map(i => i.id).join(', ')
+      // );
+      const existingIndex = tmp3.model.annotations.findIndex(
+        a => annotation.id === a.id
+      );
+      console.log('existingIndex', existingIndex);
+      if (existingIndex > -1) {
+        tmp3.model.annotations.splice(existingIndex, 1);
+      }
       tmp3.model.annotations.push(annotation);
       tmp3.model.annotations.sort((a, b) => {
         if (a.range.start.row > b.range.start.row) return true;
@@ -262,6 +274,12 @@ function reducer(state, action) {
         user: state.ui.user,
       };
       return tmp4;
+    case SELECT_ANNOTATION:
+      const tmp5 = Object.assign({}, state);
+      const a5 = state.model.annotations.filter(a => action.id === a.id)[0];
+      tmp5.ui = Object.assign({}, state.ui);
+      tmp5.ui.activeAnnotation = Object.assign({}, a5);
+      return tmp5;
     default:
       return INITIAL_STATE;
   }
@@ -372,6 +390,7 @@ function renderAnnotation(annotation, isActive = false) {
     document.querySelector(`#L${annotation.range.end.row}>td.content`),
     annotation.range.end.column
   );
+  console.log(r);
   highlightRange(r, () => {
     const span = document.createElement('span');
     span.classList.add('highlighted-range');
@@ -451,6 +470,13 @@ document.addEventListener('DOMContentLoaded', evt => {
       console.log('starting annotation…');
       store.dispatch({
         type: NEW_ANNOTATION,
+      });
+    }
+    if (evt.target.matches('.highlighted-range')) {
+      const annotationEl = evt.target;
+      store.dispatch({
+        type: SELECT_ANNOTATION,
+        id: annotationEl.dataset.annotationId,
       });
     }
   });
