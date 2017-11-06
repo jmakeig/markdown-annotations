@@ -457,33 +457,6 @@ function renderAnnotation(annotation, isActive = false) {
 }
 
 /**
- * Slices a string into `rng.length + 1` slices, with the number contents
- * of `rng` as the zero-based boundaries.
- * 
- * @param {string} str - the input string
- * @param {Array<number>} rng - the 
- * @returns {Array<string>} - the substrings
- */
-function slices(str, rng) {
-  if (!str || '' === str) return str;
-  if (!Array.isArray(rng) || rng.length < 1) return str;
-  if (rng.some(r => !Number.isInteger(r) || r < 0)) {
-    throw new TypeError('Boundaries must be positive integers');
-  }
-  const ranges = rng.sort((a, b) => a > b);
-  return [
-    ...ranges.reduce(
-      (slices, current, index, r) => [
-        ...slices,
-        str.substring(r[index - 1], current),
-      ],
-      []
-    ),
-    str.substring(ranges[ranges.length - 1]),
-  ];
-}
-
-/**
  * Replaces the entire contents of `oldNode` with `newChild`.
  * It’s generally advisable to use a `DocumentFragment` for the
  * the replacement.
