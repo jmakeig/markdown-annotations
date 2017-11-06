@@ -280,16 +280,20 @@ function reducer(state, action) {
     case CHANGE_COMMENT:
       const tmp2 = Object.assign({}, state);
       tmp2.ui = Object.assign({}, state.ui);
+      const annotation2 = state.model.annotations.findByID(
+        state.ui.activeAnnotationID
+      );
+      if (state.ui.user !== annotation2.user) {
+        throw new Error(
+          `Can’t edit someone else’s comment (${annotation2.user})`
+        );
+      }
       tmp2.model.annotations = decorateAnnotations(state.model.annotations);
       tmp2.model.annotations = state.model.annotations.upsert(
-        Object.assign(
-          {},
-          state.model.annotations.findByID(state.ui.activeAnnotationID),
-          {
-            isDirty: true,
-            comment: action.comment,
-          }
-        )
+        Object.assign({}, annotation2, {
+          isDirty: true,
+          comment: action.comment,
+        })
       );
       return tmp2;
     case SAVE_ANNOTATION_INTENT:
