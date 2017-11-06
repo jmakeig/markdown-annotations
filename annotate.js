@@ -193,6 +193,8 @@ const CHANGE_COMMENT = 'CHANGE_COMMENT';
 const SAVE_ANNOTATION_INTENT = 'SAVE_ANNOTATION_INTENT';
 const SAVE_ANNOTATION_RECEIPT = 'SAVE_ANNOTATION_RECEIPT';
 const EDIT_ANNOTATION = 'EDIT_ANNOTATION';
+const DELETE_ANNOTATION_INTENT = 'DELETE_ANNOTATION_INTENT';
+const DELETE_ANNOTATION_RECEIPT = 'DELETE_ANNOTATION_RECEIPT';
 
 function decorateAnnotations(annotations = []) {
   const array = [...annotations];
@@ -322,6 +324,16 @@ function reducer(state, action) {
       tmp5.ui = Object.assign({}, state.ui);
       tmp5.ui.activeAnnotationID = action.id;
       return tmp5;
+    // case DELETE_ANNOTATION_INTENT:
+    case DELETE_ANNOTATION_RECEIPT:
+      const tmp6 = Object.assign({}, state);
+      tmp6.model = Object.assign({}, state.model);
+      tmp6.model.annotations = state.model.annotations.delete(
+        state.ui.activeAnnotationID
+      );
+      tmp6.ui = Object.assign({}, state.ui);
+      delete tmp6.ui.activeAnnotationID;
+      return tmp6;
     default:
       return INITIAL_STATE;
   }
@@ -389,6 +401,7 @@ function render() {
   const active = state.model.annotations.findByID(state.ui.activeAnnotationID);
   document.querySelector('#SaveAnnotation').disabled =
     !active || !active.comment || !active.comment.length > 0;
+  document.querySelector('#DeleteAnnotation').disabled = !active;
 
   state.ui.isRendering = false;
 }
@@ -499,6 +512,11 @@ document.addEventListener('DOMContentLoaded', evt => {
       });
       store.dispatch({
         type: SAVE_ANNOTATION_RECEIPT,
+      });
+    }
+    if (evt.target && evt.target.matches('#DeleteAnnotation')) {
+      store.dispatch({
+        type: DELETE_ANNOTATION_RECEIPT,
       });
     }
     if (evt.target && evt.target.matches('#SelectAnnotation>button')) {
