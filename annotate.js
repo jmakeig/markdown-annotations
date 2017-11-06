@@ -173,7 +173,7 @@ function renderMarkdown(md, annotations = [], processors = []) {
     // if (
     //   annotations.some(
     //     ann =>
-    //       index + 1 >= ann.range.start.row && index + 1 <= ann.range.end.row
+    //       index + 1 >= ann.range.start.line && index + 1 <= ann.range.end.line
     //   )
     // ) {
     //   row.classList.add('has-annotation');
@@ -213,8 +213,8 @@ function decorateAnnotations(annotations = []) {
     arr.push(Object.assign({}, annotation));
 
     const documentOrder = (a, b) => {
-      if (a.range.start.row > b.range.start.row) return true;
-      if (a.range.start.row === b.range.start.row) {
+      if (a.range.start.line > b.range.start.line) return true;
+      if (a.range.start.line === b.range.start.line) {
         return a.range.start.column > b.range.start.column;
       }
       return false;
@@ -267,11 +267,11 @@ function reducer(state, action) {
         comment: '',
         range: {
           start: {
-            row: state.ui.selection.start.row,
+            line: state.ui.selection.start.line,
             column: state.ui.selection.start.column,
           },
           end: {
-            row: state.ui.selection.end.row,
+            line: state.ui.selection.end.line,
             column: state.ui.selection.end.column,
           },
         },
@@ -413,9 +413,9 @@ function render() {
 function restoreSelection(range) {
   if (!range) return;
   const r = rangeFromOffsets(
-    document.querySelector(`#L${range.start.row}>td.content`),
+    document.querySelector(`#L${range.start.line}>td.content`),
     range.start.column,
-    document.querySelector(`#L${range.end.row}>td.content`),
+    document.querySelector(`#L${range.end.line}>td.content`),
     range.end.column
   );
   const selection = window.getSelection();
@@ -441,9 +441,9 @@ function renderAnnotations(annotations) {
 function renderAnnotation(annotation, isActive = false) {
   if (!annotation) return;
   const r = rangeFromOffsets(
-    document.querySelector(`#L${annotation.range.start.row}>td.content`),
+    document.querySelector(`#L${annotation.range.start.line}>td.content`),
     annotation.range.start.column,
-    document.querySelector(`#L${annotation.range.end.row}>td.content`),
+    document.querySelector(`#L${annotation.range.end.line}>td.content`),
     annotation.range.end.column
   );
   highlightRange(r, () => {
@@ -654,7 +654,7 @@ function getRange(selection) {
   if (!(selection instanceof Selection))
     throw new TypeError(String(selection.constructor.name));
   const anchor = {
-    row: getLineNumber(selection.anchorNode),
+    line: getLineNumber(selection.anchorNode),
     column:
       textOffsetFromNode(
         getLine(selection.anchorNode),
@@ -663,7 +663,7 @@ function getRange(selection) {
       ) + 0, // ?
   };
   const focus = {
-    row: getLineNumber(selection.focusNode),
+    line: getLineNumber(selection.focusNode),
     column:
       textOffsetFromNode(
         getLine(selection.focusNode),
@@ -672,8 +672,8 @@ function getRange(selection) {
       ) + 0, // ?
   };
   if (
-    anchor.row < focus.row ||
-    (anchor.row === focus.row && anchor.column <= focus.column)
+    anchor.line < focus.line ||
+    (anchor.line === focus.line && anchor.column <= focus.column)
   ) {
     return {
       start: anchor,
