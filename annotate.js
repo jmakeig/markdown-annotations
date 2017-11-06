@@ -4,7 +4,7 @@ const INITIAL_STATE = {
     user: 'jmakeig',
   },
   model: {
-    annotations: [],
+    annotations: decorateAnnotations([]),
     href: 'https://github.com/…',
     commit: 'SHA',
     content: `---
@@ -192,7 +192,46 @@ const NEW_ANNOTATION = ' NEW_ANNOTATION';
 const CHANGE_COMMENT = 'CHANGE_COMMENT';
 const SAVE_ANNOTATION_INTENT = 'SAVE_ANNOTATION_INTENT';
 const SAVE_ANNOTATION_RECEIPT = 'SAVE_ANNOTATION_RECEIPT';
-const SELECT_ANNOTATION = 'SELECT_ANNOTATION';
+const EDIT_ANNOTATION = 'EDIT_ANNOTATION';
+
+function decorateAnnotations(annotations = []) {
+  const array = [...annotations];
+  array.findByID = function(id) {
+    return this.find(a => id === a.id);
+  };
+  array.upsert = function(annotation) {
+    if (!annotation) throw new ReferenceError(`Missing annotation`);
+    if (!annotation.id) throw new ReferenceError(`Missing annotation.id`);
+
+    const arr = [...this];
+    const existingIndex = arr.findIndex(a => annotation.id === a.id);
+    if (existingIndex > -1) {
+      arr.splice(existingIndex, 1);
+    }
+    arr.push(Object.assign({}, annotation));
+
+    const documentOrder = (a, b) => {
+      if (a.range.start.row > b.range.start.row) return true;
+      if (a.range.start.row === b.range.start.row) {
+        return a.range.start.column > b.range.start.column;
+      }
+      return false;
+    };
+    return decorateAnnotations(arr.sort(documentOrder));
+  };
+  array.delete = function(id) {
+    const arr = [...this];
+    const existingIndex = arr.findIndex(a => id === a.id);
+    if (existingIndex > -1) {
+      arr.splice(existingIndex, 1);
+    }
+    return decorateAnnotations(arr);
+  };
+  array.toJSON = function() {
+    return this.filter(a => !a.isDirty);
+  };
+  return array;
+}
 
 /**
  * Redux reducer. Make sure nothing mutates the
@@ -211,10 +250,16 @@ function reducer(state, action) {
       tmp0.ui.selection = action.selection;
       return tmp0;
     case NEW_ANNOTATION:
+      const id = uuidv4();
       const tmp = Object.assign({}, state);
       tmp.ui = Object.assign({}, tmp.ui);
-      tmp.ui.activeAnnotation = {
-        id: uuidv4(),
+      delete tmp.ui.selection;
+      delete tmp.ui.position;
+      tmp.ui.activeAnnotationID = id;
+      tmp.model.annotations = decorateAnnotations(state.model.annotations);
+      tmp.model.annotations = tmp.model.annotations.upsert({
+        isDirty: true,
+        id: id,
         timestamp: null,
         user: state.ui.user,
         comment: '',
@@ -228,57 +273,54 @@ function reducer(state, action) {
             column: state.ui.selection.end.column,
           },
         },
-      };
-      delete tmp.ui.selection;
-      delete tmp.ui.position;
+      });
       return tmp;
     case CHANGE_COMMENT:
       const tmp2 = Object.assign({}, state);
       tmp2.ui = Object.assign({}, state.ui);
-      tmp2.ui.activeAnnotation.comment = action.comment;
+      tmp2.model.annotations = decorateAnnotations(state.model.annotations);
+      tmp2.model.annotations = state.model.annotations.upsert(
+        Object.assign(
+          {},
+          state.model.annotations.findByID(state.ui.activeAnnotationID),
+          {
+            isDirty: true,
+            comment: action.comment,
+          }
+        )
+      );
       return tmp2;
     case SAVE_ANNOTATION_INTENT:
       const tmp3 = Object.assign({}, state);
       tmp3.model = Object.assign({}, state.model);
-      tmp3.model.annotations = [...tmp3.model.annotations];
-      const annotation = Object.assign(
-        { timestamp: new Date().toISOString() },
-        state.ui.activeAnnotation,
-        action.annotation
+      tmp3.model.annotations = state.model.annotations.upsert(
+        Object.assign(
+          {},
+          state.model.annotations.findByID(state.ui.activeAnnotationID),
+          {
+            timestamp: new Date().toISOString(),
+          }
+        )
       );
-      // console.log(
-      //   annotation.id,
-      //   tmp3.model.annotations.map(i => i.id).join(', ')
-      // );
-      const existingIndex = tmp3.model.annotations.findIndex(
-        a => annotation.id === a.id
-      );
-      console.log('existingIndex', existingIndex);
-      if (existingIndex > -1) {
-        tmp3.model.annotations.splice(existingIndex, 1);
-      }
-      tmp3.model.annotations.push(annotation);
-      tmp3.model.annotations.sort((a, b) => {
-        if (a.range.start.row > b.range.start.row) return true;
-        if (a.range.start.row === b.range.start.row) {
-          return a.range.start.column > b.range.start.column;
-        }
-        return false;
-      });
-      tmp3.ui.activeAnnotation = undefined;
       return tmp3;
     case SAVE_ANNOTATION_RECEIPT:
       const tmp4 = Object.assign({}, state);
-      tmp4.ui = {
-        isRendering: state.ui.isRendering,
-        user: state.ui.user,
-      };
+      tmp4.model = Object.assign({}, state.model);
+      tmp4.model.annotations = decorateAnnotations(state.model.annotations);
+      tmp4.model.annotations = state.model.annotations.upsert(
+        Object.assign(
+          {},
+          state.model.annotations.findByID(state.ui.activeAnnotationID)
+        )
+      );
+      delete tmp4.model.annotations.findByID(state.ui.activeAnnotationID)
+        .isDirty;
+      tmp4.ui = { isRendering: state.ui.isRendering, user: state.ui.user };
       return tmp4;
-    case SELECT_ANNOTATION:
+    case EDIT_ANNOTATION:
       const tmp5 = Object.assign({}, state);
-      const a5 = state.model.annotations.filter(a => action.id === a.id)[0];
       tmp5.ui = Object.assign({}, state.ui);
-      tmp5.ui.activeAnnotation = Object.assign({}, a5);
+      tmp5.ui.activeAnnotationID = action.id;
       return tmp5;
     default:
       return INITIAL_STATE;
@@ -324,12 +366,9 @@ function render() {
   );
   renderAnnotations(state.model.annotations);
 
-  if (state.ui.activeAnnotation) {
-    renderAnnotation(state.ui.activeAnnotation, true);
-  }
-
-  document.querySelector('#Comment').value = state.ui.activeAnnotation
-    ? state.ui.activeAnnotation.comment || ''
+  document.querySelector('#Comment').value = state.ui.activeAnnotationID
+    ? state.model.annotations.findByID(state.ui.activeAnnotationID).comment ||
+      ''
     : '';
 
   const selAnn = document.querySelector('#SelectAnnotation');
@@ -345,11 +384,11 @@ function render() {
     selAnn.style.left = `-100px`;
   }
 
-  document.querySelector('#Comment').disabled = !state.ui.activeAnnotation;
+  document.querySelector('#Comment').disabled = !state.ui.activeAnnotationID;
+
+  const active = state.model.annotations.findByID(state.ui.activeAnnotationID);
   document.querySelector('#SaveAnnotation').disabled =
-    !state.ui.activeAnnotation ||
-    !state.ui.activeAnnotation.comment ||
-    !state.ui.activeAnnotation.comment.length > 0;
+    !active || !active.comment || !active.comment.length > 0;
 
   state.ui.isRendering = false;
 }
@@ -362,7 +401,6 @@ function restoreSelection(range) {
     document.querySelector(`#L${range.end.row}>td.content`),
     range.end.column
   );
-  console.log(r);
   const selection = window.getSelection();
   selection.removeAllRanges();
   selection.addRange(r);
@@ -376,6 +414,8 @@ function restoreSelection(range) {
  * @return undefined
  */
 function renderAnnotations(annotations) {
+  // annotations.forEach(renderAnnotation);
+
   // Highlight annotations. Requires that DOM is already committed above
   for (const annotation of annotations) {
     renderAnnotation(annotation);
@@ -390,7 +430,6 @@ function renderAnnotation(annotation, isActive = false) {
     document.querySelector(`#L${annotation.range.end.row}>td.content`),
     annotation.range.end.column
   );
-  console.log(r);
   highlightRange(r, () => {
     const span = document.createElement('span');
     span.classList.add('highlighted-range');
@@ -457,17 +496,12 @@ document.addEventListener('DOMContentLoaded', evt => {
     if (evt.target && evt.target.matches('#SaveAnnotation')) {
       store.dispatch({
         type: SAVE_ANNOTATION_INTENT,
-        annotation: {
-          timestamp: new Date().toISOString(),
-          comment: document.querySelector('#Comment').value,
-        },
       });
       store.dispatch({
         type: SAVE_ANNOTATION_RECEIPT,
       });
     }
     if (evt.target && evt.target.matches('#SelectAnnotation>button')) {
-      console.log('starting annotation…');
       store.dispatch({
         type: NEW_ANNOTATION,
       });
@@ -475,7 +509,7 @@ document.addEventListener('DOMContentLoaded', evt => {
     if (evt.target.matches('.highlighted-range')) {
       const annotationEl = evt.target;
       store.dispatch({
-        type: SELECT_ANNOTATION,
+        type: EDIT_ANNOTATION,
         id: annotationEl.dataset.annotationId,
       });
     }
