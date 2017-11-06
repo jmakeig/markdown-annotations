@@ -427,11 +427,10 @@ function restoreSelection(range) {
  * @return undefined
  */
 function renderAnnotations(annotations) {
-  // annotations.forEach(renderAnnotation);
-
+  const state = store.getState();
   // Highlight annotations. Requires that DOM is already committed above
   for (const annotation of annotations) {
-    renderAnnotation(annotation);
+    renderAnnotation(annotation, state.ui.activeAnnotationID === annotation.id);
   }
 }
 
