@@ -495,6 +495,12 @@ document.addEventListener('DOMContentLoaded', evt => {
       store.dispatch({
         type: NEW_ANNOTATION,
       });
+      const commentEl = document.querySelector('#Comment');
+      commentEl.focus();
+      commentEl.setSelectionRange(
+        commentEl.value.length,
+        commentEl.value.length
+      );
     }
     if (evt.target.matches('.highlighted-range')) {
       const annotationEl = evt.target;
@@ -502,6 +508,12 @@ document.addEventListener('DOMContentLoaded', evt => {
         type: EDIT_ANNOTATION,
         id: annotationEl.dataset.annotationId,
       });
+      const commentEl = document.querySelector('#Comment');
+      commentEl.focus();
+      commentEl.setSelectionRange(
+        commentEl.value.length,
+        commentEl.value.length
+      );
     }
   });
 
