@@ -170,14 +170,14 @@ function renderMarkdown(md, annotations = [], processors = []) {
     }
 
     const markup = document.createDocumentFragment();
-    if (
-      annotations.some(
-        ann =>
-          index + 1 >= ann.range.start.row && index + 1 <= ann.range.end.row
-      )
-    ) {
-      row.classList.add('has-annotation');
-    }
+    // if (
+    //   annotations.some(
+    //     ann =>
+    //       index + 1 >= ann.range.start.row && index + 1 <= ann.range.end.row
+    //   )
+    // ) {
+    //   row.classList.add('has-annotation');
+    // }
     markup.appendChild(document.createTextNode('' === line ? '\n' : line));
 
     content.appendChild(markup);
@@ -300,7 +300,6 @@ function render() {
 
   state.ui.isRendering = true;
 
-  console.log('render', state);
   replaceChildren(
     renderMarkdown(state.model.content, state.model.annotations),
     document.querySelector('tbody')
@@ -380,6 +379,9 @@ function renderAnnotation(annotation, isActive = false) {
     if (isActive) {
       span.classList.add('active-annotation');
     }
+    span.style.backgroundColor = `rgba(${new ColorHash()
+      .rgb(annotation.user)
+      .join(', ')}, 0.5)`;
     return span;
   });
 }
