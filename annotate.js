@@ -595,7 +595,7 @@ function debounce(func, wait = 500, immediate = false) {
 function textOffsetFromNode(parent, child, childOffset = 0) {
   if (!parent) return;
   if (!child) return offset;
-
+  // console.log('textOffsetFromNode', parent, child, childOffset);
   const iter = document.createNodeIterator(parent, NodeFilter.SHOW_TEXT);
 
   let node;
@@ -655,22 +655,21 @@ function getRange(selection) {
     throw new TypeError(String(selection.constructor.name));
   const anchor = {
     line: getLineNumber(selection.anchorNode),
-    column:
-      textOffsetFromNode(
-        getLine(selection.anchorNode),
-        selection.anchorNode,
-        selection.anchorOffset
-      ) + 0, // ?
+    column: textOffsetFromNode(
+      getLine(selection.anchorNode),
+      selection.anchorNode,
+      selection.anchorOffset
+    ),
   };
   const focus = {
     line: getLineNumber(selection.focusNode),
-    column:
-      textOffsetFromNode(
-        getLine(selection.focusNode),
-        selection.focusNode,
-        selection.focusOffset
-      ) + 0, // ?
+    column: textOffsetFromNode(
+      getLine(selection.focusNode),
+      selection.focusNode,
+      selection.focusOffset
+    ),
   };
+  // console.log('getRange', anchor, focus);
   if (
     anchor.line < focus.line ||
     (anchor.line === focus.line && anchor.column <= focus.column)
@@ -701,10 +700,11 @@ function rangeFromOffsets(
   parentEnd = parentStart,
   end = 0
 ) {
+  // console.log('rangeFromOffsets', parentStart, start, parentEnd, end);
   const range = document.createRange();
   const s = nodeFromTextOffset(parentStart, start);
   const e = nodeFromTextOffset(parentEnd, end);
-
+  // console.log('rangeFromOffsets#nodeFromTextOffset', s, e);
   range.setStart(childTextNodeOrSelf(s.node), s.offset);
   range.setEnd(childTextNodeOrSelf(e.node), e.offset);
 
@@ -719,16 +719,18 @@ function rangeFromOffsets(
  */
 function nodeFromTextOffset(parent, offset = 0) {
   if (!parent) return;
+  // console.log('nodeFromTextOffset', parent, offset);
+
   const iter = document.createNodeIterator(parent, NodeFilter.SHOW_TEXT);
 
-  let counter = 0;
+  let counter = -1;
   let node;
   let last;
   // Find the start node (could we somehow skip this seemingly needless search?)
   while (counter < offset && iter.nextNode()) {
     node = iter.referenceNode;
     if (node.nodeType === Node.TEXT_NODE) {
-      last = offset - counter;
+      last = offset - counter - 1;
       counter += node.textContent.length;
     }
   }
