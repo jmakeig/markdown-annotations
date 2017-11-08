@@ -88,9 +88,12 @@ table.markdown {
   line-height: 1.45;
 }
 
-.highlighted-range {
+.annotation {
   /* background: rgba(255, 255, 0, 0.5); */
 }
-.highlighted-range.active-annotation {
+.annotation.active {
   background: rgba(255, 255, 0, 0.5) !important; /* override the inline style */
+}
+.annotation.mine:hover {
+  cursor: pointer;
 }

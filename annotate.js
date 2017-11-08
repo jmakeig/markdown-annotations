@@ -4,7 +4,7 @@ const INITIAL_STATE = {
     user: 'jmakeig',
   },
   model: {
-    annotations: decorateAnnotations([]),
+    annotations: null,
     href: 'https://github.com/…',
     commit: 'SHA',
     content: `---
@@ -129,6 +129,10 @@ Taiyaki raclette hexagon, tumblr put a bird on it microdosing deep v 8-bit ethic
 Drinking vinegar YOLO swag, pabst cardigan 90's occupy hexagon plaid schlitz poke hot chicken banjo vape. Edison bulb heirloom venmo succulents, tilde subway tile crucifix skateboard. Vape YOLO activated charcoal craft beer ennui seitan distillery. Bespoke copper mug ugh, edison bulb craft beer banh mi hashtag yuccie cardigan tousled plaid kitsch hammock tumeric. Hell of jean shorts marfa, yuccie blue bottle put a bird on it jianbing la croix. Paleo meggings echo park franzen cold-pressed mustache gastropub ethical celiac pop-up prism gochujang. Salvia keffiyeh chillwave taxidermy. Ethical pitchfork tilde cliche polaroid beard. Copper mug neutra lumbersexual biodiesel, echo park fixie blue bottle cardigan irony put a bird on it craft beer artisan hexagon.`,
   },
 };
+INITIAL_STATE.model.annotations = decorateAnnotations(
+  [],
+  INITIAL_STATE.ui.user
+);
 
 /**
  * Renders Markdown string as HTML table rows. Does not touch the live DOM. 
@@ -170,14 +174,6 @@ function renderMarkdown(md, annotations = [], processors = []) {
     }
 
     const markup = document.createDocumentFragment();
-    // if (
-    //   annotations.some(
-    //     ann =>
-    //       index + 1 >= ann.range.start.line && index + 1 <= ann.range.end.line
-    //   )
-    // ) {
-    //   row.classList.add('has-annotation');
-    // }
     markup.appendChild(document.createTextNode('' === line ? '\n' : line));
 
     content.appendChild(markup);
@@ -197,8 +193,12 @@ const EDIT_ANNOTATION = 'EDIT_ANNOTATION';
 const DELETE_ANNOTATION_INTENT = 'DELETE_ANNOTATION_INTENT';
 const DELETE_ANNOTATION_RECEIPT = 'DELETE_ANNOTATION_RECEIPT';
 
-function decorateAnnotations(annotations = []) {
+function decorateAnnotations(annotations = [], user) {
   const array = [...annotations];
+  array.mine = function() {
+    if (!user) return this;
+    return this.filter(a => user === a.user);
+  };
   array.findByID = function(id) {
     return this.find(a => id === a.id);
   };
@@ -220,7 +220,7 @@ function decorateAnnotations(annotations = []) {
       }
       return false;
     };
-    return decorateAnnotations(arr.sort(documentOrder));
+    return decorateAnnotations(arr.sort(documentOrder), user);
   };
   array.delete = function(id) {
     const arr = [...this];
@@ -228,7 +228,7 @@ function decorateAnnotations(annotations = []) {
     if (existingIndex > -1) {
       arr.splice(existingIndex, 1);
     }
-    return decorateAnnotations(arr);
+    return decorateAnnotations(arr, user);
   };
   array.toJSON = function() {
     return this.filter(a => !a.isDirty);
@@ -265,7 +265,10 @@ function reducer(state, action) {
       delete tmp.ui.selection;
       delete tmp.ui.position;
       tmp.ui.activeAnnotationID = id;
-      tmp.model.annotations = decorateAnnotations(state.model.annotations);
+      tmp.model.annotations = decorateAnnotations(
+        state.model.annotations,
+        tmp.ui.user
+      );
       tmp.model.annotations = tmp.model.annotations.upsert({
         isDirty: true,
         id: id,
@@ -295,7 +298,10 @@ function reducer(state, action) {
           `Can’t edit someone else’s comment (${annotation2.user})`
         );
       }
-      tmp2.model.annotations = decorateAnnotations(state.model.annotations);
+      tmp2.model.annotations = decorateAnnotations(
+        state.model.annotations,
+        tmp2.ui.user
+      );
       tmp2.model.annotations = state.model.annotations.upsert(
         Object.assign({}, annotation2, {
           isDirty: true,
@@ -319,7 +325,10 @@ function reducer(state, action) {
     case SAVE_ANNOTATION_RECEIPT:
       const tmp4 = Object.assign({}, state);
       tmp4.model = Object.assign({}, state.model);
-      tmp4.model.annotations = decorateAnnotations(state.model.annotations);
+      tmp4.model.annotations = decorateAnnotations(
+        state.model.annotations,
+        tmp4.ui.user
+      );
       tmp4.model.annotations = state.model.annotations.upsert(
         Object.assign(
           {},
@@ -445,11 +454,15 @@ function renderAnnotations(annotations) {
   const state = store.getState();
   // Highlight annotations. Requires that DOM is already committed above
   for (const annotation of annotations) {
-    renderAnnotation(annotation, state.ui.activeAnnotationID === annotation.id);
+    renderAnnotation(
+      annotation,
+      state.model.annotations.mine().some(a => annotation.id === a.id),
+      state.ui.activeAnnotationID === annotation.id
+    );
   }
 }
 
-function renderAnnotation(annotation, isActive = false) {
+function renderAnnotation(annotation, isMine = false, isActive = false) {
   if (!annotation) return;
   const r = rangeFromOffsets(
     document.querySelector(`#L${annotation.range.start.line}>td.content`),
@@ -459,10 +472,13 @@ function renderAnnotation(annotation, isActive = false) {
   );
   highlightRange(r, () => {
     const span = document.createElement('span');
-    span.classList.add('highlighted-range');
+    span.classList.add('annotation');
     span.dataset.annotationId = annotation.id;
+    if (isMine) {
+      span.classList.add('mine');
+    }
     if (isActive) {
-      span.classList.add('active-annotation');
+      span.classList.add('active');
     }
     span.style.backgroundColor = `rgba(${new ColorHash()
       .rgb(annotation.user)
@@ -493,6 +509,7 @@ function replaceChildren(newChild, oldNode) {
 document.addEventListener('DOMContentLoaded', evt => {
   render();
   document.addEventListener('click', evt => {
+    console.log('evt.target.classList', evt.target.classList);
     if (evt.target && evt.target.matches('#SaveAnnotation')) {
       store.dispatch({
         type: SAVE_ANNOTATION_INTENT,
@@ -517,7 +534,7 @@ document.addEventListener('DOMContentLoaded', evt => {
         commentEl.value.length
       );
     }
-    if (evt.target.matches('.highlighted-range')) {
+    if (evt.target.matches('.annotation.mine')) {
       const annotationEl = evt.target;
       store.dispatch({
         type: EDIT_ANNOTATION,
@@ -559,7 +576,9 @@ document.addEventListener('DOMContentLoaded', evt => {
       });
       isSelecting = false;
     } else {
-      store.dispatch({ type: CANCEL_SELECTION });
+      if (store.getState().ui.selection) {
+        store.dispatch({ type: CANCEL_SELECTION });
+      }
     }
   });
 });
