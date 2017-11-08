@@ -377,16 +377,19 @@ store.delayedDispatch = debounce(store.dispatch, 250);
  * @return {undefined}
  */
 function render() {
+  console.time('render');
   // It’s odd that the state isn’t passed to the subscriber.
   // Need to get the state from the global store itself.
   const state = store.getState();
 
   state.ui.isRendering = true;
 
+  console.time('renderMarkdown');
   replaceChildren(
     renderMarkdown(state.model.content, state.model.annotations),
     document.querySelector('tbody')
   );
+  console.timeEnd('renderMarkdown');
   renderAnnotations(state.model.annotations);
 
   document.querySelector('#Comment').value = state.ui.activeAnnotationID
@@ -415,6 +418,7 @@ function render() {
   document.querySelector('#DeleteAnnotation').disabled = !active;
 
   state.ui.isRendering = false;
+  console.timeEnd('render');
 }
 
 function restoreSelection(range) {
