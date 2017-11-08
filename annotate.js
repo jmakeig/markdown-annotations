@@ -192,6 +192,7 @@ const SAVE_ANNOTATION_RECEIPT = 'SAVE_ANNOTATION_RECEIPT';
 const EDIT_ANNOTATION = 'EDIT_ANNOTATION';
 const DELETE_ANNOTATION_INTENT = 'DELETE_ANNOTATION_INTENT';
 const DELETE_ANNOTATION_RECEIPT = 'DELETE_ANNOTATION_RECEIPT';
+const CANCEL_EDIT_ANNOTATION_RECEIPT = 'CANCEL_EDIT_ANNOTATION_RECEIPT';
 
 function decorateAnnotations(annotations = [], user) {
   const array = [...annotations];
@@ -230,6 +231,9 @@ function decorateAnnotations(annotations = [], user) {
     }
     return decorateAnnotations(arr, user);
   };
+  array.clearUnsaved = function() {
+    return decorateAnnotations(array.filter(a => !!a.timestamp));
+  };
   array.toJSON = function() {
     return this.filter(a => !a.isDirty);
   };
@@ -266,7 +270,7 @@ function reducer(state, action) {
       delete tmp.ui.position;
       tmp.ui.activeAnnotationID = id;
       tmp.model.annotations = decorateAnnotations(
-        state.model.annotations,
+        state.model.annotations.clearUnsaved(),
         tmp.ui.user
       );
       tmp.model.annotations = tmp.model.annotations.upsert({
@@ -354,6 +358,16 @@ function reducer(state, action) {
       tmp6.ui = Object.assign({}, state.ui);
       delete tmp6.ui.activeAnnotationID;
       return tmp6;
+    case CANCEL_EDIT_ANNOTATION_RECEIPT:
+      const tmp8 = Object.assign({}, state);
+      tmp8.model = Object.assign({}, state.model);
+      tmp8.model.annotations = decorateAnnotations(
+        state.model.annotations.clearUnsaved(),
+        state.ui.user
+      );
+      tmp8.ui = Object.assign({}, state.ui);
+      delete tmp8.ui.activeAnnotationID;
+      return tmp8;
     default:
       return INITIAL_STATE;
   }
@@ -522,6 +536,9 @@ document.addEventListener('DOMContentLoaded', evt => {
       store.dispatch({
         type: DELETE_ANNOTATION_RECEIPT,
       });
+    }
+    if (evt.target && evt.target.matches('#CancelEditAnnotation')) {
+      store.dispatch({ type: CANCEL_EDIT_ANNOTATION_RECEIPT });
     }
     if (evt.target && evt.target.matches('#SelectAnnotation>button')) {
       store.dispatch({
