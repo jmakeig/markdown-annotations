@@ -291,28 +291,6 @@ function reducer(state, action) {
         },
       });
       return tmp;
-    case CHANGE_COMMENT:
-      const tmp2 = Object.assign({}, state);
-      tmp2.ui = Object.assign({}, state.ui);
-      const annotation2 = state.model.annotations.findByID(
-        state.ui.activeAnnotationID
-      );
-      if (state.ui.user !== annotation2.user) {
-        throw new Error(
-          `Can’t edit someone else’s comment (${annotation2.user})`
-        );
-      }
-      tmp2.model.annotations = decorateAnnotations(
-        state.model.annotations,
-        tmp2.ui.user
-      );
-      tmp2.model.annotations = state.model.annotations.upsert(
-        Object.assign({}, annotation2, {
-          isDirty: true,
-          comment: action.comment,
-        })
-      );
-      return tmp2;
     case SAVE_ANNOTATION_INTENT:
       const tmp3 = Object.assign({}, state);
       tmp3.model = Object.assign({}, state.model);
@@ -322,6 +300,7 @@ function reducer(state, action) {
           state.model.annotations.findByID(state.ui.activeAnnotationID),
           {
             timestamp: new Date().toISOString(),
+            comment: action.comment,
           }
         )
       );
@@ -332,10 +311,10 @@ function reducer(state, action) {
       tmp4.model.annotations = decorateAnnotations(
         state.model.annotations,
         tmp4.ui.user
-      );
-      tmp4.model.annotations = state.model.annotations.upsert(
+      ).upsert(
         Object.assign(
           {},
+          // FIXME: This should be passed in the action
           state.model.annotations.findByID(state.ui.activeAnnotationID)
         )
       );
@@ -437,8 +416,17 @@ function render() {
 
   const active = state.model.annotations.findByID(state.ui.activeAnnotationID);
   document.querySelector('#SaveAnnotation').disabled =
-    !active || !active.comment || !active.comment.length > 0;
+    !active || document.querySelector('#Comment').value.length === 0;
   document.querySelector('#DeleteAnnotation').disabled = !active;
+
+  // FIXME: This is ugly and brittle
+  if (!active || !active.timestamp) {
+    console.log('hide delete');
+    document.querySelector('#DeleteAnnotation').style.display = 'none';
+  } else {
+    document.querySelector('#DeleteAnnotation').style.display = 'unset';
+  }
+  document.querySelector('#CancelEditAnnotation').disabled = !active;
 
   state.ui.isRendering = false;
   console.timeEnd('render');
@@ -527,6 +515,7 @@ document.addEventListener('DOMContentLoaded', evt => {
     if (evt.target && evt.target.matches('#SaveAnnotation')) {
       store.dispatch({
         type: SAVE_ANNOTATION_INTENT,
+        comment: document.querySelector('#Comment').value,
       });
       store.dispatch({
         type: SAVE_ANNOTATION_RECEIPT,
@@ -571,12 +560,13 @@ document.addEventListener('DOMContentLoaded', evt => {
       evt.stopPropagation();
       return;
     }
-    // TODO: Debounce
+    const state = store.getState();
     if (evt.target && evt.target.matches('#Comment')) {
-      store.delayedDispatch({
-        type: CHANGE_COMMENT,
-        comment: evt.target.value,
-      });
+      const active = state.model.annotations.findByID(
+        state.ui.activeAnnotationID
+      );
+      document.querySelector('#SaveAnnotation').disabled =
+        !active || document.querySelector('#Comment').value.length === 0;
     }
   });
 
