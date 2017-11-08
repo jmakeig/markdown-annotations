@@ -4,9 +4,11 @@ const INITIAL_STATE = {
     user: 'jmakeig',
   },
   model: {
-    annotations: null,
-    href: 'https://github.com/…',
-    commit: 'SHA',
+    annotations: [],
+    // <https://help.github.com/articles/getting-permanent-links-to-files/>
+    href:
+      'https://github.com/jmakeig/markdown-annotations/blob/fa2530c83142cd1405cca52d5caa2c2c6abc66fd/Nausgaard%20ugh%20XOXO.md',
+    commit: 'fa2530c83142cd1405cca52d5caa2c2c6abc66fd',
     content: `---
 title: MarkLogic Consolidated Vision
 author:
@@ -18,7 +20,7 @@ history: |
 
 ...
 
-# Nausgaard ugh XOXO {#nausgaard}
+## Nausgaard ugh XOXO {#nausgaard}
  
 Knausgaard ugh XOXO flannel pok pok marfa pork belly sustainable cronut la croix vice palo santo actually ethical. 
 
@@ -428,8 +430,33 @@ function render() {
   }
   document.querySelector('#CancelEditAnnotation').disabled = !active;
 
+  const download = document.querySelector('#Download');
+  // FIXME: The `toJSON` call is weird.
+  // The effect is “those that have been saved". Maybe just a rename
+  // of `clearUnsaved` to `onlyPersisted`?
+  if (state.model.annotations && state.model.annotations.toJSON().length > 0) {
+    download.href = `data:text/markdown;charset=utf-8;base64,${Base64.encode(
+      state.model.content +
+        '\n\n' +
+        serializeAnnotations(state.model.annotations)
+    )}`;
+    download.download = decodeURIComponent(state.model.href.split('/').pop());
+    download.style.display = 'unset';
+  } else {
+    download.style.display = 'none';
+  }
+
   state.ui.isRendering = false;
   console.timeEnd('render');
+}
+
+function serializeAnnotations(annotations) {
+  if (!annotations || 0 === annotations.length) {
+    return '';
+  }
+  const NAMESPACE = 'http://marklogic.com/annotations';
+  const annotationsJSON = JSON.stringify(annotations, null, 2);
+  return `<!--- ${NAMESPACE}\n\n${annotationsJSON}\n\n--->`;
 }
 
 function restoreSelection(range) {
