@@ -188,6 +188,7 @@ function renderMarkdown(md, annotations = [], processors = []) {
 }
 
 const CHANGE_SELECTION = 'CHANGE_SELECTION';
+const CANCEL_SELECTION = 'CANCEL_SELECTION';
 const NEW_ANNOTATION = ' NEW_ANNOTATION';
 const CHANGE_COMMENT = 'CHANGE_COMMENT';
 const SAVE_ANNOTATION_INTENT = 'SAVE_ANNOTATION_INTENT';
@@ -251,6 +252,12 @@ function reducer(state, action) {
       tmp0.ui.position = action.position;
       tmp0.ui.selection = action.selection;
       return tmp0;
+    case CANCEL_SELECTION:
+      const tmp7 = Object.assign({}, state);
+      tmp7.ui = Object.assign({}, tmp7.ui);
+      delete tmp7.ui.selection;
+      delete tmp7.ui.position;
+      return tmp7;
     case NEW_ANNOTATION:
       const id = uuidv4();
       const tmp = Object.assign({}, state);
@@ -547,6 +554,8 @@ document.addEventListener('DOMContentLoaded', evt => {
         position: { x: evt.pageX, y: evt.pageY },
       });
       isSelecting = false;
+    } else {
+      store.dispatch({ type: CANCEL_SELECTION });
     }
   });
 });
