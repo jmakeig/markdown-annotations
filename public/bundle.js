@@ -1,1914 +1,256 @@
-(function (global, factory) {
-	typeof exports === 'object' && typeof module !== 'undefined' ? factory() :
-	typeof define === 'function' && define.amd ? define(factory) :
-	(factory());
-}(this, (function () { 'use strict';
-
-/*
- * <https://github.com/Treora/dom-highlight-range>
- * 
- * 
- * Except for parts incorporated from copyrighted works, all code is released in the public domain, free from copyright restrictions.
- * 
- * Contains code copied from TextPositionAnchor[1] by Randall Leeds, published under the following licence:
- * """
- * Copyright (c) 2015 Randall Leeds
- * 
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- * 
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- * 
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
- * THE SOFTWARE.
- * """
- * 
- * [1]: https://github.com/tilgovi/dom-anchor-text-position/blob/d110756ff00702f642daae570752be9595fc2a52/TextPositionAnchor.js
- */
-
-// Wrap each text node in a given DOM Range with a <span class=[highLightClass]>.
-// Breaks start and/or end node if needed.
-// Returns a function that cleans up the created highlight (not a perfect undo: split text nodes are not merged again).
-//
-// Parameters:
-// - rangeObject: a Range whose start and end containers are text nodes.
-// - highlightClass: the CSS class the text pieces in the range should get, defaults to 'highlighted-range'.
-function highlightRange(
-  rangeObject,
-  highlightCallback = () => document.createElement('span')
-) {
-  // Ignore range if empty.
-  if (rangeObject.collapsed) {
-    return;
-  }
-
-  if (typeof highlightClass == 'undefined') {
-    highlightClass = 'highlighted-range';
-  }
-
-  // First put all nodes in an array (splits start and end nodes)
-  var nodes = textNodesInRange(rangeObject);
-
-  // Remember range details to restore it later.
-  var startContainer = rangeObject.startContainer;
-  var startOffset = rangeObject.startOffset;
-  var endContainer = rangeObject.endContainer;
-  var endOffset = rangeObject.endOffset;
-
-  // Highlight each node
-  var highlights = [];
-  for (nodeIdx in nodes) {
-    highlights.push(highlightNode(nodes[nodeIdx], highlightCallback));
-  }
-
-  // The rangeObject gets messed up by our DOM changes. Be kind and restore.
-  rangeObject.setStart(startContainer, startOffset);
-  rangeObject.setEnd(endContainer, endOffset);
-
-  // Return a function that cleans up the highlights.
-  function cleanupHighlights() {
-    // Remember range details to restore it later.
-    var startContainer = rangeObject.startContainer;
-    var startOffset = rangeObject.startOffset;
-    var endContainer = rangeObject.endContainer;
-    var endOffset = rangeObject.endOffset;
-
-    // Remove each of the created highlights.
-    for (var highlightIdx in highlights) {
-      removeHighlight(highlights[highlightIdx]);
-    }
-
-    // Be kind and restore the rangeObject again.
-    rangeObject.setStart(startContainer, startOffset);
-    rangeObject.setEnd(endContainer, endOffset);
-  }
-  return cleanupHighlights;
-}
-
-// Return an array of the text nodes in the range. Split the start and end nodes if required.
-function textNodesInRange(rangeObject) {
-  // Modify Range to make sure that the start and end nodes are text nodes.
-  setRangeToTextNodes(rangeObject);
-
-  var nodes = [];
-
-  // Ignore range if empty.
-  if (rangeObject.collapsed) {
-    return nodes;
-  }
-
-  // Include (part of) the start node if needed.
-  if (rangeObject.startOffset != rangeObject.startContainer.length) {
-    // If only part of the start node is in the range, split it.
-    if (rangeObject.startOffset != 0) {
-      // Split startContainer to turn the part after the startOffset into a new node.
-      var createdNode = rangeObject.startContainer.splitText(
-        rangeObject.startOffset
-      );
-
-      // If the end was in the same container, it will now be in the newly created node.
-      if (rangeObject.endContainer === rangeObject.startContainer) {
-        rangeObject.setEnd(
-          createdNode,
-          rangeObject.endOffset - rangeObject.startOffset
-        );
-      }
-
-      // Update the start node, which no longer has an offset.
-      rangeObject.setStart(createdNode, 0);
-    }
-  }
-
-  // Create an iterator to iterate through the nodes.
-  var root =
-    typeof rangeObject.commonAncestorContainer != 'undefined'
-      ? rangeObject.commonAncestorContainer
-      : document.body; // fall back to whole document for browser compatibility
-  var iter = document.createNodeIterator(root, NodeFilter.SHOW_TEXT);
-
-  // Find the start node (could we somehow skip this seemingly needless search?)
-  while (
-    iter.referenceNode !== rangeObject.startContainer &&
-    iter.referenceNode !== null
-  ) {
-    iter.nextNode();
-  }
-
-  // Add each node up to (but excluding) the end node.
-  while (
-    iter.referenceNode !== rangeObject.endContainer &&
-    iter.referenceNode !== null
-  ) {
-    nodes.push(iter.referenceNode);
-    iter.nextNode();
-  }
-
-  // Include (part of) the end node if needed.
-  if (rangeObject.endOffset != 0) {
-    // If it is only partly included, we need to split it up.
-    if (rangeObject.endOffset != rangeObject.endContainer.length) {
-      // Split the node, breaking off the part outside the range.
-      rangeObject.endContainer.splitText(rangeObject.endOffset);
-      // Note that the range object need not be updated.
-
-      //assert(rangeObject.endOffset == rangeObject.endContainer.length);
-    }
-
-    // Add the end node.
-    nodes.push(rangeObject.endContainer);
-  }
-
-  return nodes;
-}
-
-// Normalise the range to start and end in a text node.
-// Copyright (c) 2015 Randall Leeds
-function setRangeToTextNodes(rangeObject) {
-  function getFirstTextNode(node) {
-    if (node.nodeType === Node.TEXT_NODE) return node;
-    var document = node.ownerDocument;
-    var walker = document.createTreeWalker(
-      node,
-      NodeFilter.SHOW_TEXT,
-      null,
-      false
-    );
-    return walker.firstChild();
-  }
-
-  var startNode = rangeObject.startContainer;
-  var startOffset = rangeObject.startOffset;
-
-  // Drill down to a text node if the range starts at the container boundary.
-  if (startNode.nodeType !== Node.TEXT_NODE) {
-    if (startOffset === startNode.childNodes.length) {
-      startNode = startNode.childNodes[startOffset - 1];
-      startNode = getFirstTextNode(startNode);
-      startOffset = startNode.textContent.length;
-    } else {
-      startNode = startNode.childNodes[startOffset];
-      startNode = getFirstTextNode(startNode);
-      startOffset = 0;
-    }
-    rangeObject.setStart(startNode, startOffset);
-  }
-
-  var endNode = rangeObject.endContainer;
-  var endOffset = rangeObject.endOffset;
-
-  // Drill down to a text node if the range ends at the container boundary.
-  if (endNode.nodeType !== Node.TEXT_NODE) {
-    if (endOffset === endNode.childNodes.length) {
-      endNode = endNode.childNodes[endOffset - 1];
-      endNode = getFirstTextNode(endNode);
-      endOffset = endNode.textContent.length;
-    } else {
-      endNode = endNode.childNodes[endOffset];
-      endNode = getFirstTextNode(endNode);
-      endOffset = 0;
-    }
-    rangeObject.setEnd(endNode, endOffset);
-  }
-}
-
-// Replace [node] with <span class=[highlightClass]>[node]</span>
-function highlightNode(node, highlightCallback) {
-  // Create a highlight
-  var highlight = highlightCallback();
-
-  // Wrap it around the text node
-  node.parentNode.replaceChild(highlight, node);
-  highlight.appendChild(node);
-
-  return highlight;
-}
-
-// Remove a highlight <span> created with highlightNode.
-function removeHighlight(highlight) {
-  // Move its children (normally just one text node) into its parent.
-  while (highlight.firstChild) {
-    highlight.parentNode.insertBefore(highlight.firstChild, highlight);
-  }
-  // Remove the now empty node
-  highlight.remove();
-}
-
-// <https://github.com/zenozeng/color-hash>
-// MIT license
-
-/**
- * BKDR Hash (modified version)
- *
- * @param {String} str string to hash
- * @returns {Number}
- */
-var BKDRHash = function(str) {
-  var seed = 131;
-  var seed2 = 137;
-  var hash = 0;
-  // make hash more sensitive for short string like 'a', 'b', 'c'
-  str += 'x';
-  // Note: Number.MAX_SAFE_INTEGER equals 9007199254740991
-  var MAX_SAFE_INTEGER = parseInt(9007199254740991 / seed2);
-  for (var i = 0; i < str.length; i++) {
-    if (hash > MAX_SAFE_INTEGER) {
-      hash = parseInt(hash / seed2);
-    }
-    hash = hash * seed + str.charCodeAt(i);
-  }
-  return hash;
-};
-
-/**
- * Convert RGB Array to HEX
- *
- * @param {Array} RGBArray - [R, G, B]
- * @returns {String} 6 digits hex starting with #
- */
-var RGB2HEX = function(RGBArray) {
-  var hex = '#';
-  RGBArray.forEach(function(value) {
-    if (value < 16) {
-      hex += 0;
-    }
-    hex += value.toString(16);
-  });
-  return hex;
-};
-
-/**
- * Convert HSL to RGB
- *
- * @see {@link http://zh.wikipedia.org/wiki/HSL和HSV色彩空间} for further information.
- * @param {Number} H Hue ∈ [0, 360)
- * @param {Number} S Saturation ∈ [0, 1]
- * @param {Number} L Lightness ∈ [0, 1]
- * @returns {Array} R, G, B ∈ [0, 255]
- */
-var HSL2RGB = function(H, S, L) {
-  H /= 360;
-
-  var q = L < 0.5 ? L * (1 + S) : L + S - L * S;
-  var p = 2 * L - q;
-
-  return [H + 1 / 3, H, H - 1 / 3].map(function(color) {
-    if (color < 0) {
-      color++;
-    }
-    if (color > 1) {
-      color--;
-    }
-    if (color < 1 / 6) {
-      color = p + (q - p) * 6 * color;
-    } else if (color < 0.5) {
-      color = q;
-    } else if (color < 2 / 3) {
-      color = p + (q - p) * 6 * (2 / 3 - color);
-    } else {
-      color = p;
-    }
-    return Math.round(color * 255);
-  });
-};
-
-/**
- * Color Hash Class
- *
- * @class
- */
-var ColorHash = function(options) {
-  options = options || {};
-
-  var LS = [options.lightness, options.saturation].map(function(param) {
-    param = param || [0.35, 0.5, 0.65]; // note that 3 is a prime
-    return Object.prototype.toString.call(param) === '[object Array]'
-      ? param.concat()
-      : [param];
-  });
-
-  this.L = LS[0];
-  this.S = LS[1];
-
-  this.minH = options.minH;
-  this.maxH = options.maxH;
-  if (typeof this.minH === 'undefined' && typeof this.maxH !== 'undefined')
-    this.minH = 0;
-  if (typeof this.minH !== 'undefined' && typeof this.maxH === 'undefined')
-    this.maxH = 360;
-
-  this.hash = options.hash || BKDRHash;
-};
-
-/**
- * Returns the hash in [h, s, l].
- * Note that H ∈ [0, 360); S ∈ [0, 1]; L ∈ [0, 1];
- *
- * @param {String} str string to hash
- * @returns {Array} [h, s, l]
- */
-ColorHash.prototype.hsl = function(str) {
-  var H, S, L;
-  var hash = this.hash(str);
-
-  H = hash % 359; // note that 359 is a prime
-  if (typeof this.minH !== 'undefined' && typeof this.maxH !== 'undefined') {
-    H /= 1000;
-    H = H * (this.maxH - this.minH) + this.minH;
-  }
-  hash = parseInt(hash / 360);
-  S = this.S[hash % this.S.length];
-  hash = parseInt(hash / this.S.length);
-  L = this.L[hash % this.L.length];
-
-  return [H, S, L];
-};
-
-/**
- * Returns the hash in [r, g, b].
- * Note that R, G, B ∈ [0, 255]
- *
- * @param {String} str string to hash
- * @returns {Array} [r, g, b]
- */
-ColorHash.prototype.rgb = function(str) {
-  var hsl = this.hsl(str);
-  return HSL2RGB.apply(this, hsl);
-};
-
-/**
- * Returns the hash in hex
- *
- * @param {String} str string to hash
- * @returns {String} hex with #
- */
-ColorHash.prototype.hex = function(str) {
-  var rgb = this.rgb(str);
-  return RGB2HEX(rgb);
-};
-
-// <https://jsfiddle.net/gabrieleromanato/qAGHT/>
-const Base64 = {
-  _keyStr: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=',
-
-  encode: function(input) {
-    var output = '';
-    var chr1, chr2, chr3, enc1, enc2, enc3, enc4;
-    var i = 0;
-
-    input = Base64._utf8_encode(input);
-
-    while (i < input.length) {
-      chr1 = input.charCodeAt(i++);
-      chr2 = input.charCodeAt(i++);
-      chr3 = input.charCodeAt(i++);
-
-      enc1 = chr1 >> 2;
-      enc2 = ((chr1 & 3) << 4) | (chr2 >> 4);
-      enc3 = ((chr2 & 15) << 2) | (chr3 >> 6);
-      enc4 = chr3 & 63;
-
-      if (isNaN(chr2)) {
-        enc3 = enc4 = 64;
-      } else if (isNaN(chr3)) {
-        enc4 = 64;
-      }
-
-      output =
-        output +
-        this._keyStr.charAt(enc1) +
-        this._keyStr.charAt(enc2) +
-        this._keyStr.charAt(enc3) +
-        this._keyStr.charAt(enc4);
-    }
-
-    return output;
-  },
-
-  decode: function(input) {
-    var output = '';
-    var chr1, chr2, chr3;
-    var enc1, enc2, enc3, enc4;
-    var i = 0;
-
-    input = input.replace(/[^A-Za-z0-9\+\/\=]/g, '');
-
-    while (i < input.length) {
-      enc1 = this._keyStr.indexOf(input.charAt(i++));
-      enc2 = this._keyStr.indexOf(input.charAt(i++));
-      enc3 = this._keyStr.indexOf(input.charAt(i++));
-      enc4 = this._keyStr.indexOf(input.charAt(i++));
-
-      chr1 = (enc1 << 2) | (enc2 >> 4);
-      chr2 = ((enc2 & 15) << 4) | (enc3 >> 2);
-      chr3 = ((enc3 & 3) << 6) | enc4;
-
-      output = output + String.fromCharCode(chr1);
-
-      if (enc3 != 64) {
-        output = output + String.fromCharCode(chr2);
-      }
-      if (enc4 != 64) {
-        output = output + String.fromCharCode(chr3);
-      }
-    }
-
-    output = Base64._utf8_decode(output);
-
-    return output;
-  },
-
-  _utf8_encode: function(string) {
-    string = string.replace(/\r\n/g, '\n');
-    var utftext = '';
-
-    for (var n = 0; n < string.length; n++) {
-      var c = string.charCodeAt(n);
-
-      if (c < 128) {
-        utftext += String.fromCharCode(c);
-      } else if (c > 127 && c < 2048) {
-        utftext += String.fromCharCode((c >> 6) | 192);
-        utftext += String.fromCharCode((c & 63) | 128);
-      } else {
-        utftext += String.fromCharCode((c >> 12) | 224);
-        utftext += String.fromCharCode(((c >> 6) & 63) | 128);
-        utftext += String.fromCharCode((c & 63) | 128);
-      }
-    }
-
-    return utftext;
-  },
-
-  _utf8_decode: function(utftext) {
-    var string = '';
-    var i = 0;
-    var c = (c1 = c2 = 0);
-
-    while (i < utftext.length) {
-      c = utftext.charCodeAt(i);
-
-      if (c < 128) {
-        string += String.fromCharCode(c);
-        i++;
-      } else if (c > 191 && c < 224) {
-        c2 = utftext.charCodeAt(i + 1);
-        string += String.fromCharCode(((c & 31) << 6) | (c2 & 63));
-        i += 2;
-      } else {
-        c2 = utftext.charCodeAt(i + 1);
-        c3 = utftext.charCodeAt(i + 2);
-        string += String.fromCharCode(
-          ((c & 15) << 12) | ((c2 & 63) << 6) | (c3 & 63)
-        );
-        i += 3;
-      }
-    }
-
-    return string;
-  },
-};
-
-/** Detect free variable `global` from Node.js. */
-var freeGlobal = typeof global == 'object' && global && global.Object === Object && global;
-
-/** Detect free variable `self`. */
-var freeSelf = typeof self == 'object' && self && self.Object === Object && self;
-
-/** Used as a reference to the global object. */
-var root = freeGlobal || freeSelf || Function('return this')();
-
-/** Built-in value references. */
-var Symbol = root.Symbol;
-
-/** Used for built-in method references. */
-var objectProto$1 = Object.prototype;
-
-/** Used to check objects for own properties. */
-var hasOwnProperty$1 = objectProto$1.hasOwnProperty;
-
-/**
- * Used to resolve the
- * [`toStringTag`](http://ecma-international.org/ecma-262/7.0/#sec-object.prototype.tostring)
- * of values.
- */
-var nativeObjectToString = objectProto$1.toString;
-
-/** Built-in value references. */
-var symToStringTag$1 = Symbol ? Symbol.toStringTag : undefined;
-
-/**
- * A specialized version of `baseGetTag` which ignores `Symbol.toStringTag` values.
- *
- * @private
- * @param {*} value The value to query.
- * @returns {string} Returns the raw `toStringTag`.
- */
-function getRawTag(value) {
-  var isOwn = hasOwnProperty$1.call(value, symToStringTag$1),
-      tag = value[symToStringTag$1];
-
-  try {
-    value[symToStringTag$1] = undefined;
-    var unmasked = true;
-  } catch (e) {}
-
-  var result = nativeObjectToString.call(value);
-  if (unmasked) {
-    if (isOwn) {
-      value[symToStringTag$1] = tag;
-    } else {
-      delete value[symToStringTag$1];
-    }
-  }
-  return result;
-}
-
-/** Used for built-in method references. */
-var objectProto$2 = Object.prototype;
-
-/**
- * Used to resolve the
- * [`toStringTag`](http://ecma-international.org/ecma-262/7.0/#sec-object.prototype.tostring)
- * of values.
- */
-var nativeObjectToString$1 = objectProto$2.toString;
-
-/**
- * Converts `value` to a string using `Object.prototype.toString`.
- *
- * @private
- * @param {*} value The value to convert.
- * @returns {string} Returns the converted string.
- */
-function objectToString(value) {
-  return nativeObjectToString$1.call(value);
-}
-
-/** `Object#toString` result references. */
-var nullTag = '[object Null]';
-var undefinedTag = '[object Undefined]';
-
-/** Built-in value references. */
-var symToStringTag = Symbol ? Symbol.toStringTag : undefined;
-
-/**
- * The base implementation of `getTag` without fallbacks for buggy environments.
- *
- * @private
- * @param {*} value The value to query.
- * @returns {string} Returns the `toStringTag`.
- */
-function baseGetTag(value) {
-  if (value == null) {
-    return value === undefined ? undefinedTag : nullTag;
-  }
-  return (symToStringTag && symToStringTag in Object(value))
-    ? getRawTag(value)
-    : objectToString(value);
-}
-
-/**
- * Creates a unary function that invokes `func` with its argument transformed.
- *
- * @private
- * @param {Function} func The function to wrap.
- * @param {Function} transform The argument transform.
- * @returns {Function} Returns the new function.
- */
-function overArg(func, transform) {
-  return function(arg) {
-    return func(transform(arg));
-  };
-}
-
-/** Built-in value references. */
-var getPrototype = overArg(Object.getPrototypeOf, Object);
-
-/**
- * Checks if `value` is object-like. A value is object-like if it's not `null`
- * and has a `typeof` result of "object".
- *
- * @static
- * @memberOf _
- * @since 4.0.0
- * @category Lang
- * @param {*} value The value to check.
- * @returns {boolean} Returns `true` if `value` is object-like, else `false`.
- * @example
- *
- * _.isObjectLike({});
- * // => true
- *
- * _.isObjectLike([1, 2, 3]);
- * // => true
- *
- * _.isObjectLike(_.noop);
- * // => false
- *
- * _.isObjectLike(null);
- * // => false
- */
-function isObjectLike(value) {
-  return value != null && typeof value == 'object';
-}
-
-/** `Object#toString` result references. */
-var objectTag = '[object Object]';
-
-/** Used for built-in method references. */
-var funcProto = Function.prototype;
-var objectProto = Object.prototype;
-
-/** Used to resolve the decompiled source of functions. */
-var funcToString = funcProto.toString;
-
-/** Used to check objects for own properties. */
-var hasOwnProperty = objectProto.hasOwnProperty;
-
-/** Used to infer the `Object` constructor. */
-var objectCtorString = funcToString.call(Object);
-
-/**
- * Checks if `value` is a plain object, that is, an object created by the
- * `Object` constructor or one with a `[[Prototype]]` of `null`.
- *
- * @static
- * @memberOf _
- * @since 0.8.0
- * @category Lang
- * @param {*} value The value to check.
- * @returns {boolean} Returns `true` if `value` is a plain object, else `false`.
- * @example
- *
- * function Foo() {
- *   this.a = 1;
- * }
- *
- * _.isPlainObject(new Foo);
- * // => false
- *
- * _.isPlainObject([1, 2, 3]);
- * // => false
- *
- * _.isPlainObject({ 'x': 0, 'y': 0 });
- * // => true
- *
- * _.isPlainObject(Object.create(null));
- * // => true
- */
-function isPlainObject(value) {
-  if (!isObjectLike(value) || baseGetTag(value) != objectTag) {
-    return false;
-  }
-  var proto = getPrototype(value);
-  if (proto === null) {
-    return true;
-  }
-  var Ctor = hasOwnProperty.call(proto, 'constructor') && proto.constructor;
-  return typeof Ctor == 'function' && Ctor instanceof Ctor &&
-    funcToString.call(Ctor) == objectCtorString;
-}
-
-function symbolObservablePonyfill(root) {
-	var result;
-	var Symbol = root.Symbol;
-
-	if (typeof Symbol === 'function') {
-		if (Symbol.observable) {
-			result = Symbol.observable;
-		} else {
-			result = Symbol('observable');
-			Symbol.observable = result;
-		}
-	} else {
-		result = '@@observable';
-	}
-
-	return result;
-}
-
-/* global window */
-var root$2;
-
-if (typeof self !== 'undefined') {
-  root$2 = self;
-} else if (typeof window !== 'undefined') {
-  root$2 = window;
-} else if (typeof global !== 'undefined') {
-  root$2 = global;
-} else if (typeof module !== 'undefined') {
-  root$2 = module;
-} else {
-  root$2 = Function('return this')();
-}
-
-var result = symbolObservablePonyfill(root$2);
-
-/**
- * These are private action types reserved by Redux.
- * For any unknown actions, you must return the current state.
- * If the current state is undefined, you must return the initial state.
- * Do not reference these action types directly in your code.
- */
-var ActionTypes = {
-  INIT: '@@redux/INIT'
-
-  /**
-   * Creates a Redux store that holds the state tree.
-   * The only way to change the data in the store is to call `dispatch()` on it.
-   *
-   * There should only be a single store in your app. To specify how different
-   * parts of the state tree respond to actions, you may combine several reducers
-   * into a single reducer function by using `combineReducers`.
-   *
-   * @param {Function} reducer A function that returns the next state tree, given
-   * the current state tree and the action to handle.
-   *
-   * @param {any} [preloadedState] The initial state. You may optionally specify it
-   * to hydrate the state from the server in universal apps, or to restore a
-   * previously serialized user session.
-   * If you use `combineReducers` to produce the root reducer function, this must be
-   * an object with the same shape as `combineReducers` keys.
-   *
-   * @param {Function} [enhancer] The store enhancer. You may optionally specify it
-   * to enhance the store with third-party capabilities such as middleware,
-   * time travel, persistence, etc. The only store enhancer that ships with Redux
-   * is `applyMiddleware()`.
-   *
-   * @returns {Store} A Redux store that lets you read the state, dispatch actions
-   * and subscribe to changes.
-   */
-};function createStore(reducer, preloadedState, enhancer) {
-  var _ref2;
-
-  if (typeof preloadedState === 'function' && typeof enhancer === 'undefined') {
-    enhancer = preloadedState;
-    preloadedState = undefined;
-  }
-
-  if (typeof enhancer !== 'undefined') {
-    if (typeof enhancer !== 'function') {
-      throw new Error('Expected the enhancer to be a function.');
-    }
-
-    return enhancer(createStore)(reducer, preloadedState);
-  }
-
-  if (typeof reducer !== 'function') {
-    throw new Error('Expected the reducer to be a function.');
-  }
-
-  var currentReducer = reducer;
-  var currentState = preloadedState;
-  var currentListeners = [];
-  var nextListeners = currentListeners;
-  var isDispatching = false;
-
-  function ensureCanMutateNextListeners() {
-    if (nextListeners === currentListeners) {
-      nextListeners = currentListeners.slice();
-    }
-  }
-
-  /**
-   * Reads the state tree managed by the store.
-   *
-   * @returns {any} The current state tree of your application.
-   */
-  function getState() {
-    return currentState;
-  }
-
-  /**
-   * Adds a change listener. It will be called any time an action is dispatched,
-   * and some part of the state tree may potentially have changed. You may then
-   * call `getState()` to read the current state tree inside the callback.
-   *
-   * You may call `dispatch()` from a change listener, with the following
-   * caveats:
-   *
-   * 1. The subscriptions are snapshotted just before every `dispatch()` call.
-   * If you subscribe or unsubscribe while the listeners are being invoked, this
-   * will not have any effect on the `dispatch()` that is currently in progress.
-   * However, the next `dispatch()` call, whether nested or not, will use a more
-   * recent snapshot of the subscription list.
-   *
-   * 2. The listener should not expect to see all state changes, as the state
-   * might have been updated multiple times during a nested `dispatch()` before
-   * the listener is called. It is, however, guaranteed that all subscribers
-   * registered before the `dispatch()` started will be called with the latest
-   * state by the time it exits.
-   *
-   * @param {Function} listener A callback to be invoked on every dispatch.
-   * @returns {Function} A function to remove this change listener.
-   */
-  function subscribe(listener) {
-    if (typeof listener !== 'function') {
-      throw new Error('Expected listener to be a function.');
-    }
-
-    var isSubscribed = true;
-
-    ensureCanMutateNextListeners();
-    nextListeners.push(listener);
-
-    return function unsubscribe() {
-      if (!isSubscribed) {
-        return;
-      }
-
-      isSubscribed = false;
-
-      ensureCanMutateNextListeners();
-      var index = nextListeners.indexOf(listener);
-      nextListeners.splice(index, 1);
-    };
-  }
-
-  /**
-   * Dispatches an action. It is the only way to trigger a state change.
-   *
-   * The `reducer` function, used to create the store, will be called with the
-   * current state tree and the given `action`. Its return value will
-   * be considered the **next** state of the tree, and the change listeners
-   * will be notified.
-   *
-   * The base implementation only supports plain object actions. If you want to
-   * dispatch a Promise, an Observable, a thunk, or something else, you need to
-   * wrap your store creating function into the corresponding middleware. For
-   * example, see the documentation for the `redux-thunk` package. Even the
-   * middleware will eventually dispatch plain object actions using this method.
-   *
-   * @param {Object} action A plain object representing “what changed”. It is
-   * a good idea to keep actions serializable so you can record and replay user
-   * sessions, or use the time travelling `redux-devtools`. An action must have
-   * a `type` property which may not be `undefined`. It is a good idea to use
-   * string constants for action types.
-   *
-   * @returns {Object} For convenience, the same action object you dispatched.
-   *
-   * Note that, if you use a custom middleware, it may wrap `dispatch()` to
-   * return something else (for example, a Promise you can await).
-   */
-  function dispatch(action) {
-    if (!isPlainObject(action)) {
-      throw new Error('Actions must be plain objects. ' + 'Use custom middleware for async actions.');
-    }
-
-    if (typeof action.type === 'undefined') {
-      throw new Error('Actions may not have an undefined "type" property. ' + 'Have you misspelled a constant?');
-    }
-
-    if (isDispatching) {
-      throw new Error('Reducers may not dispatch actions.');
-    }
-
-    try {
-      isDispatching = true;
-      currentState = currentReducer(currentState, action);
-    } finally {
-      isDispatching = false;
-    }
-
-    var listeners = currentListeners = nextListeners;
-    for (var i = 0; i < listeners.length; i++) {
-      var listener = listeners[i];
-      listener();
-    }
-
-    return action;
-  }
-
-  /**
-   * Replaces the reducer currently used by the store to calculate the state.
-   *
-   * You might need this if your app implements code splitting and you want to
-   * load some of the reducers dynamically. You might also need this if you
-   * implement a hot reloading mechanism for Redux.
-   *
-   * @param {Function} nextReducer The reducer for the store to use instead.
-   * @returns {void}
-   */
-  function replaceReducer(nextReducer) {
-    if (typeof nextReducer !== 'function') {
-      throw new Error('Expected the nextReducer to be a function.');
-    }
-
-    currentReducer = nextReducer;
-    dispatch({ type: ActionTypes.INIT });
-  }
-
-  /**
-   * Interoperability point for observable/reactive libraries.
-   * @returns {observable} A minimal observable of state changes.
-   * For more information, see the observable proposal:
-   * https://github.com/tc39/proposal-observable
-   */
-  function observable() {
-    var _ref;
-
-    var outerSubscribe = subscribe;
-    return _ref = {
-      /**
-       * The minimal observable subscription method.
-       * @param {Object} observer Any object that can be used as an observer.
-       * The observer object should have a `next` method.
-       * @returns {subscription} An object with an `unsubscribe` method that can
-       * be used to unsubscribe the observable from the store, and prevent further
-       * emission of values from the observable.
-       */
-      subscribe: function subscribe(observer) {
-        if (typeof observer !== 'object') {
-          throw new TypeError('Expected the observer to be an object.');
-        }
-
-        function observeState() {
-          if (observer.next) {
-            observer.next(getState());
-          }
-        }
-
-        observeState();
-        var unsubscribe = outerSubscribe(observeState);
-        return { unsubscribe: unsubscribe };
-      }
-    }, _ref[$$observable] = function () {
-      return this;
-    }, _ref;
-  }
-
-  // When a store is created, an "INIT" action is dispatched so that every
-  // reducer returns their initial state. This effectively populates
-  // the initial state tree.
-  dispatch({ type: ActionTypes.INIT });
-
-  return _ref2 = {
-    dispatch: dispatch,
-    subscribe: subscribe,
-    getState: getState,
-    replaceReducer: replaceReducer
-  }, _ref2[$$observable] = observable, _ref2;
-}
-
-/**
- * Prints a warning in the console if it exists.
- *
- * @param {String} message The warning message.
- * @returns {void}
- */
-
-/**
- * Composes single-argument functions from right to left. The rightmost
- * function can take multiple arguments as it provides the signature for
- * the resulting composite function.
- *
- * @param {...Function} funcs The functions to compose.
- * @returns {Function} A function obtained by composing the argument functions
- * from right to left. For example, compose(f, g, h) is identical to doing
- * (...args) => f(g(h(...args))).
- */
-
-function compose() {
-  for (var _len = arguments.length, funcs = Array(_len), _key = 0; _key < _len; _key++) {
-    funcs[_key] = arguments[_key];
-  }
-
-  if (funcs.length === 0) {
-    return function (arg) {
-      return arg;
-    };
-  }
-
-  if (funcs.length === 1) {
-    return funcs[0];
-  }
-
-  return funcs.reduce(function (a, b) {
-    return function () {
-      return a(b.apply(undefined, arguments));
-    };
-  });
-}
-
-var _extends = Object.assign || function (target) { for (var i = 1; i < arguments.length; i++) { var source = arguments[i]; for (var key in source) { if (Object.prototype.hasOwnProperty.call(source, key)) { target[key] = source[key]; } } } return target; };
-
-/**
- * Creates a store enhancer that applies middleware to the dispatch method
- * of the Redux store. This is handy for a variety of tasks, such as expressing
- * asynchronous actions in a concise manner, or logging every action payload.
- *
- * See `redux-thunk` package as an example of the Redux middleware.
- *
- * Because middleware is potentially asynchronous, this should be the first
- * store enhancer in the composition chain.
- *
- * Note that each middleware will be given the `dispatch` and `getState` functions
- * as named arguments.
- *
- * @param {...Function} middlewares The middleware chain to be applied.
- * @returns {Function} A store enhancer applying the middleware.
- */
-function applyMiddleware() {
-  for (var _len = arguments.length, middlewares = Array(_len), _key = 0; _key < _len; _key++) {
-    middlewares[_key] = arguments[_key];
-  }
-
-  return function (createStore) {
-    return function (reducer, preloadedState, enhancer) {
-      var store = createStore(reducer, preloadedState, enhancer);
-      var _dispatch = store.dispatch;
-      var chain = [];
-
-      var middlewareAPI = {
-        getState: store.getState,
-        dispatch: function dispatch(action) {
-          return _dispatch(action);
-        }
-      };
-      chain = middlewares.map(function (middleware) {
-        return middleware(middlewareAPI);
-      });
-      _dispatch = compose.apply(undefined, chain)(store.dispatch);
-
-      return _extends({}, store, {
-        dispatch: _dispatch
-      });
-    };
-  };
-}
-
-const INITIAL_STATE = {
-  ui: {
-    isRendering: false,
-    user: 'jmakeig',
-  },
-  model: {
-    annotations: [],
-    // <https://help.github.com/articles/getting-permanent-links-to-files/>
-    href:
-      'https://github.com/jmakeig/markdown-annotations/blob/fa2530c83142cd1405cca52d5caa2c2c6abc66fd/Nausgaard%20ugh%20XOXO.md',
-    commit: 'fa2530c83142cd1405cca52d5caa2c2c6abc66fd',
-    content: `---
-title: MarkLogic Consolidated Vision
-author:
-- Justin Makeig
-history: |
-  
-  * Things
-  * Stuff
-
-...
-
-## Nausgaard ugh XOXO {#nausgaard}
- 
-Knausgaard ugh XOXO flannel pok pok marfa pork belly sustainable cronut la croix vice palo santo actually ethical. 
-
-  * Cornhole plaid tumblr PBR&B
-  * Semiotics echo park 
-  * iPhone post-ironic tacos banh mi. 
-  
-Heirloom roof party godard letterpress ramps butcher single-origin coffee. Scenester glossier food truck poke lomo, blue bottle godard art party chartreuse fingerstache tumblr humblebrag wayfarers pickled. 
-
-  1. Squid drinking vinegar chambray enamel pin. Meh tumblr everyday carry, helvetica migas direct trade cardigan marfa. 
-    1. Try-hard authentic XOXO shaman polaroid pork belly. Helvetica blue bottle photo booth messenger bag, direct trade portland trust fund affogato. 
-      1. Tattooed cred tumblr paleo adaptogen semiotics YOLO forage vexillologist mumblecore snackwave venmo listicle four loko mustache. 
-        1. 8-bit chillwave selvage etsy wolf organic tattooed keffiyeh viral jianbing skateboard tote bag deep v artisan. Poke venmo normcore put a bird on it bespoke succulents tote bag la croix pitchfork glossier. Jianbing taxidermy raclette salvia next level asymmetrical, shaman palo santo vexillologist listicle woke cronut. Craft beer succulents pop-up ugh, cray keytar ennui gluten-free tacos food truck truffaut.
-
-Literally unicorn pork belly, pabst hell of tbh ramps cred. Brooklyn neutra intelligentsia artisan chartreuse. Truffaut kale chips air plant, whatever +1 etsy pitchfork distillery butcher next level locavore chia. Disrupt squid tumblr chia migas. YOLO kitsch man bun vice polaroid gentrify quinoa irony narwhal. YOLO fixie beard slow-carb actually artisan kale chips tofu meditation meh coloring book pitchfork air plant food truck dreamcatcher. Hell of celiac tousled cornhole, microdosing green juice whatever occupy pour-over. Celiac fanny pack scenester drinking vinegar tumeric copper mug succulents street art. Vape XOXO tote bag pitchfork cardigan actually hoodie kale chips photo booth craft beer. Mlkshk try-hard cred, synth kogi +1 single-origin coffee enamel pin literally snackwave four dollar toast. Raclette enamel pin hella sartorial celiac man bun copper mug squid. Godard beard gochujang, roof party poutine shabby chic etsy iceland. Swag palo santo readymade la croix.
-
-  * Squid drinking vinegar chambray enamel pin. Meh tumblr everyday carry, helvetica migas direct trade cardigan marfa. 
-    - Try-hard authentic XOXO shaman polaroid pork belly. Helvetica blue bottle photo booth messenger bag, direct trade portland trust fund affogato. 
-      * Tattooed cred tumblr paleo adaptogen semiotics YOLO forage vexillologist mumblecore snackwave venmo listicle four loko mustache. 
-        - 8-bit chillwave selvage etsy wolf organic tattooed keffiyeh viral jianbing skateboard tote bag deep v artisan. Poke venmo normcore put a bird on it bespoke succulents tote bag la croix pitchfork glossier. Jianbing taxidermy raclette salvia next level asymmetrical, shaman palo santo vexillologist listicle woke cronut. Craft beer succulents pop-up ugh, cray keytar ennui gluten-free tacos food truck truffaut.
-
-## Yuccie Craft Beer
-
-Austin humblebrag unicorn asymmetrical keffiyeh chillwave raw denim master cleanse microdosing before they sold out chicharrones cred. Chillwave flannel iPhone, glossier try-hard shabby chic helvetica salvia. 
-
-  * Before they sold out normcore fixie mustache
-    - Pop-up enamel pin marfa yr four 
-    - Loko vape stumptown. 
-  * You probably haven't heard of them 
-    - Migas vaporware normcore 
-    - Helvetica drinking vinegar 
-    - Man braid jianbing kinfolk 
-      - DIY fixie master cleanse irony. 
-      
-Tattooed tilde direct trade raw denim unicorn adaptogen authentic pitchfork air plant gluten-free tacos. Lomo heirloom typewriter celiac kale chips hashtag. Humblebrag echo park artisan +1, pork belly green juice master cleanse jean shorts lumbersexual yr swag vice activated charcoal selfies. Gochujang disrupt asymmetrical 8-bit listicle man bun blog edison bulb tofu. Aesthetic iPhone subway tile green juice stumptown seitan, lomo master cleanse tbh cronut craft beer skateboard.
-
-## Fanny Pack Tote Bag {#tote}
-
-  * Vinyl af, ramps selvage chia ugh fashion axe master cleanse. Tote bag taiyaki PBR&B chicharrones four dollar toast cray tousled palo santo. Listicle asymmetrical af aesthetic. Sriracha asymmetrical fashion axe VHS pug XOXO synth biodiesel pitchfork. Lo-fi truffaut blue bottle mixtape, scenester ramps poutine. 
-  * Yr godard pickled, lo-fi asymmetrical keytar chillwave shoreditch. Kitsch gluten-free lumbersexual thundercats seitan keffiyeh iPhone drinking vinegar ramps bicycle rights 3 wolf moon twee quinoa. Bespoke bitters vinyl normcore squid. Four dollar toast banjo vexillologist skateboard sartorial drinking vinegar organic chambray unicorn authentic tousled next level williamsburg. 
-    * Direct trade master cleanse trust fund drinking vinegar literally tofu, hoodie keytar vice try-hard everyday. 
-    * Carry plaid cardigan cray. Butcher kale chips palo santo jianbing. Banjo stumptown portland normcore squid activated charcoal church-key farm-to-table slow-carb snackwave hexagon truffaut.
-
-Fingerstache hammock bicycle rights cliche tousled freegan. Sartorial tousled kombucha cliche. Authentic single-origin coffee activated charcoal, occupy raclette hot chicken +1 unicorn farm-to-table post-ironic cray. Adaptogen thundercats mumblecore actually ennui, man bun bespoke. Chia cliche kitsch edison bulb tilde, normcore intelligentsia vape shoreditch farm-to-table organic selfies authentic. Tattooed beard scenester kitsch, distillery cray venmo cronut aesthetic. Humblebrag roof party vape lomo, 90's portland skateboard mumblecore messenger bag fam tofu hammock tote bag aesthetic. Marfa aesthetic direct trade kombucha. Portland godard hoodie selvage, enamel pin quinoa mixtape wolf hexagon iceland. Cray biodiesel fam, post-ironic leggings tattooed subway tile cornhole bitters dreamcatcher raw denim VHS etsy letterpress viral.
-
-### Sartorial Kogi Meditation {#Meditation}
-
-Sartorial kogi meditation gastropub, ethical shabby chic paleo asymmetrical franzen live-edge pug. Viral blog chambray bitters, tofu shabby chic kitsch pitchfork. IPhone slow-carb twee keffiyeh edison bulb. Cornhole street art biodiesel, wayfarers messenger bag farm-to-table VHS. Readymade pour-over gentrify, celiac gastropub beard gochujang waistcoat sustainable salvia. Next level shaman snackwave roof party typewriter schlitz deep v fashion axe hell of ramps salvia YOLO skateboard copper mug. Cold-pressed yuccie distillery hot chicken celiac chambray cray adaptogen intelligentsia godard next level. Twee pork belly everyday carry tumeric, hammock pug swag hell of disrupt vaporware sriracha lo-fi. Leggings chia master cleanse vegan. 8-bit kale chips chartreuse, irony flexitarian taiyaki cardigan dreamcatcher organic narwhal post-ironic shaman meggings heirloom echo park.
-
-  11. Squid drinking vinegar chambray enamel pin. Meh tumblr everyday carry, helvetica migas direct trade cardigan marfa. 
-    111. Try-hard authentic XOXO shaman polaroid pork belly. Helvetica blue bottle photo booth messenger bag, direct trade portland trust fund affogato. 
-      1111. Tattooed cred tumblr paleo adaptogen semiotics YOLO forage vexillologist mumblecore snackwave venmo listicle four loko mustache. 
-        11111. 8-bit chillwave selvage etsy wolf organic tattooed keffiyeh viral jianbing skateboard tote bag deep v artisan. Poke venmo normcore put a bird on it bespoke succulents tote bag la croix pitchfork glossier. Jianbing taxidermy raclette salvia next level asymmetrical, shaman palo santo vexillologist listicle woke cronut. Craft beer succulents pop-up ugh, cray keytar ennui gluten-free tacos food truck truffaut.
-
-
-Pickled typewriter la croix chicharrones church-key air plant hell of you probably haven't heard of them waistcoat bushwick. Tbh VHS vinyl yr taiyaki cronut 90's kale chips literally woke. Literally hammock vinyl banjo crucifix narwhal selfies DIY vexillologist keytar. Fixie etsy literally, gluten-free beard leggings biodiesel. Kombucha blue bottle thundercats authentic green juice. Lyft church-key air plant tousled tbh. Stumptown marfa raclette next level pabst. Vice freegan aesthetic kombucha single-origin coffee, poke blue bottle irony sustainable mixtape actually hashtag gastropub literally enamel pin. Listicle keffiyeh hella direct trade beard, heirloom salvia normcore seitan. Yuccie +1 put a bird on it pour-over celiac. Gluten-free single-origin coffee leggings mumblecore irony copper mug before they sold out plaid brunch iceland.
-
-## Mlkshk Deep v. Umami
-
-Single-origin coffee, poke hell of pour-over disrupt fashion axe copper mug. Butcher scenester thundercats, deep v kitsch fixie 3 wolf moon taxidermy humblebrag. Post-ironic asymmetrical fingerstache keytar biodiesel. Pour-over man bun yuccie freegan wolf. Chia sartorial bespoke literally fixie meditation. Squid woke PBR&B authentic beard hashtag prism fingerstache pitchfork, YOLO before they sold out bespoke coloring book disrupt freegan. Williamsburg chia subway tile bicycle rights kale chips knausgaard, schlitz blog hell of PBR&B. Crucifix mixtape try-hard selvage. Af hexagon you probably haven't heard of them narwhal man braid +1 pok pok. Put a bird on it lo-fi heirloom XOXO dreamcatcher letterpress raclette roof party biodiesel cliche microdosing single-origin coffee crucifix intelligentsia. Mustache gentrify enamel pin deep v +1 freegan air plant.
-
-> Wolf schlitz letterpress helvetica listicle irony man braid. Hella four dollar toast pabst tilde cray. Hot chicken palo santo aesthetic, flexitarian XOXO forage poutine vaporware vegan hammock dreamcatcher mustache. Gochujang brunch swag, next level pour-over stumptown hot chicken heirloom vegan blue bottle austin kinfolk. Everyday carry copper mug enamel pin try-hard, chillwave quinoa coloring book food truck vaporware. Try-hard vinyl cornhole, lo-fi intelligentsia bushwick man bun post-ironic forage. Drinking vinegar man bun VHS direct trade yuccie adaptogen jianbing green juice unicorn tumblr narwhal polaroid. Vegan tousled yr, retro quinoa shoreditch hammock sriracha brunch microdosing kale chips you probably haven't heard of them pinterest. Neutra vice vexillologist listicle, gluten-free hot chicken readymade thundercats man braid venmo mustache wolf food truck. Selvage hammock master cleanse swag, beard neutra next level normcore lumbersexual bitters kale chips kombucha flexitarian farm-to-table. Umami palo santo pop-up, meh unicorn gentrify disrupt vaporware DIY intelligentsia.
-
-Yuccie taxidermy deep v selfies tacos meh locavore slow-carb. Authentic tilde raw denim semiotics tbh. Vape tacos gentrify intelligentsia, poke beard seitan humblebrag raclette schlitz bespoke godard church-key everyday carry waistcoat. Banh mi jean shorts snackwave cornhole chia vice. Stumptown chicharrones photo booth vinyl, hammock pour-over af. Fanny pack asymmetrical ramps, plaid cardigan ennui actually chambray pork belly. Edison bulb copper mug asymmetrical listicle, paleo activated charcoal small batch offal sriracha keffiyeh pabst locavore banh mi waistcoat master cleanse. Cloud bread raw denim flexitarian af shaman mustache authentic cornhole tote bag tilde distillery vice. YOLO four dollar toast deep v helvetica sustainable austin jianbing distillery lumbersexual shoreditch offal. Cray swag letterpress put a bird on it actually, cold-pressed pok pok vice try-hard VHS shoreditch. Biodiesel deep v ugh poke microdosing intelligentsia. Activated charcoal chambray hell of intelligentsia actually. Echo park +1 vice, tattooed photo booth lyft poutine palo santo.
-
-### Forage poke gastropub retro
-
-Cornhole pork belly green juice selfies whatever. Biodiesel aesthetic helvetica adaptogen, flannel drinking vinegar master cleanse artisan fingerstache blog copper mug organic portland raw denim. Photo booth la croix af, butcher keffiyeh mlkshk letterpress locavore. Yr unicorn raw denim skateboard PBR&B air plant jianbing vaporware seitan. Authentic bespoke tilde, trust fund selfies listicle cold-pressed kinfolk ennui normcore before they sold out wayfarers brunch disrupt. Truffaut thundercats church-key, hashtag cronut art party kale chips etsy DIY bicycle rights ramps poutine twee. Activated charcoal tumblr selfies waistcoat. Hella retro hoodie, cray knausgaard lomo semiotics roof party trust fund unicorn man braid. Taiyaki affogato glossier, unicorn green juice put a bird on it trust fund cloud bread. Poutine flexitarian pickled four loko banh mi bushwick taiyaki kitsch cliche cardigan aesthetic lomo affogato offal whatever. Activated charcoal brunch sustainable, adaptogen lumbersexual kombucha gentrify hell of. XOXO lyft edison bulb kickstarter. Iceland vexillologist master cleanse tumblr distillery small batch humblebrag.
-
-Man bun next level messenger bag truffaut 3 wolf moon normcore. Sartorial quinoa synth marfa. Woke tattooed snackwave church-key palo santo +1 XOXO microdosing quinoa kale chips ethical sartorial. IPhone cornhole wayfarers truffaut you probably haven't heard of them. Tofu tattooed humblebrag chillwave. Raclette vegan lumbersexual artisan listicle gentrify narwhal health goth photo booth cred. Vaporware occupy retro, wolf drinking vinegar tumblr craft beer flexitarian freegan thundercats. Normcore asymmetrical try-hard, taxidermy yuccie kickstarter succulents neutra post-ironic cloud bread quinoa. Tumblr man bun microdosing selfies food truck brooklyn. Adaptogen tilde franzen slow-carb disrupt synth fixie coloring book aesthetic pinterest vice waistcoat man bun mustache. Art party af bicycle rights messenger bag, synth seitan cred snackwave hell of keffiyeh semiotics quinoa venmo vinyl knausgaard. Neutra mustache ugh cronut, occupy YOLO pop-up paleo hoodie next level. YOLO poke post-ironic thundercats you probably haven't heard of them DIY poutine echo park tumeric pinterest.
-
-Salvia keffiyeh narwhal lomo. Brunch bitters kickstarter 8-bit hella. Selfies microdosing single-origin coffee cronut shaman 3 wolf moon edison bulb marfa activated charcoal organic asymmetrical mustache jean shorts typewriter. Flexitarian tbh ethical vegan scenester ugh poutine brooklyn cred fanny pack irony wolf. Aesthetic farm-to-table crucifix meditation activated charcoal selvage hoodie sustainable listicle pok pok blue bottle slow-carb etsy. Raclette irony kogi microdosing small batch pop-up. Artisan hell of hammock, bespoke twee af green juice. Crucifix normcore church-key williamsburg quinoa sriracha portland blue bottle iPhone chartreuse tacos. Bicycle rights deep v four loko bespoke small batch stumptown salvia vexillologist next level fingerstache cornhole succulents. Retro 8-bit 90's chillwave.
-
-## Locavore tumblr authentic
-
-Offal portland retro. Pok pok cloud bread literally intelligentsia taiyaki viral vinyl kombucha. Disrupt schlitz lumbersexual ennui chia cronut 90's. Echo park PBR&B migas raw denim. Marfa blue bottle microdosing street art thundercats, glossier sustainable fam coloring book yuccie waistcoat bicycle rights pinterest fanny pack. Fingerstache swag four dollar toast drinking vinegar vexillologist, godard hammock bespoke helvetica food truck ramps. 3 wolf moon marfa narwhal trust fund green juice mumblecore quinoa tilde. Iceland four loko skateboard direct trade kombucha viral lumbersexual pickled meggings fam knausgaard tote bag whatever chia gentrify. Jianbing shabby chic venmo dreamcatcher, 8-bit master cleanse pop-up. Edison bulb thundercats street art distillery blue bottle mixtape tbh you probably haven't heard of them roof party chia tilde mumblecore blog cloud bread mlkshk. Air plant iceland meggings shabby chic lumbersexual leggings. Craft beer lo-fi street art godard seitan poke. Activated charcoal viral twee, pitchfork portland thundercats XOXO fanny pack umami. Migas beard YOLO ugh polaroid umami, lyft hell of heirloom ramps salvia readymade.
-
-### Marfa master cleanse
-
-Seitan, pork belly before they sold out vexillologist etsy vice brunch hot chicken XOXO meggings green juice swag mustache. Twee austin meh quinoa palo santo tousled kombucha taxidermy polaroid chambray pork belly ethical master cleanse kale chips. Activated charcoal readymade glossier tumeric bicycle rights occupy cronut hoodie. Neutra try-hard offal ethical man braid pok pok vice YOLO poutine food truck crucifix. Cronut iPhone pork belly, twee banh mi four dollar toast craft beer chia salvia. Letterpress gastropub selfies cardigan four loko health goth cliche roof party readymade. Offal squid kombucha disrupt PBR&B. Fixie ugh taxidermy aesthetic williamsburg, pork belly tattooed jean shorts lumbersexual small batch. Health goth vexillologist letterpress skateboard kombucha +1 selfies poke beard vape squid tacos neutra etsy. Heirloom snackwave drinking vinegar next level. Chambray selvage viral actually readymade wayfarers jean shorts.
-
-#### Pickled Godard Offal
-
-Plaid banjo listicle selvage iPhone. Affogato selvage tattooed readymade celiac DIY. Stumptown butcher glossier tacos. Deep v tattooed brunch pickled cray crucifix four loko. Succulents freegan pork belly offal tilde, adaptogen cloud bread. Meditation cornhole affogato street art. Af sriracha quinoa brunch drinking vinegar, subway tile vape poutine taiyaki fingerstache raw denim cardigan tbh fixie lomo. Pok pok church-key cronut, photo booth sartorial butcher gastropub hot chicken iceland. Locavore vape pinterest, meggings asymmetrical pok pok letterpress pork belly hella fingerstache. Sustainable literally meditation cold-pressed whatever glossier bushwick quinoa food truck brunch etsy cray. Before they sold out cold-pressed butcher, squid pitchfork biodiesel mumblecore yuccie coloring book semiotics gentrify. Actually cornhole taiyaki keffiyeh artisan try-hard seitan, lo-fi readymade photo booth mustache cronut. Gochujang tumeric biodiesel scenester forage.
-
-#### Taxidermy Bespoke Mlkshk
-
-Disrupt quinoa cliche. *Polaroid* unicorn selfies, bespoke shabby chic jean shorts heirloom yr stumptown fam. Letterpress kinfolk asymmetrical taiyaki health goth 3 wolf moon cred helvetica. Man braid chicharrones venmo, synth kombucha +1 post-ironic squid meggings hell of succulents selfies tumeric sriracha pickled. Unicorn street art kale chips, photo booth etsy hot chicken pour-over twee health goth. Vegan scenester before they sold out, chillwave kogi trust fund lomo freegan sriracha. Quinoa mumblecore crucifix tumblr mlkshk butcher glossier williamsburg post-ironic taiyaki literally hot chicken. Pabst photo booth church-key twee next level tilde vice. Twee butcher cray before they sold out occupy, blue bottle banjo sustainable DIY distillery kogi vape actually. Try-hard pop-up crucifix, thundercats chillwave raclette shaman migas organic. Whatever chillwave fam woke keffiyeh vaporware fashion axe viral shaman. Chartreuse pitchfork kickstarter seitan literally banh mi. Ramps subway tile brunch, intelligentsia scenester offal vexillologist. Church-key YOLO tumeric fashion axe fanny pack.
-
-### Iceland mumblecore normcore
-
-Organic, prism succulents banjo. Knausgaard vexillologist hella, bespoke vice leggings before they sold out man bun roof party tilde chillwave banh mi 8-bit. Photo booth fixie roof party post-ironic taiyaki selvage, bitters fam taxidermy pork belly prism swag. Occupy cloud bread austin hell of selvage iceland la croix slow-carb edison bulb bicycle rights plaid typewriter copper mug normcore. Glossier prism kale chips next level drinking vinegar typewriter bespoke schlitz subway tile man braid organic jianbing kinfolk sriracha. IPhone gentrify yuccie, keytar celiac brunch gochujang venmo. Succulents meggings tbh pug dreamcatcher. Synth humblebrag tattooed tumeric, pitchfork live-edge paleo pickled enamel pin PBR&B cronut venmo gluten-free flexitarian. Aesthetic DIY mixtape brunch. Whatever franzen lomo, pork belly forage chia viral semiotics af cray food truck paleo man braid cardigan post-ironic. Poke craft beer squid kale chips pinterest. Chicharrones hella next level fashion axe, flannel 90's palo santo franzen ennui vexillologist truffaut asymmetrical lo-fi beard. 8-bit schlitz health goth heirloom af art party.
-
-Adaptogen jean shorts franzen locavore 90's blog bitters ennui edison bulb listicle pitchfork viral cornhole keytar. Gastropub intelligentsia fingerstache, four loko post-ironic stumptown cloud bread. Master cleanse craft beer heirloom hot chicken, ugh literally keffiyeh activated charcoal ramps hexagon williamsburg cardigan vinyl kale chips food truck. Green juice bicycle rights health goth vegan pop-up before they sold out. Pabst hashtag viral cred, snackwave microdosing pitchfork raclette glossier man braid keytar celiac readymade. Iceland cardigan seitan, retro ennui cred enamel pin forage vice before they sold out four loko. Fixie crucifix gochujang bespoke yr. IPhone health goth crucifix DIY pug kinfolk. Put a bird on it sustainable snackwave live-edge narwhal fam salvia austin. Waistcoat pickled organic, food truck sriracha you probably haven't heard of them craft beer. Edison bulb selvage jianbing thundercats subway tile etsy. Chicharrones single-origin coffee aesthetic banjo 8-bit.
-
-## Brooklyn Activated Charcoal
-
-Four dollar toast locavore DIY echo park semiotics craft beer hashtag tattooed. Pinterest mlkshk viral helvetica, ugh chillwave cold-pressed mustache leggings fanny pack YOLO vape synth readymade blue bottle. Four loko green juice biodiesel brooklyn pickled viral. Ramps jianbing readymade, salvia af shaman chambray man braid cornhole waistcoat cred. Tattooed semiotics af wayfarers, hammock yr leggings tacos live-edge before they sold out authentic bespoke actually unicorn. Street art master cleanse hell of chartreuse pickled raclette skateboard, cred everyday carry trust fund. Occupy PBR&B twee chia succulents readymade literally neutra raw denim. Church-key knausgaard pinterest jianbing PBR&B listicle sartorial wayfarers blog disrupt poutine aesthetic bitters. Hell of butcher wolf, asymmetrical health goth cloud bread disrupt sartorial. Single-origin coffee pitchfork hammock pickled stumptown flannel, cardigan PBR&B polaroid enamel pin tilde. Yuccie master cleanse helvetica edison bulb disrupt microdosing typewriter selvage, taxidermy echo park synth craft beer 3 wolf moon +1 woke. Swag church-key stumptown, copper mug portland ethical kale chips beard. 8-bit pok pok man bun brooklyn, migas yuccie chillwave trust fund. Dreamcatcher sustainable schlitz direct trade celiac shaman knausgaard bicycle rights fam plaid subway tile man bun. Microdosing aesthetic bespoke whatever hashtag forage, XOXO paleo.
-
-Yuccie retro kickstarter edison bulb tattooed franzen neutra, yr hexagon enamel pin distillery scenester +1 authentic. Lo-fi squid waistcoat vexillologist artisan, plaid poke vice humblebrag kitsch slow-carb iceland. Fanny pack hella mustache aesthetic. Occupy etsy jean shorts thundercats aesthetic air plant chicharrones YOLO fashion axe glossier iceland typewriter pop-up. Neutra unicorn XOXO PBR&B poke stumptown chillwave. Vaporware sartorial bespoke shabby chic seitan tilde. Skateboard pok pok adaptogen squid shoreditch. Drinking vinegar succulents cornhole hexagon iPhone adaptogen fingerstache whatever synth thundercats listicle mixtape heirloom messenger bag blue bottle. Distillery hot chicken kickstarter neutra, pickled disrupt meggings aesthetic craft beer narwhal mustache tilde selfies forage. Jianbing sartorial poutine meditation wolf, gastropub portland humblebrag. YOLO four dollar toast mustache wolf cornhole banh mi marfa sartorial tousled banjo meditation. Cold-pressed bicycle rights jean shorts distillery, pour-over poke yr fixie.
-
-Pinterest thundercats you probably haven't heard of them, drinking vinegar live-edge health goth bitters raclette migas 8-bit craft beer. Ramps taiyaki XOXO art party umami occupy etsy gastropub authentic franzen humblebrag chia quinoa selvage. Street art godard cloud bread, fashion axe kinfolk disrupt edison bulb air plant cliche hell of fam la croix. Quinoa farm-to-table taxidermy gochujang williamsburg activated charcoal narwhal kickstarter shaman vinyl typewriter kitsch. Vexillologist mumblecore raw denim cloud bread tote bag, small batch letterpress irony gentrify YOLO post-ironic umami iceland. Live-edge ramps air plant retro kombucha. Man braid polaroid gochujang, etsy waistcoat subway tile roof party shaman tumeric intelligentsia poutine raclette coloring book pop-up whatever. Freegan gastropub echo park brunch, letterpress roof party synth listicle raclette normcore keytar vaporware neutra pug. Microdosing disrupt retro 90's. Heirloom food truck schlitz snackwave. Af chartreuse offal glossier cronut jianbing thundercats shabby chic bitters man braid freegan before they sold out knausgaard polaroid iceland. Vegan truffaut bitters whatever kogi. Activated charcoal irony brooklyn fashion axe letterpress forage humblebrag YOLO. Hell of tofu direct trade, aesthetic keytar snackwave PBR&B cloud bread asymmetrical yuccie succulents letterpress intelligentsia. Sriracha pitchfork kale chips, gluten-free bitters photo booth seitan lyft readymade salvia cred dreamcatcher wolf bespoke bushwick.
-
-Glossier cloud bread tacos, twee jean shorts vape whatever literally locavore woke dreamcatcher shabby chic narwhal. Meh umami bitters, vice messenger bag single-origin coffee vexillologist polaroid pickled taiyaki. Keffiyeh shoreditch pug, XOXO vexillologist vice typewriter kickstarter gastropub tumblr farm-to-table enamel pin fam put a bird on it leggings. Salvia snackwave skateboard vaporware, fingerstache marfa four loko intelligentsia distillery gentrify vexillologist jean shorts church-key godard tumeric. Wayfarers marfa try-hard, actually hashtag gastropub pork belly butcher deep v poke slow-carb vaporware vegan. Locavore bushwick activated charcoal migas roof party. Four loko austin live-edge jianbing migas squid. Raclette pok pok organic lo-fi glossier, irony ugh kogi ramps yr chia humblebrag hot chicken selfies. +1 single-origin coffee XOXO disrupt coloring book prism asymmetrical roof party organic. Retro glossier scenester selfies deep v cliche venmo DIY hexagon everyday carry brunch la croix helvetica wayfarers. Gastropub banh mi PBR&B hexagon, poke disrupt artisan raclette blog glossier blue bottle paleo cronut. Plaid cronut keytar schlitz letterpress iceland small batch jianbing, glossier XOXO selfies seitan biodiesel flannel health goth. Chicharrones mlkshk small batch, brooklyn neutra man braid flannel. Pour-over blog hexagon, chicharrones neutra woke adaptogen. Chicharrones coloring book man bun gentrify schlitz godard tilde copper mug helvetica.
-
-Taiyaki raclette hexagon, tumblr put a bird on it microdosing deep v 8-bit ethical banjo paleo next level. Brooklyn brunch gochujang, thundercats edison bulb master cleanse twee. Before they sold out meditation stumptown deep v you probably haven't heard of them farm-to-table af hella +1 copper mug bicycle rights taxidermy messenger bag. Cronut echo park quinoa banh mi semiotics keytar. Irony tilde brunch fixie. Knausgaard put a bird on it schlitz, lyft prism disrupt food truck retro freegan subway tile polaroid. Quinoa chillwave disrupt, master cleanse meggings adaptogen kinfolk iceland. Everyday carry chartreuse vape prism lo-fi. Microdosing taxidermy sartorial squid selfies, bitters kinfolk.
-
-Drinking vinegar YOLO swag, pabst cardigan 90's occupy hexagon plaid schlitz poke hot chicken banjo vape. Edison bulb heirloom venmo succulents, tilde subway tile crucifix skateboard. Vape YOLO activated charcoal craft beer ennui seitan distillery. Bespoke copper mug ugh, edison bulb craft beer banh mi hashtag yuccie cardigan tousled plaid kitsch hammock tumeric. Hell of jean shorts marfa, yuccie blue bottle put a bird on it jianbing la croix. Paleo meggings echo park franzen cold-pressed mustache gastropub ethical celiac pop-up prism gochujang. Salvia keffiyeh chillwave taxidermy. Ethical pitchfork tilde cliche polaroid beard. Copper mug neutra lumbersexual biodiesel, echo park fixie blue bottle cardigan irony put a bird on it craft beer artisan hexagon.`,
-  },
-};
-INITIAL_STATE.model.annotations = decorateAnnotations(
-  [],
-  INITIAL_STATE.ui.user
-);
-
-/**
- * Renders Markdown string as HTML table rows. Does not touch the live DOM. 
- * 
- * @param {string} md  - Markdown
- * @returns {DocumentFragment}
- */
-function renderMarkdown(md, annotations = [], processors = []) {
-  const fragment = document.createDocumentFragment();
-  if (!md) return fragment;
-  const lines = md.split(/\n/);
-  lines.map((line, index) => {
-    const row = document.createElement('tr');
-    row.classList.add('line');
-    row.dataset.line = index + 1;
-    row.id = `L${index + 1}`;
-    const num = document.createElement('td');
-    num.classList.add('line-number');
-    num.dataset.line = index + 1;
-    row.appendChild(num);
-    const content = document.createElement('td');
-    content.classList.add('content');
-
-    const listMatcher = /^(\s*)(\*|\-|\d+\.|>) /; // matches list items and quotes
-    const matches = line.match(listMatcher);
-    if (matches) {
-      const indent = matches[1].length + matches[2].length + 1;
-      content.style = `padding-left: ${indent}ch; text-indent: -${indent}ch;`;
-    }
-
-    const headingMatcher = /^#+ /;
-    if (line.match(headingMatcher)) {
-      content.classList.add('heading');
-    }
-
-    const quoteMatcher = /^>+ /;
-    if (line.match(quoteMatcher)) {
-      content.classList.add('quote');
-    }
-
-    const markup = document.createDocumentFragment();
-    markup.appendChild(document.createTextNode('' === line ? '\n' : line));
-
-    content.appendChild(markup);
-    row.appendChild(content);
-    fragment.appendChild(row);
-  });
-  return fragment;
-}
-
-const CHANGE_SELECTION = 'CHANGE_SELECTION';
-const CANCEL_SELECTION = 'CANCEL_SELECTION';
-const NEW_ANNOTATION = ' NEW_ANNOTATION';
-const SAVE_ANNOTATION_INTENT = 'SAVE_ANNOTATION_INTENT';
-const SAVE_ANNOTATION_RECEIPT = 'SAVE_ANNOTATION_RECEIPT';
-const EDIT_ANNOTATION = 'EDIT_ANNOTATION';
-const DELETE_ANNOTATION_RECEIPT = 'DELETE_ANNOTATION_RECEIPT';
-const CANCEL_EDIT_ANNOTATION_RECEIPT = 'CANCEL_EDIT_ANNOTATION_RECEIPT';
-
-function decorateAnnotations(annotations = [], user) {
-  const array = [...annotations];
-  array.mine = function() {
-    if (!user) return this;
-    return this.filter(a => user === a.user);
-  };
-  array.findByID = function(id) {
-    return this.find(a => id === a.id);
-  };
-  array.upsert = function(annotation) {
-    if (!annotation) throw new ReferenceError(`Missing annotation`);
-    if (!annotation.id) throw new ReferenceError(`Missing annotation.id`);
-
-    const arr = [...this];
-    const existingIndex = arr.findIndex(a => annotation.id === a.id);
-    if (existingIndex > -1) {
-      arr.splice(existingIndex, 1);
-    }
-    arr.push(Object.assign({}, annotation));
-
-    const documentOrder = (a, b) => {
-      if (a.range.start.line > b.range.start.line) return true;
-      if (a.range.start.line === b.range.start.line) {
-        return a.range.start.column > b.range.start.column;
-      }
-      return false;
-    };
-    return decorateAnnotations(arr.sort(documentOrder), user);
-  };
-  array.delete = function(id) {
-    const arr = [...this];
-    const existingIndex = arr.findIndex(a => id === a.id);
-    if (existingIndex > -1) {
-      arr.splice(existingIndex, 1);
-    }
-    return decorateAnnotations(arr, user);
-  };
-  array.clearUnsaved = function() {
-    return decorateAnnotations(array.filter(a => !!a.timestamp));
-  };
-  array.toJSON = function() {
-    return this.filter(a => !a.isDirty);
-  };
-  return array;
-}
-
-/**
- * Redux reducer. Make sure nothing mutates the
- * state in-place.
- * 
- * @param {Object} state - current state
- * @param {Object} action 
- * @returns {Object} - new state
- */
-function reducer(state, action) {
-  switch (action.type) {
-    case CHANGE_SELECTION:
-      const tmp0 = Object.assign({}, state);
-      tmp0.ui = Object.assign({}, tmp0.ui);
-      tmp0.ui.position = action.position;
-      tmp0.ui.selection = action.selection;
-      return tmp0;
-    case CANCEL_SELECTION:
-      const tmp7 = Object.assign({}, state);
-      tmp7.ui = Object.assign({}, tmp7.ui);
-      delete tmp7.ui.selection;
-      delete tmp7.ui.position;
-      return tmp7;
-    case NEW_ANNOTATION:
-      const id = uuidv4();
-      const tmp = Object.assign({}, state);
-      tmp.ui = Object.assign({}, tmp.ui);
-      delete tmp.ui.selection;
-      delete tmp.ui.position;
-      tmp.ui.activeAnnotationID = id;
-      tmp.model.annotations = decorateAnnotations(
-        state.model.annotations.clearUnsaved(),
-        tmp.ui.user
-      );
-      tmp.model.annotations = tmp.model.annotations.upsert({
-        isDirty: true,
-        id: id,
-        timestamp: null,
-        user: state.ui.user,
-        comment: '',
-        range: {
-          start: {
-            line: state.ui.selection.start.line,
-            column: state.ui.selection.start.column,
-          },
-          end: {
-            line: state.ui.selection.end.line,
-            column: state.ui.selection.end.column,
-          },
-        },
-      });
-      return tmp;
-    case SAVE_ANNOTATION_INTENT:
-      const tmp3 = Object.assign({}, state);
-      tmp3.model = Object.assign({}, state.model);
-      tmp3.model.annotations = state.model.annotations.upsert(
-        Object.assign(
-          {},
-          state.model.annotations.findByID(state.ui.activeAnnotationID),
-          {
-            timestamp: new Date().toISOString(),
-            comment: action.comment,
-          }
-        )
-      );
-      return tmp3;
-    case SAVE_ANNOTATION_RECEIPT:
-      const tmp4 = Object.assign({}, state);
-      tmp4.model = Object.assign({}, state.model);
-      tmp4.model.annotations = decorateAnnotations(
-        state.model.annotations,
-        tmp4.ui.user
-      ).upsert(
-        Object.assign(
-          {},
-          // FIXME: This should be passed in the action
-          state.model.annotations.findByID(state.ui.activeAnnotationID)
-        )
-      );
-      delete tmp4.model.annotations.findByID(state.ui.activeAnnotationID)
-        .isDirty;
-      tmp4.ui = { isRendering: state.ui.isRendering, user: state.ui.user };
-      return tmp4;
-    case EDIT_ANNOTATION:
-      const tmp5 = Object.assign({}, state);
-      tmp5.ui = Object.assign({}, state.ui);
-      tmp5.ui.activeAnnotationID = action.id;
-      return tmp5;
-    // case DELETE_ANNOTATION_INTENT:
-    case DELETE_ANNOTATION_RECEIPT:
-      const tmp6 = Object.assign({}, state);
-      tmp6.model = Object.assign({}, state.model);
-      tmp6.model.annotations = state.model.annotations.delete(
-        state.ui.activeAnnotationID
-      );
-      tmp6.ui = Object.assign({}, state.ui);
-      delete tmp6.ui.activeAnnotationID;
-      return tmp6;
-    case CANCEL_EDIT_ANNOTATION_RECEIPT:
-      const tmp8 = Object.assign({}, state);
-      tmp8.model = Object.assign({}, state.model);
-      tmp8.model.annotations = decorateAnnotations(
-        state.model.annotations.clearUnsaved(),
-        state.ui.user
-      );
-      tmp8.ui = Object.assign({}, state.ui);
-      delete tmp8.ui.activeAnnotationID;
-      return tmp8;
-    default:
-      return INITIAL_STATE;
-  }
-}
-// <https://stackoverflow.com/a/2117523/563324>
-function uuidv4() {
-  return ([1e7] + -1e3 + -4e3 + -8e3 + -1e11).replace(/[018]/g, c =>
-    (c ^
-      (crypto.getRandomValues(new Uint8Array(1))[0] & (15 >> (c / 4)))
-    ).toString(16)
-  );
-}
-
-const store = createStore(
-  reducer,
-  applyMiddleware(store => next => action => {
-    console.log('Dispatching', action);
-    const result = next(action);
-    console.log('Next state', store.getState());
-    return result;
-  })
-);
-
-store.subscribe(render, INITIAL_STATE);
-store.delayedDispatch = debounce(store.dispatch, 250);
-
-/**
- * Render global state to the live DOM.
- * 
- * @return {undefined}
- */
-function render() {
-  console.time('render');
-  // It’s odd that the state isn’t passed to the subscriber.
-  // Need to get the state from the global store itself.
-  const state = store.getState();
-
-  state.ui.isRendering = true;
-
-  console.time('renderMarkdown');
-  replaceChildren(
-    renderMarkdown(state.model.content, state.model.annotations),
-    document.querySelector('tbody')
-  );
-  console.timeEnd('renderMarkdown');
-  renderAnnotations(state.model.annotations);
-
-  document.querySelector('#Comment').value = state.ui.activeAnnotationID
-    ? state.model.annotations.findByID(state.ui.activeAnnotationID).comment ||
-      ''
-    : '';
-
-  const selAnn = document.querySelector('#SelectAnnotation');
-  if (state.ui.position) {
-    selAnn.style.display = 'unset';
-    selAnn.style.top = `${state.ui.position.y}px`;
-    selAnn.style.left = `${state.ui.position.x}px`;
-    selAnn.querySelector('button').focus();
-    restoreSelection(state.ui.selection);
-  } else {
-    selAnn.style.display = 'none';
-    selAnn.style.top = `-100px`;
-    selAnn.style.left = `-100px`;
-  }
-
-  document.querySelector('#Comment').disabled = !state.ui.activeAnnotationID;
-
-  const active = state.model.annotations.findByID(state.ui.activeAnnotationID);
-  document.querySelector('#SaveAnnotation').disabled =
-    !active || document.querySelector('#Comment').value.length === 0;
-  document.querySelector('#DeleteAnnotation').disabled = !active;
-
-  // FIXME: This is ugly and brittle
-  if (!active || !active.timestamp) {
-    console.log('hide delete');
-    document.querySelector('#DeleteAnnotation').style.display = 'none';
-  } else {
-    document.querySelector('#DeleteAnnotation').style.display = 'unset';
-  }
-  document.querySelector('#CancelEditAnnotation').disabled = !active;
-
-  const download = document.querySelector('#Download');
-  // FIXME: The `toJSON` call is weird.
-  // The effect is “those that have been saved". Maybe just a rename
-  // of `clearUnsaved` to `onlyPersisted`?
-  if (state.model.annotations && state.model.annotations.toJSON().length > 0) {
-    download.href = `data:text/markdown;charset=utf-8;base64,${Base64.encode(
-      state.model.content +
-        '\n\n' +
-        serializeAnnotations(state.model.annotations)
-    )}`;
-    download.download = decodeURIComponent(state.model.href.split('/').pop());
-    download.style.display = 'unset';
-  } else {
-    download.style.display = 'none';
-  }
-
-  state.ui.isRendering = false;
-  console.timeEnd('render');
-}
-
-function serializeAnnotations(annotations) {
-  if (!annotations || 0 === annotations.length) {
-    return '';
-  }
-  const NAMESPACE = 'http://marklogic.com/annotations';
-  const annotationsJSON = JSON.stringify(annotations, null, 2);
-  return `<!--- ${NAMESPACE}\n\n${annotationsJSON}\n\n--->`;
-}
-
-function restoreSelection(range) {
-  if (!range) return;
-  const r = rangeFromOffsets(
-    document.querySelector(`#L${range.start.line}>td.content`),
-    range.start.column,
-    document.querySelector(`#L${range.end.line}>td.content`),
-    range.end.column
-  );
-  const selection = window.getSelection();
-  selection.removeAllRanges();
-  selection.addRange(r);
-}
-
-/**
- * Assumes the Markdown DOM has been rendered. Works on the live DOM.
- * Probably should make this async for lots of annotations.
- * 
- * @param {Array<Annotation>} annotations 
- * @return undefined
- */
-function renderAnnotations(annotations) {
-  const state = store.getState();
-  // Highlight annotations. Requires that DOM is already committed above
-  for (const annotation of annotations) {
-    renderAnnotation(
-      annotation,
-      state.model.annotations.mine().some(a => annotation.id === a.id),
-      state.ui.activeAnnotationID === annotation.id
-    );
-  }
-}
-
-function renderAnnotation(annotation, isMine = false, isActive = false) {
-  if (!annotation) return;
-  const r = rangeFromOffsets(
-    document.querySelector(`#L${annotation.range.start.line}>td.content`),
-    annotation.range.start.column,
-    document.querySelector(`#L${annotation.range.end.line}>td.content`),
-    annotation.range.end.column
-  );
-  highlightRange(r, () => {
-    const span = document.createElement('span');
-    span.classList.add('annotation');
-    span.dataset.annotationId = annotation.id;
-    if (isMine) {
-      span.classList.add('mine');
-    }
-    if (isActive) {
-      span.classList.add('active');
-    }
-    span.style.backgroundColor = `rgba(${new ColorHash()
-      .rgb(annotation.user)
-      .join(', ')}, 0.5)`;
-    return span;
-  });
-}
-
-/**
- * Replaces the entire contents of `oldNode` with `newChild`.
- * It’s generally advisable to use a `DocumentFragment` for the
- * the replacement.
- * 
- * @param {Node|DocumentFragment} newChild 
- * @param {Node} oldNode 
- * @returns {Node}  - The new parent wrapper
- */
-function replaceChildren(newChild, oldNode) {
-  if (!oldNode) return;
-  const tmpParent = document.createElement(oldNode.tagName);
-  if (newChild) {
-    tmpParent.appendChild(newChild);
-  }
-  oldNode.parentNode.replaceChild(tmpParent, oldNode);
-  return tmpParent;
-}
-
-document.addEventListener('DOMContentLoaded', evt => {
-  render();
-  document.addEventListener('click', evt => {
-    console.log('evt.target.classList', evt.target.classList);
-    if (evt.target && evt.target.matches('#SaveAnnotation')) {
-      store.dispatch({
-        type: SAVE_ANNOTATION_INTENT,
-        comment: document.querySelector('#Comment').value,
-      });
-      store.dispatch({
-        type: SAVE_ANNOTATION_RECEIPT,
-      });
-    }
-    if (evt.target && evt.target.matches('#DeleteAnnotation')) {
-      store.dispatch({
-        type: DELETE_ANNOTATION_RECEIPT,
-      });
-    }
-    if (evt.target && evt.target.matches('#CancelEditAnnotation')) {
-      store.dispatch({ type: CANCEL_EDIT_ANNOTATION_RECEIPT });
-    }
-    if (evt.target && evt.target.matches('#SelectAnnotation>button')) {
-      store.dispatch({
-        type: NEW_ANNOTATION,
-      });
-      const commentEl = document.querySelector('#Comment');
-      commentEl.focus();
-      commentEl.setSelectionRange(
-        commentEl.value.length,
-        commentEl.value.length
-      );
-    }
-    if (evt.target.matches('.annotation.mine')) {
-      const annotationEl = evt.target;
-      store.dispatch({
-        type: EDIT_ANNOTATION,
-        id: annotationEl.dataset.annotationId,
-      });
-      const commentEl = document.querySelector('#Comment');
-      commentEl.focus();
-      commentEl.setSelectionRange(
-        commentEl.value.length,
-        commentEl.value.length
-      );
-    }
-  });
-
-  document.addEventListener('input', evt => {
-    if (store.getState().ui.isRendering) {
-      evt.stopPropagation();
-      return;
-    }
-    const state = store.getState();
-    if (evt.target && evt.target.matches('#Comment')) {
-      const active = state.model.annotations.findByID(
-        state.ui.activeAnnotationID
-      );
-      document.querySelector('#SaveAnnotation').disabled =
-        !active || document.querySelector('#Comment').value.length === 0;
-    }
-  });
-
-  let isSelecting = false;
-  document.addEventListener('selectionchange', evt => {
-    isSelecting = !window.getSelection().isCollapsed;
-  });
-  document.addEventListener('mouseup', evt => {
-    if (isSelecting) {
-      store.dispatch({
-        type: CHANGE_SELECTION,
-        selection: getRange(window.getSelection()),
-        position: { x: evt.pageX, y: evt.pageY },
-      });
-      isSelecting = false;
-    } else {
-      if (store.getState().ui.selection) {
-        store.dispatch({ type: CANCEL_SELECTION });
-      }
-    }
-  });
-});
-
-/**
- * Returns a function, that, as long as it continues to be invoked, will not
- * be triggered. The function will be called after it stops being called for
- * N milliseconds. If `immediate` is passed, trigger the function on the
- * leading edge, instead of the trailing.
- * 
- * @see https://davidwalsh.name/javascript-debounce-function
- * 
- * @param {function} func 
- * @param {number} [wait=500] 
- * @param {boolean} [immediate=false] 
- * @returns {function}
- */
-function debounce(func, wait = 500, immediate = false) {
-  var timeout;
-  return function() {
-    var context = this,
-      args = arguments;
-    var later = function() {
-      timeout = null;
-      if (!immediate) func.apply(context, args);
-    };
-    var callNow = immediate && !timeout;
-    clearTimeout(timeout);
-    timeout = setTimeout(later, wait);
-    if (callNow) func.apply(context, args);
-  };
-}
-
-/**
- * The number of characters from the start of the parent node
- * to the child node, flattening all intervening children, 
- * plus the offset in the child node.
- * 
- * @example <div>ab<a>cd<a>ef</a>f</a>gh</div>
- *          textOffsetFromNode(div, a[1], 1) // 5 = 'ab' + 'cd' + 1
- * 
- * @param {Node} parent 
- * @param {Node} child 
- * @param {number} [childOffset = 0]
- */
-function textOffsetFromNode(parent, child, childOffset = 0) {
-  if (!parent) return;
-  if (!child) return offset;
-  // console.log('textOffsetFromNode', parent, child, childOffset);
-  const iter = document.createNodeIterator(parent, NodeFilter.SHOW_TEXT);
-
-  let node;
-  let offset = 0;
-  while (iter.nextNode()) {
-    node = iter.referenceNode;
-    if (node === child) {
-      return offset + childOffset;
-    }
-    if (Node.TEXT_NODE === node.nodeType) {
-      offset += node.textContent.length;
-    }
-  }
-  throw new Error(
-    `Couldn’t find ${String(child)} as a child of ${String(parent)}`
-  );
-}
-
-/**
- * Given a node, find its parent line number, 
- * delegating to `getLine()`.
- * 
- * @param {Node} node 
- * @param {string} [matcher = 'tr.line']
- * @return {number}
- */
-function getLineNumber(node, matcher = 'tr.line') {
-  return parseInt(getLine(node, matcher).dataset.line, 10);
-}
-
-/**
- * Given a node, find its parent line.
- * 
- * @param {Node} node 
- * @param {string} [matcher = 'tr.line']
- */
-function getLine(node, matcher = 'tr.line') {
-  do {
-    if (node.matches && node.matches(matcher)) {
-      return node;
-    }
-  } while ((node = node.parentNode));
-  return undefined;
-}
-
-/**
- * Given a `Selection`, determine the `Range`, where
- * `start` is always before `end`, regardless 
- * from which direction the selection was made.
- * 
- * @param {Selection} selection 
- * @returns {Object} - `{ start: number, end: number };
- */
-function getRange(selection) {
-  if (!selection) return;
-  if (!(selection instanceof Selection))
-    throw new TypeError(String(selection.constructor.name));
-  const anchor = {
-    line: getLineNumber(selection.anchorNode),
-    column: textOffsetFromNode(
-      getLine(selection.anchorNode),
-      selection.anchorNode,
-      selection.anchorOffset
-    ),
-  };
-  const focus = {
-    line: getLineNumber(selection.focusNode),
-    column: textOffsetFromNode(
-      getLine(selection.focusNode),
-      selection.focusNode,
-      selection.focusOffset
-    ),
-  };
-  // console.log('getRange', anchor, focus);
-  if (
-    anchor.line < focus.line ||
-    (anchor.line === focus.line && anchor.column <= focus.column)
-  ) {
-    return {
-      start: anchor,
-      end: focus,
-    };
-  } else {
-    return {
-      start: focus,
-      end: anchor,
-    };
-  }
-}
-
-/**
- * 
- * @param {Node} parentStart 
- * @param {number} start 
- * @param {Node} parentEnd 
- * @param {number} end 
- * @return {Range} 
- */
-function rangeFromOffsets(
-  parentStart,
-  start = 0,
-  parentEnd = parentStart,
-  end = 0
-) {
-  // console.log('rangeFromOffsets', parentStart, start, parentEnd, end);
-  const range = document.createRange();
-  const s = nodeFromTextOffset(parentStart, start);
-  const e = nodeFromTextOffset(parentEnd, end);
-  // console.log('rangeFromOffsets#nodeFromTextOffset', s, e);
-  range.setStart(childTextNodeOrSelf(s.node), s.offset);
-  range.setEnd(childTextNodeOrSelf(e.node), e.offset);
-
-  return range;
-}
-
-/**
- * 
- * @param {Node} parent 
- * @param {number} offset 
- * @return {Object} - `{ node: Node, offset: number }`
- */
-function nodeFromTextOffset(parent, offset = 0) {
-  if (!parent) return;
-  // console.log('nodeFromTextOffset', parent, offset);
-
-  const iter = document.createNodeIterator(parent, NodeFilter.SHOW_TEXT);
-
-  let counter = -1;
-  let node;
-  let last;
-  // Find the start node (could we somehow skip this seemingly needless search?)
-  while (counter < offset && iter.nextNode()) {
-    node = iter.referenceNode;
-    if (node.nodeType === Node.TEXT_NODE) {
-      last = offset - counter - 1;
-      counter += node.textContent.length;
-    }
-  }
-  return { node: node, offset: last };
-}
-
-/**
- * Descendent-or-self until you get a `TextNode`
- * 
- * @param {Node} node 
- * @return {TextNode} - Or `undefined` if there are not text 
- *                      children, e.g. `<br/>`
- */
-function childTextNodeOrSelf(node) {
-  if (!node) return;
-  if (!(node instanceof Node)) throw new TypeError(node.constructor.name);
-
-  if (Node.TEXT_NODE === node.nodeType) {
-    return node;
-  }
-  if (node.firstChild) {
-    return childTextNodeOrSelf(node.firstChild);
-  }
-  return undefined;
-}
-
-})));
-//# sourceMappingURL=bundle.js.map
+/******/ (function(modules) { // webpackBootstrap
+/******/ 	// The module cache
+/******/ 	var installedModules = {};
+/******/
+/******/ 	// The require function
+/******/ 	function __webpack_require__(moduleId) {
+/******/
+/******/ 		// Check if module is in cache
+/******/ 		if(installedModules[moduleId]) {
+/******/ 			return installedModules[moduleId].exports;
+/******/ 		}
+/******/ 		// Create a new module (and put it into the cache)
+/******/ 		var module = installedModules[moduleId] = {
+/******/ 			i: moduleId,
+/******/ 			l: false,
+/******/ 			exports: {}
+/******/ 		};
+/******/
+/******/ 		// Execute the module function
+/******/ 		modules[moduleId].call(module.exports, module, module.exports, __webpack_require__);
+/******/
+/******/ 		// Flag the module as loaded
+/******/ 		module.l = true;
+/******/
+/******/ 		// Return the exports of the module
+/******/ 		return module.exports;
+/******/ 	}
+/******/
+/******/
+/******/ 	// expose the modules object (__webpack_modules__)
+/******/ 	__webpack_require__.m = modules;
+/******/
+/******/ 	// expose the module cache
+/******/ 	__webpack_require__.c = installedModules;
+/******/
+/******/ 	// define getter function for harmony exports
+/******/ 	__webpack_require__.d = function(exports, name, getter) {
+/******/ 		if(!__webpack_require__.o(exports, name)) {
+/******/ 			Object.defineProperty(exports, name, {
+/******/ 				configurable: false,
+/******/ 				enumerable: true,
+/******/ 				get: getter
+/******/ 			});
+/******/ 		}
+/******/ 	};
+/******/
+/******/ 	// getDefaultExport function for compatibility with non-harmony modules
+/******/ 	__webpack_require__.n = function(module) {
+/******/ 		var getter = module && module.__esModule ?
+/******/ 			function getDefault() { return module['default']; } :
+/******/ 			function getModuleExports() { return module; };
+/******/ 		__webpack_require__.d(getter, 'a', getter);
+/******/ 		return getter;
+/******/ 	};
+/******/
+/******/ 	// Object.prototype.hasOwnProperty.call
+/******/ 	__webpack_require__.o = function(object, property) { return Object.prototype.hasOwnProperty.call(object, property); };
+/******/
+/******/ 	// __webpack_public_path__
+/******/ 	__webpack_require__.p = "";
+/******/
+/******/ 	// Load entry module and return exports
+/******/ 	return __webpack_require__(__webpack_require__.s = 7);
+/******/ })
+/************************************************************************/
+/******/ ([
+/* 0 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+eval("\n\n// shim for using process in browser\nvar process = module.exports = {};\n\n// cached from whatever global is present so that test runners that stub it\n// don't break things.  But we need to wrap it in a try catch in case it is\n// wrapped in strict mode code which doesn't define any globals.  It's inside a\n// function because try/catches deoptimize in certain engines.\n\nvar cachedSetTimeout;\nvar cachedClearTimeout;\n\nfunction defaultSetTimout() {\n    throw new Error('setTimeout has not been defined');\n}\nfunction defaultClearTimeout() {\n    throw new Error('clearTimeout has not been defined');\n}\n(function () {\n    try {\n        if (typeof setTimeout === 'function') {\n            cachedSetTimeout = setTimeout;\n        } else {\n            cachedSetTimeout = defaultSetTimout;\n        }\n    } catch (e) {\n        cachedSetTimeout = defaultSetTimout;\n    }\n    try {\n        if (typeof clearTimeout === 'function') {\n            cachedClearTimeout = clearTimeout;\n        } else {\n            cachedClearTimeout = defaultClearTimeout;\n        }\n    } catch (e) {\n        cachedClearTimeout = defaultClearTimeout;\n    }\n})();\nfunction runTimeout(fun) {\n    if (cachedSetTimeout === setTimeout) {\n        //normal enviroments in sane situations\n        return setTimeout(fun, 0);\n    }\n    // if setTimeout wasn't available but was latter defined\n    if ((cachedSetTimeout === defaultSetTimout || !cachedSetTimeout) && setTimeout) {\n        cachedSetTimeout = setTimeout;\n        return setTimeout(fun, 0);\n    }\n    try {\n        // when when somebody has screwed with setTimeout but no I.E. maddness\n        return cachedSetTimeout(fun, 0);\n    } catch (e) {\n        try {\n            // When we are in I.E. but the script has been evaled so I.E. doesn't trust the global object when called normally\n            return cachedSetTimeout.call(null, fun, 0);\n        } catch (e) {\n            // same as above but when it's a version of I.E. that must have the global object for 'this', hopfully our context correct otherwise it will throw a global error\n            return cachedSetTimeout.call(this, fun, 0);\n        }\n    }\n}\nfunction runClearTimeout(marker) {\n    if (cachedClearTimeout === clearTimeout) {\n        //normal enviroments in sane situations\n        return clearTimeout(marker);\n    }\n    // if clearTimeout wasn't available but was latter defined\n    if ((cachedClearTimeout === defaultClearTimeout || !cachedClearTimeout) && clearTimeout) {\n        cachedClearTimeout = clearTimeout;\n        return clearTimeout(marker);\n    }\n    try {\n        // when when somebody has screwed with setTimeout but no I.E. maddness\n        return cachedClearTimeout(marker);\n    } catch (e) {\n        try {\n            // When we are in I.E. but the script has been evaled so I.E. doesn't  trust the global object when called normally\n            return cachedClearTimeout.call(null, marker);\n        } catch (e) {\n            // same as above but when it's a version of I.E. that must have the global object for 'this', hopfully our context correct otherwise it will throw a global error.\n            // Some versions of I.E. have different rules for clearTimeout vs setTimeout\n            return cachedClearTimeout.call(this, marker);\n        }\n    }\n}\nvar queue = [];\nvar draining = false;\nvar currentQueue;\nvar queueIndex = -1;\n\nfunction cleanUpNextTick() {\n    if (!draining || !currentQueue) {\n        return;\n    }\n    draining = false;\n    if (currentQueue.length) {\n        queue = currentQueue.concat(queue);\n    } else {\n        queueIndex = -1;\n    }\n    if (queue.length) {\n        drainQueue();\n    }\n}\n\nfunction drainQueue() {\n    if (draining) {\n        return;\n    }\n    var timeout = runTimeout(cleanUpNextTick);\n    draining = true;\n\n    var len = queue.length;\n    while (len) {\n        currentQueue = queue;\n        queue = [];\n        while (++queueIndex < len) {\n            if (currentQueue) {\n                currentQueue[queueIndex].run();\n            }\n        }\n        queueIndex = -1;\n        len = queue.length;\n    }\n    currentQueue = null;\n    draining = false;\n    runClearTimeout(timeout);\n}\n\nprocess.nextTick = function (fun) {\n    var args = new Array(arguments.length - 1);\n    if (arguments.length > 1) {\n        for (var i = 1; i < arguments.length; i++) {\n            args[i - 1] = arguments[i];\n        }\n    }\n    queue.push(new Item(fun, args));\n    if (queue.length === 1 && !draining) {\n        runTimeout(drainQueue);\n    }\n};\n\n// v8 likes predictible objects\nfunction Item(fun, array) {\n    this.fun = fun;\n    this.array = array;\n}\nItem.prototype.run = function () {\n    this.fun.apply(null, this.array);\n};\nprocess.title = 'browser';\nprocess.browser = true;\nprocess.env = {};\nprocess.argv = [];\nprocess.version = ''; // empty string to avoid regexp issues\nprocess.versions = {};\n\nfunction noop() {}\n\nprocess.on = noop;\nprocess.addListener = noop;\nprocess.once = noop;\nprocess.off = noop;\nprocess.removeListener = noop;\nprocess.removeAllListeners = noop;\nprocess.emit = noop;\nprocess.prependListener = noop;\nprocess.prependOnceListener = noop;\n\nprocess.listeners = function (name) {\n    return [];\n};\n\nprocess.binding = function (name) {\n    throw new Error('process.binding is not supported');\n};\n\nprocess.cwd = function () {\n    return '/';\n};\nprocess.chdir = function (dir) {\n    throw new Error('process.chdir is not supported');\n};\nprocess.umask = function () {\n    return 0;\n};\n//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoiMC5qcyIsInNvdXJjZXMiOlsid2VicGFjazovLy9ub2RlX21vZHVsZXMvcHJvY2Vzcy9icm93c2VyLmpzPzgzOTIiXSwic291cmNlc0NvbnRlbnQiOlsiLy8gc2hpbSBmb3IgdXNpbmcgcHJvY2VzcyBpbiBicm93c2VyXG52YXIgcHJvY2VzcyA9IG1vZHVsZS5leHBvcnRzID0ge307XG5cbi8vIGNhY2hlZCBmcm9tIHdoYXRldmVyIGdsb2JhbCBpcyBwcmVzZW50IHNvIHRoYXQgdGVzdCBydW5uZXJzIHRoYXQgc3R1YiBpdFxuLy8gZG9uJ3QgYnJlYWsgdGhpbmdzLiAgQnV0IHdlIG5lZWQgdG8gd3JhcCBpdCBpbiBhIHRyeSBjYXRjaCBpbiBjYXNlIGl0IGlzXG4vLyB3cmFwcGVkIGluIHN0cmljdCBtb2RlIGNvZGUgd2hpY2ggZG9lc24ndCBkZWZpbmUgYW55IGdsb2JhbHMuICBJdCdzIGluc2lkZSBhXG4vLyBmdW5jdGlvbiBiZWNhdXNlIHRyeS9jYXRjaGVzIGRlb3B0aW1pemUgaW4gY2VydGFpbiBlbmdpbmVzLlxuXG52YXIgY2FjaGVkU2V0VGltZW91dDtcbnZhciBjYWNoZWRDbGVhclRpbWVvdXQ7XG5cbmZ1bmN0aW9uIGRlZmF1bHRTZXRUaW1vdXQoKSB7XG4gICAgdGhyb3cgbmV3IEVycm9yKCdzZXRUaW1lb3V0IGhhcyBub3QgYmVlbiBkZWZpbmVkJyk7XG59XG5mdW5jdGlvbiBkZWZhdWx0Q2xlYXJUaW1lb3V0ICgpIHtcbiAgICB0aHJvdyBuZXcgRXJyb3IoJ2NsZWFyVGltZW91dCBoYXMgbm90IGJlZW4gZGVmaW5lZCcpO1xufVxuKGZ1bmN0aW9uICgpIHtcbiAgICB0cnkge1xuICAgICAgICBpZiAodHlwZW9mIHNldFRpbWVvdXQgPT09ICdmdW5jdGlvbicpIHtcbiAgICAgICAgICAgIGNhY2hlZFNldFRpbWVvdXQgPSBzZXRUaW1lb3V0O1xuICAgICAgICB9IGVsc2Uge1xuICAgICAgICAgICAgY2FjaGVkU2V0VGltZW91dCA9IGRlZmF1bHRTZXRUaW1vdXQ7XG4gICAgICAgIH1cbiAgICB9IGNhdGNoIChlKSB7XG4gICAgICAgIGNhY2hlZFNldFRpbWVvdXQgPSBkZWZhdWx0U2V0VGltb3V0O1xuICAgIH1cbiAgICB0cnkge1xuICAgICAgICBpZiAodHlwZW9mIGNsZWFyVGltZW91dCA9PT0gJ2Z1bmN0aW9uJykge1xuICAgICAgICAgICAgY2FjaGVkQ2xlYXJUaW1lb3V0ID0gY2xlYXJUaW1lb3V0O1xuICAgICAgICB9IGVsc2Uge1xuICAgICAgICAgICAgY2FjaGVkQ2xlYXJUaW1lb3V0ID0gZGVmYXVsdENsZWFyVGltZW91dDtcbiAgICAgICAgfVxuICAgIH0gY2F0Y2ggKGUpIHtcbiAgICAgICAgY2FjaGVkQ2xlYXJUaW1lb3V0ID0gZGVmYXVsdENsZWFyVGltZW91dDtcbiAgICB9XG59ICgpKVxuZnVuY3Rpb24gcnVuVGltZW91dChmdW4pIHtcbiAgICBpZiAoY2FjaGVkU2V0VGltZW91dCA9PT0gc2V0VGltZW91dCkge1xuICAgICAgICAvL25vcm1hbCBlbnZpcm9tZW50cyBpbiBzYW5lIHNpdHVhdGlvbnNcbiAgICAgICAgcmV0dXJuIHNldFRpbWVvdXQoZnVuLCAwKTtcbiAgICB9XG4gICAgLy8gaWYgc2V0VGltZW91dCB3YXNuJ3QgYXZhaWxhYmxlIGJ1dCB3YXMgbGF0dGVyIGRlZmluZWRcbiAgICBpZiAoKGNhY2hlZFNldFRpbWVvdXQgPT09IGRlZmF1bHRTZXRUaW1vdXQgfHwgIWNhY2hlZFNldFRpbWVvdXQpICYmIHNldFRpbWVvdXQpIHtcbiAgICAgICAgY2FjaGVkU2V0VGltZW91dCA9IHNldFRpbWVvdXQ7XG4gICAgICAgIHJldHVybiBzZXRUaW1lb3V0KGZ1biwgMCk7XG4gICAgfVxuICAgIHRyeSB7XG4gICAgICAgIC8vIHdoZW4gd2hlbiBzb21lYm9keSBoYXMgc2NyZXdlZCB3aXRoIHNldFRpbWVvdXQgYnV0IG5vIEkuRS4gbWFkZG5lc3NcbiAgICAgICAgcmV0dXJuIGNhY2hlZFNldFRpbWVvdXQoZnVuLCAwKTtcbiAgICB9IGNhdGNoKGUpe1xuICAgICAgICB0cnkge1xuICAgICAgICAgICAgLy8gV2hlbiB3ZSBhcmUgaW4gSS5FLiBidXQgdGhlIHNjcmlwdCBoYXMgYmVlbiBldmFsZWQgc28gSS5FLiBkb2Vzbid0IHRydXN0IHRoZSBnbG9iYWwgb2JqZWN0IHdoZW4gY2FsbGVkIG5vcm1hbGx5XG4gICAgICAgICAgICByZXR1cm4gY2FjaGVkU2V0VGltZW91dC5jYWxsKG51bGwsIGZ1biwgMCk7XG4gICAgICAgIH0gY2F0Y2goZSl7XG4gICAgICAgICAgICAvLyBzYW1lIGFzIGFib3ZlIGJ1dCB3aGVuIGl0J3MgYSB2ZXJzaW9uIG9mIEkuRS4gdGhhdCBtdXN0IGhhdmUgdGhlIGdsb2JhbCBvYmplY3QgZm9yICd0aGlzJywgaG9wZnVsbHkgb3VyIGNvbnRleHQgY29ycmVjdCBvdGhlcndpc2UgaXQgd2lsbCB0aHJvdyBhIGdsb2JhbCBlcnJvclxuICAgICAgICAgICAgcmV0dXJuIGNhY2hlZFNldFRpbWVvdXQuY2FsbCh0aGlzLCBmdW4sIDApO1xuICAgICAgICB9XG4gICAgfVxuXG5cbn1cbmZ1bmN0aW9uIHJ1bkNsZWFyVGltZW91dChtYXJrZXIpIHtcbiAgICBpZiAoY2FjaGVkQ2xlYXJUaW1lb3V0ID09PSBjbGVhclRpbWVvdXQpIHtcbiAgICAgICAgLy9ub3JtYWwgZW52aXJvbWVudHMgaW4gc2FuZSBzaXR1YXRpb25zXG4gICAgICAgIHJldHVybiBjbGVhclRpbWVvdXQobWFya2VyKTtcbiAgICB9XG4gICAgLy8gaWYgY2xlYXJUaW1lb3V0IHdhc24ndCBhdmFpbGFibGUgYnV0IHdhcyBsYXR0ZXIgZGVmaW5lZFxuICAgIGlmICgoY2FjaGVkQ2xlYXJUaW1lb3V0ID09PSBkZWZhdWx0Q2xlYXJUaW1lb3V0IHx8ICFjYWNoZWRDbGVhclRpbWVvdXQpICYmIGNsZWFyVGltZW91dCkge1xuICAgICAgICBjYWNoZWRDbGVhclRpbWVvdXQgPSBjbGVhclRpbWVvdXQ7XG4gICAgICAgIHJldHVybiBjbGVhclRpbWVvdXQobWFya2VyKTtcbiAgICB9XG4gICAgdHJ5IHtcbiAgICAgICAgLy8gd2hlbiB3aGVuIHNvbWVib2R5IGhhcyBzY3Jld2VkIHdpdGggc2V0VGltZW91dCBidXQgbm8gSS5FLiBtYWRkbmVzc1xuICAgICAgICByZXR1cm4gY2FjaGVkQ2xlYXJUaW1lb3V0KG1hcmtlcik7XG4gICAgfSBjYXRjaCAoZSl7XG4gICAgICAgIHRyeSB7XG4gICAgICAgICAgICAvLyBXaGVuIHdlIGFyZSBpbiBJLkUuIGJ1dCB0aGUgc2NyaXB0IGhhcyBiZWVuIGV2YWxlZCBzbyBJLkUuIGRvZXNuJ3QgIHRydXN0IHRoZSBnbG9iYWwgb2JqZWN0IHdoZW4gY2FsbGVkIG5vcm1hbGx5XG4gICAgICAgICAgICByZXR1cm4gY2FjaGVkQ2xlYXJUaW1lb3V0LmNhbGwobnVsbCwgbWFya2VyKTtcbiAgICAgICAgfSBjYXRjaCAoZSl7XG4gICAgICAgICAgICAvLyBzYW1lIGFzIGFib3ZlIGJ1dCB3aGVuIGl0J3MgYSB2ZXJzaW9uIG9mIEkuRS4gdGhhdCBtdXN0IGhhdmUgdGhlIGdsb2JhbCBvYmplY3QgZm9yICd0aGlzJywgaG9wZnVsbHkgb3VyIGNvbnRleHQgY29ycmVjdCBvdGhlcndpc2UgaXQgd2lsbCB0aHJvdyBhIGdsb2JhbCBlcnJvci5cbiAgICAgICAgICAgIC8vIFNvbWUgdmVyc2lvbnMgb2YgSS5FLiBoYXZlIGRpZmZlcmVudCBydWxlcyBmb3IgY2xlYXJUaW1lb3V0IHZzIHNldFRpbWVvdXRcbiAgICAgICAgICAgIHJldHVybiBjYWNoZWRDbGVhclRpbWVvdXQuY2FsbCh0aGlzLCBtYXJrZXIpO1xuICAgICAgICB9XG4gICAgfVxuXG5cblxufVxudmFyIHF1ZXVlID0gW107XG52YXIgZHJhaW5pbmcgPSBmYWxzZTtcbnZhciBjdXJyZW50UXVldWU7XG52YXIgcXVldWVJbmRleCA9IC0xO1xuXG5mdW5jdGlvbiBjbGVhblVwTmV4dFRpY2soKSB7XG4gICAgaWYgKCFkcmFpbmluZyB8fCAhY3VycmVudFF1ZXVlKSB7XG4gICAgICAgIHJldHVybjtcbiAgICB9XG4gICAgZHJhaW5pbmcgPSBmYWxzZTtcbiAgICBpZiAoY3VycmVudFF1ZXVlLmxlbmd0aCkge1xuICAgICAgICBxdWV1ZSA9IGN1cnJlbnRRdWV1ZS5jb25jYXQocXVldWUpO1xuICAgIH0gZWxzZSB7XG4gICAgICAgIHF1ZXVlSW5kZXggPSAtMTtcbiAgICB9XG4gICAgaWYgKHF1ZXVlLmxlbmd0aCkge1xuICAgICAgICBkcmFpblF1ZXVlKCk7XG4gICAgfVxufVxuXG5mdW5jdGlvbiBkcmFpblF1ZXVlKCkge1xuICAgIGlmIChkcmFpbmluZykge1xuICAgICAgICByZXR1cm47XG4gICAgfVxuICAgIHZhciB0aW1lb3V0ID0gcnVuVGltZW91dChjbGVhblVwTmV4dFRpY2spO1xuICAgIGRyYWluaW5nID0gdHJ1ZTtcblxuICAgIHZhciBsZW4gPSBxdWV1ZS5sZW5ndGg7XG4gICAgd2hpbGUobGVuKSB7XG4gICAgICAgIGN1cnJlbnRRdWV1ZSA9IHF1ZXVlO1xuICAgICAgICBxdWV1ZSA9IFtdO1xuICAgICAgICB3aGlsZSAoKytxdWV1ZUluZGV4IDwgbGVuKSB7XG4gICAgICAgICAgICBpZiAoY3VycmVudFF1ZXVlKSB7XG4gICAgICAgICAgICAgICAgY3VycmVudFF1ZXVlW3F1ZXVlSW5kZXhdLnJ1bigpO1xuICAgICAgICAgICAgfVxuICAgICAgICB9XG4gICAgICAgIHF1ZXVlSW5kZXggPSAtMTtcbiAgICAgICAgbGVuID0gcXVldWUubGVuZ3RoO1xuICAgIH1cbiAgICBjdXJyZW50UXVldWUgPSBudWxsO1xuICAgIGRyYWluaW5nID0gZmFsc2U7XG4gICAgcnVuQ2xlYXJUaW1lb3V0KHRpbWVvdXQpO1xufVxuXG5wcm9jZXNzLm5leHRUaWNrID0gZnVuY3Rpb24gKGZ1bikge1xuICAgIHZhciBhcmdzID0gbmV3IEFycmF5KGFyZ3VtZW50cy5sZW5ndGggLSAxKTtcbiAgICBpZiAoYXJndW1lbnRzLmxlbmd0aCA+IDEpIHtcbiAgICAgICAgZm9yICh2YXIgaSA9IDE7IGkgPCBhcmd1bWVudHMubGVuZ3RoOyBpKyspIHtcbiAgICAgICAgICAgIGFyZ3NbaSAtIDFdID0gYXJndW1lbnRzW2ldO1xuICAgICAgICB9XG4gICAgfVxuICAgIHF1ZXVlLnB1c2gobmV3IEl0ZW0oZnVuLCBhcmdzKSk7XG4gICAgaWYgKHF1ZXVlLmxlbmd0aCA9PT0gMSAmJiAhZHJhaW5pbmcpIHtcbiAgICAgICAgcnVuVGltZW91dChkcmFpblF1ZXVlKTtcbiAgICB9XG59O1xuXG4vLyB2OCBsaWtlcyBwcmVkaWN0aWJsZSBvYmplY3RzXG5mdW5jdGlvbiBJdGVtKGZ1biwgYXJyYXkpIHtcbiAgICB0aGlzLmZ1biA9IGZ1bjtcbiAgICB0aGlzLmFycmF5ID0gYXJyYXk7XG59XG5JdGVtLnByb3RvdHlwZS5ydW4gPSBmdW5jdGlvbiAoKSB7XG4gICAgdGhpcy5mdW4uYXBwbHkobnVsbCwgdGhpcy5hcnJheSk7XG59O1xucHJvY2Vzcy50aXRsZSA9ICdicm93c2VyJztcbnByb2Nlc3MuYnJvd3NlciA9IHRydWU7XG5wcm9jZXNzLmVudiA9IHt9O1xucHJvY2Vzcy5hcmd2ID0gW107XG5wcm9jZXNzLnZlcnNpb24gPSAnJzsgLy8gZW1wdHkgc3RyaW5nIHRvIGF2b2lkIHJlZ2V4cCBpc3N1ZXNcbnByb2Nlc3MudmVyc2lvbnMgPSB7fTtcblxuZnVuY3Rpb24gbm9vcCgpIHt9XG5cbnByb2Nlc3Mub24gPSBub29wO1xucHJvY2Vzcy5hZGRMaXN0ZW5lciA9IG5vb3A7XG5wcm9jZXNzLm9uY2UgPSBub29wO1xucHJvY2Vzcy5vZmYgPSBub29wO1xucHJvY2Vzcy5yZW1vdmVMaXN0ZW5lciA9IG5vb3A7XG5wcm9jZXNzLnJlbW92ZUFsbExpc3RlbmVycyA9IG5vb3A7XG5wcm9jZXNzLmVtaXQgPSBub29wO1xucHJvY2Vzcy5wcmVwZW5kTGlzdGVuZXIgPSBub29wO1xucHJvY2Vzcy5wcmVwZW5kT25jZUxpc3RlbmVyID0gbm9vcDtcblxucHJvY2Vzcy5saXN0ZW5lcnMgPSBmdW5jdGlvbiAobmFtZSkgeyByZXR1cm4gW10gfVxuXG5wcm9jZXNzLmJpbmRpbmcgPSBmdW5jdGlvbiAobmFtZSkge1xuICAgIHRocm93IG5ldyBFcnJvcigncHJvY2Vzcy5iaW5kaW5nIGlzIG5vdCBzdXBwb3J0ZWQnKTtcbn07XG5cbnByb2Nlc3MuY3dkID0gZnVuY3Rpb24gKCkgeyByZXR1cm4gJy8nIH07XG5wcm9jZXNzLmNoZGlyID0gZnVuY3Rpb24gKGRpcikge1xuICAgIHRocm93IG5ldyBFcnJvcigncHJvY2Vzcy5jaGRpciBpcyBub3Qgc3VwcG9ydGVkJyk7XG59O1xucHJvY2Vzcy51bWFzayA9IGZ1bmN0aW9uKCkgeyByZXR1cm4gMDsgfTtcblxuXG5cbi8vIFdFQlBBQ0sgRk9PVEVSIC8vXG4vLyBub2RlX21vZHVsZXMvcHJvY2Vzcy9icm93c2VyLmpzIl0sIm1hcHBpbmdzIjoiOztBQUFBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFHQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFJQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQUE7QUFBQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUFBO0FBQUE7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUFBO0FBQUEiLCJzb3VyY2VSb290IjoiIn0=\n//# sourceURL=webpack-internal:///0\n");
+
+/***/ }),
+/* 1 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+eval("\n\nObject.defineProperty(exports, \"__esModule\", {\n  value: true\n});\nexports.ActionTypes = undefined;\n\nvar _typeof = typeof Symbol === \"function\" && typeof Symbol.iterator === \"symbol\" ? function (obj) { return typeof obj; } : function (obj) { return obj && typeof Symbol === \"function\" && obj.constructor === Symbol && obj !== Symbol.prototype ? \"symbol\" : typeof obj; };\n\nexports.default = createStore;\n\nvar _isPlainObject = __webpack_require__(2);\n\nvar _isPlainObject2 = _interopRequireDefault(_isPlainObject);\n\nvar _symbolObservable = __webpack_require__(20);\n\nvar _symbolObservable2 = _interopRequireDefault(_symbolObservable);\n\nfunction _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }\n\n/**\n * These are private action types reserved by Redux.\n * For any unknown actions, you must return the current state.\n * If the current state is undefined, you must return the initial state.\n * Do not reference these action types directly in your code.\n */\nvar ActionTypes = exports.ActionTypes = {\n  INIT: '@@redux/INIT'\n\n  /**\n   * Creates a Redux store that holds the state tree.\n   * The only way to change the data in the store is to call `dispatch()` on it.\n   *\n   * There should only be a single store in your app. To specify how different\n   * parts of the state tree respond to actions, you may combine several reducers\n   * into a single reducer function by using `combineReducers`.\n   *\n   * @param {Function} reducer A function that returns the next state tree, given\n   * the current state tree and the action to handle.\n   *\n   * @param {any} [preloadedState] The initial state. You may optionally specify it\n   * to hydrate the state from the server in universal apps, or to restore a\n   * previously serialized user session.\n   * If you use `combineReducers` to produce the root reducer function, this must be\n   * an object with the same shape as `combineReducers` keys.\n   *\n   * @param {Function} [enhancer] The store enhancer. You may optionally specify it\n   * to enhance the store with third-party capabilities such as middleware,\n   * time travel, persistence, etc. The only store enhancer that ships with Redux\n   * is `applyMiddleware()`.\n   *\n   * @returns {Store} A Redux store that lets you read the state, dispatch actions\n   * and subscribe to changes.\n   */\n};function createStore(reducer, preloadedState, enhancer) {\n  var _ref2;\n\n  if (typeof preloadedState === 'function' && typeof enhancer === 'undefined') {\n    enhancer = preloadedState;\n    preloadedState = undefined;\n  }\n\n  if (typeof enhancer !== 'undefined') {\n    if (typeof enhancer !== 'function') {\n      throw new Error('Expected the enhancer to be a function.');\n    }\n\n    return enhancer(createStore)(reducer, preloadedState);\n  }\n\n  if (typeof reducer !== 'function') {\n    throw new Error('Expected the reducer to be a function.');\n  }\n\n  var currentReducer = reducer;\n  var currentState = preloadedState;\n  var currentListeners = [];\n  var nextListeners = currentListeners;\n  var isDispatching = false;\n\n  function ensureCanMutateNextListeners() {\n    if (nextListeners === currentListeners) {\n      nextListeners = currentListeners.slice();\n    }\n  }\n\n  /**\n   * Reads the state tree managed by the store.\n   *\n   * @returns {any} The current state tree of your application.\n   */\n  function getState() {\n    return currentState;\n  }\n\n  /**\n   * Adds a change listener. It will be called any time an action is dispatched,\n   * and some part of the state tree may potentially have changed. You may then\n   * call `getState()` to read the current state tree inside the callback.\n   *\n   * You may call `dispatch()` from a change listener, with the following\n   * caveats:\n   *\n   * 1. The subscriptions are snapshotted just before every `dispatch()` call.\n   * If you subscribe or unsubscribe while the listeners are being invoked, this\n   * will not have any effect on the `dispatch()` that is currently in progress.\n   * However, the next `dispatch()` call, whether nested or not, will use a more\n   * recent snapshot of the subscription list.\n   *\n   * 2. The listener should not expect to see all state changes, as the state\n   * might have been updated multiple times during a nested `dispatch()` before\n   * the listener is called. It is, however, guaranteed that all subscribers\n   * registered before the `dispatch()` started will be called with the latest\n   * state by the time it exits.\n   *\n   * @param {Function} listener A callback to be invoked on every dispatch.\n   * @returns {Function} A function to remove this change listener.\n   */\n  function subscribe(listener) {\n    if (typeof listener !== 'function') {\n      throw new Error('Expected listener to be a function.');\n    }\n\n    var isSubscribed = true;\n\n    ensureCanMutateNextListeners();\n    nextListeners.push(listener);\n\n    return function unsubscribe() {\n      if (!isSubscribed) {\n        return;\n      }\n\n      isSubscribed = false;\n\n      ensureCanMutateNextListeners();\n      var index = nextListeners.indexOf(listener);\n      nextListeners.splice(index, 1);\n    };\n  }\n\n  /**\n   * Dispatches an action. It is the only way to trigger a state change.\n   *\n   * The `reducer` function, used to create the store, will be called with the\n   * current state tree and the given `action`. Its return value will\n   * be considered the **next** state of the tree, and the change listeners\n   * will be notified.\n   *\n   * The base implementation only supports plain object actions. If you want to\n   * dispatch a Promise, an Observable, a thunk, or something else, you need to\n   * wrap your store creating function into the corresponding middleware. For\n   * example, see the documentation for the `redux-thunk` package. Even the\n   * middleware will eventually dispatch plain object actions using this method.\n   *\n   * @param {Object} action A plain object representing “what changed”. It is\n   * a good idea to keep actions serializable so you can record and replay user\n   * sessions, or use the time travelling `redux-devtools`. An action must have\n   * a `type` property which may not be `undefined`. It is a good idea to use\n   * string constants for action types.\n   *\n   * @returns {Object} For convenience, the same action object you dispatched.\n   *\n   * Note that, if you use a custom middleware, it may wrap `dispatch()` to\n   * return something else (for example, a Promise you can await).\n   */\n  function dispatch(action) {\n    if (!(0, _isPlainObject2.default)(action)) {\n      throw new Error('Actions must be plain objects. ' + 'Use custom middleware for async actions.');\n    }\n\n    if (typeof action.type === 'undefined') {\n      throw new Error('Actions may not have an undefined \"type\" property. ' + 'Have you misspelled a constant?');\n    }\n\n    if (isDispatching) {\n      throw new Error('Reducers may not dispatch actions.');\n    }\n\n    try {\n      isDispatching = true;\n      currentState = currentReducer(currentState, action);\n    } finally {\n      isDispatching = false;\n    }\n\n    var listeners = currentListeners = nextListeners;\n    for (var i = 0; i < listeners.length; i++) {\n      var listener = listeners[i];\n      listener();\n    }\n\n    return action;\n  }\n\n  /**\n   * Replaces the reducer currently used by the store to calculate the state.\n   *\n   * You might need this if your app implements code splitting and you want to\n   * load some of the reducers dynamically. You might also need this if you\n   * implement a hot reloading mechanism for Redux.\n   *\n   * @param {Function} nextReducer The reducer for the store to use instead.\n   * @returns {void}\n   */\n  function replaceReducer(nextReducer) {\n    if (typeof nextReducer !== 'function') {\n      throw new Error('Expected the nextReducer to be a function.');\n    }\n\n    currentReducer = nextReducer;\n    dispatch({ type: ActionTypes.INIT });\n  }\n\n  /**\n   * Interoperability point for observable/reactive libraries.\n   * @returns {observable} A minimal observable of state changes.\n   * For more information, see the observable proposal:\n   * https://github.com/tc39/proposal-observable\n   */\n  function observable() {\n    var _ref;\n\n    var outerSubscribe = subscribe;\n    return _ref = {\n      /**\n       * The minimal observable subscription method.\n       * @param {Object} observer Any object that can be used as an observer.\n       * The observer object should have a `next` method.\n       * @returns {subscription} An object with an `unsubscribe` method that can\n       * be used to unsubscribe the observable from the store, and prevent further\n       * emission of values from the observable.\n       */\n      subscribe: function subscribe(observer) {\n        if ((typeof observer === 'undefined' ? 'undefined' : _typeof(observer)) !== 'object') {\n          throw new TypeError('Expected the observer to be an object.');\n        }\n\n        function observeState() {\n          if (observer.next) {\n            observer.next(getState());\n          }\n        }\n\n        observeState();\n        var unsubscribe = outerSubscribe(observeState);\n        return { unsubscribe: unsubscribe };\n      }\n    }, _ref[_symbolObservable2.default] = function () {\n      return this;\n    }, _ref;\n  }\n\n  // When a store is created, an \"INIT\" action is dispatched so that every\n  // reducer returns their initial state. This effectively populates\n  // the initial state tree.\n  dispatch({ type: ActionTypes.INIT });\n\n  return _ref2 = {\n    dispatch: dispatch,\n    subscribe: subscribe,\n    getState: getState,\n    replaceReducer: replaceReducer\n  }, _ref2[_symbolObservable2.default] = observable, _ref2;\n}\n//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoiMS5qcyIsInNvdXJjZXMiOlsid2VicGFjazovLy9ub2RlX21vZHVsZXMvcmVkdXgvZXMvY3JlYXRlU3RvcmUuanM/Zjc1YSJdLCJzb3VyY2VzQ29udGVudCI6WyJpbXBvcnQgaXNQbGFpbk9iamVjdCBmcm9tICdsb2Rhc2gtZXMvaXNQbGFpbk9iamVjdCc7XG5pbXBvcnQgJCRvYnNlcnZhYmxlIGZyb20gJ3N5bWJvbC1vYnNlcnZhYmxlJztcblxuLyoqXG4gKiBUaGVzZSBhcmUgcHJpdmF0ZSBhY3Rpb24gdHlwZXMgcmVzZXJ2ZWQgYnkgUmVkdXguXG4gKiBGb3IgYW55IHVua25vd24gYWN0aW9ucywgeW91IG11c3QgcmV0dXJuIHRoZSBjdXJyZW50IHN0YXRlLlxuICogSWYgdGhlIGN1cnJlbnQgc3RhdGUgaXMgdW5kZWZpbmVkLCB5b3UgbXVzdCByZXR1cm4gdGhlIGluaXRpYWwgc3RhdGUuXG4gKiBEbyBub3QgcmVmZXJlbmNlIHRoZXNlIGFjdGlvbiB0eXBlcyBkaXJlY3RseSBpbiB5b3VyIGNvZGUuXG4gKi9cbmV4cG9ydCB2YXIgQWN0aW9uVHlwZXMgPSB7XG4gIElOSVQ6ICdAQHJlZHV4L0lOSVQnXG5cbiAgLyoqXG4gICAqIENyZWF0ZXMgYSBSZWR1eCBzdG9yZSB0aGF0IGhvbGRzIHRoZSBzdGF0ZSB0cmVlLlxuICAgKiBUaGUgb25seSB3YXkgdG8gY2hhbmdlIHRoZSBkYXRhIGluIHRoZSBzdG9yZSBpcyB0byBjYWxsIGBkaXNwYXRjaCgpYCBvbiBpdC5cbiAgICpcbiAgICogVGhlcmUgc2hvdWxkIG9ubHkgYmUgYSBzaW5nbGUgc3RvcmUgaW4geW91ciBhcHAuIFRvIHNwZWNpZnkgaG93IGRpZmZlcmVudFxuICAgKiBwYXJ0cyBvZiB0aGUgc3RhdGUgdHJlZSByZXNwb25kIHRvIGFjdGlvbnMsIHlvdSBtYXkgY29tYmluZSBzZXZlcmFsIHJlZHVjZXJzXG4gICAqIGludG8gYSBzaW5nbGUgcmVkdWNlciBmdW5jdGlvbiBieSB1c2luZyBgY29tYmluZVJlZHVjZXJzYC5cbiAgICpcbiAgICogQHBhcmFtIHtGdW5jdGlvbn0gcmVkdWNlciBBIGZ1bmN0aW9uIHRoYXQgcmV0dXJucyB0aGUgbmV4dCBzdGF0ZSB0cmVlLCBnaXZlblxuICAgKiB0aGUgY3VycmVudCBzdGF0ZSB0cmVlIGFuZCB0aGUgYWN0aW9uIHRvIGhhbmRsZS5cbiAgICpcbiAgICogQHBhcmFtIHthbnl9IFtwcmVsb2FkZWRTdGF0ZV0gVGhlIGluaXRpYWwgc3RhdGUuIFlvdSBtYXkgb3B0aW9uYWxseSBzcGVjaWZ5IGl0XG4gICAqIHRvIGh5ZHJhdGUgdGhlIHN0YXRlIGZyb20gdGhlIHNlcnZlciBpbiB1bml2ZXJzYWwgYXBwcywgb3IgdG8gcmVzdG9yZSBhXG4gICAqIHByZXZpb3VzbHkgc2VyaWFsaXplZCB1c2VyIHNlc3Npb24uXG4gICAqIElmIHlvdSB1c2UgYGNvbWJpbmVSZWR1Y2Vyc2AgdG8gcHJvZHVjZSB0aGUgcm9vdCByZWR1Y2VyIGZ1bmN0aW9uLCB0aGlzIG11c3QgYmVcbiAgICogYW4gb2JqZWN0IHdpdGggdGhlIHNhbWUgc2hhcGUgYXMgYGNvbWJpbmVSZWR1Y2Vyc2Aga2V5cy5cbiAgICpcbiAgICogQHBhcmFtIHtGdW5jdGlvbn0gW2VuaGFuY2VyXSBUaGUgc3RvcmUgZW5oYW5jZXIuIFlvdSBtYXkgb3B0aW9uYWxseSBzcGVjaWZ5IGl0XG4gICAqIHRvIGVuaGFuY2UgdGhlIHN0b3JlIHdpdGggdGhpcmQtcGFydHkgY2FwYWJpbGl0aWVzIHN1Y2ggYXMgbWlkZGxld2FyZSxcbiAgICogdGltZSB0cmF2ZWwsIHBlcnNpc3RlbmNlLCBldGMuIFRoZSBvbmx5IHN0b3JlIGVuaGFuY2VyIHRoYXQgc2hpcHMgd2l0aCBSZWR1eFxuICAgKiBpcyBgYXBwbHlNaWRkbGV3YXJlKClgLlxuICAgKlxuICAgKiBAcmV0dXJucyB7U3RvcmV9IEEgUmVkdXggc3RvcmUgdGhhdCBsZXRzIHlvdSByZWFkIHRoZSBzdGF0ZSwgZGlzcGF0Y2ggYWN0aW9uc1xuICAgKiBhbmQgc3Vic2NyaWJlIHRvIGNoYW5nZXMuXG4gICAqL1xufTtleHBvcnQgZGVmYXVsdCBmdW5jdGlvbiBjcmVhdGVTdG9yZShyZWR1Y2VyLCBwcmVsb2FkZWRTdGF0ZSwgZW5oYW5jZXIpIHtcbiAgdmFyIF9yZWYyO1xuXG4gIGlmICh0eXBlb2YgcHJlbG9hZGVkU3RhdGUgPT09ICdmdW5jdGlvbicgJiYgdHlwZW9mIGVuaGFuY2VyID09PSAndW5kZWZpbmVkJykge1xuICAgIGVuaGFuY2VyID0gcHJlbG9hZGVkU3RhdGU7XG4gICAgcHJlbG9hZGVkU3RhdGUgPSB1bmRlZmluZWQ7XG4gIH1cblxuICBpZiAodHlwZW9mIGVuaGFuY2VyICE9PSAndW5kZWZpbmVkJykge1xuICAgIGlmICh0eXBlb2YgZW5oYW5jZXIgIT09ICdmdW5jdGlvbicpIHtcbiAgICAgIHRocm93IG5ldyBFcnJvcignRXhwZWN0ZWQgdGhlIGVuaGFuY2VyIHRvIGJlIGEgZnVuY3Rpb24uJyk7XG4gICAgfVxuXG4gICAgcmV0dXJuIGVuaGFuY2VyKGNyZWF0ZVN0b3JlKShyZWR1Y2VyLCBwcmVsb2FkZWRTdGF0ZSk7XG4gIH1cblxuICBpZiAodHlwZW9mIHJlZHVjZXIgIT09ICdmdW5jdGlvbicpIHtcbiAgICB0aHJvdyBuZXcgRXJyb3IoJ0V4cGVjdGVkIHRoZSByZWR1Y2VyIHRvIGJlIGEgZnVuY3Rpb24uJyk7XG4gIH1cblxuICB2YXIgY3VycmVudFJlZHVjZXIgPSByZWR1Y2VyO1xuICB2YXIgY3VycmVudFN0YXRlID0gcHJlbG9hZGVkU3RhdGU7XG4gIHZhciBjdXJyZW50TGlzdGVuZXJzID0gW107XG4gIHZhciBuZXh0TGlzdGVuZXJzID0gY3VycmVudExpc3RlbmVycztcbiAgdmFyIGlzRGlzcGF0Y2hpbmcgPSBmYWxzZTtcblxuICBmdW5jdGlvbiBlbnN1cmVDYW5NdXRhdGVOZXh0TGlzdGVuZXJzKCkge1xuICAgIGlmIChuZXh0TGlzdGVuZXJzID09PSBjdXJyZW50TGlzdGVuZXJzKSB7XG4gICAgICBuZXh0TGlzdGVuZXJzID0gY3VycmVudExpc3RlbmVycy5zbGljZSgpO1xuICAgIH1cbiAgfVxuXG4gIC8qKlxuICAgKiBSZWFkcyB0aGUgc3RhdGUgdHJlZSBtYW5hZ2VkIGJ5IHRoZSBzdG9yZS5cbiAgICpcbiAgICogQHJldHVybnMge2FueX0gVGhlIGN1cnJlbnQgc3RhdGUgdHJlZSBvZiB5b3VyIGFwcGxpY2F0aW9uLlxuICAgKi9cbiAgZnVuY3Rpb24gZ2V0U3RhdGUoKSB7XG4gICAgcmV0dXJuIGN1cnJlbnRTdGF0ZTtcbiAgfVxuXG4gIC8qKlxuICAgKiBBZGRzIGEgY2hhbmdlIGxpc3RlbmVyLiBJdCB3aWxsIGJlIGNhbGxlZCBhbnkgdGltZSBhbiBhY3Rpb24gaXMgZGlzcGF0Y2hlZCxcbiAgICogYW5kIHNvbWUgcGFydCBvZiB0aGUgc3RhdGUgdHJlZSBtYXkgcG90ZW50aWFsbHkgaGF2ZSBjaGFuZ2VkLiBZb3UgbWF5IHRoZW5cbiAgICogY2FsbCBgZ2V0U3RhdGUoKWAgdG8gcmVhZCB0aGUgY3VycmVudCBzdGF0ZSB0cmVlIGluc2lkZSB0aGUgY2FsbGJhY2suXG4gICAqXG4gICAqIFlvdSBtYXkgY2FsbCBgZGlzcGF0Y2goKWAgZnJvbSBhIGNoYW5nZSBsaXN0ZW5lciwgd2l0aCB0aGUgZm9sbG93aW5nXG4gICAqIGNhdmVhdHM6XG4gICAqXG4gICAqIDEuIFRoZSBzdWJzY3JpcHRpb25zIGFyZSBzbmFwc2hvdHRlZCBqdXN0IGJlZm9yZSBldmVyeSBgZGlzcGF0Y2goKWAgY2FsbC5cbiAgICogSWYgeW91IHN1YnNjcmliZSBvciB1bnN1YnNjcmliZSB3aGlsZSB0aGUgbGlzdGVuZXJzIGFyZSBiZWluZyBpbnZva2VkLCB0aGlzXG4gICAqIHdpbGwgbm90IGhhdmUgYW55IGVmZmVjdCBvbiB0aGUgYGRpc3BhdGNoKClgIHRoYXQgaXMgY3VycmVudGx5IGluIHByb2dyZXNzLlxuICAgKiBIb3dldmVyLCB0aGUgbmV4dCBgZGlzcGF0Y2goKWAgY2FsbCwgd2hldGhlciBuZXN0ZWQgb3Igbm90LCB3aWxsIHVzZSBhIG1vcmVcbiAgICogcmVjZW50IHNuYXBzaG90IG9mIHRoZSBzdWJzY3JpcHRpb24gbGlzdC5cbiAgICpcbiAgICogMi4gVGhlIGxpc3RlbmVyIHNob3VsZCBub3QgZXhwZWN0IHRvIHNlZSBhbGwgc3RhdGUgY2hhbmdlcywgYXMgdGhlIHN0YXRlXG4gICAqIG1pZ2h0IGhhdmUgYmVlbiB1cGRhdGVkIG11bHRpcGxlIHRpbWVzIGR1cmluZyBhIG5lc3RlZCBgZGlzcGF0Y2goKWAgYmVmb3JlXG4gICAqIHRoZSBsaXN0ZW5lciBpcyBjYWxsZWQuIEl0IGlzLCBob3dldmVyLCBndWFyYW50ZWVkIHRoYXQgYWxsIHN1YnNjcmliZXJzXG4gICAqIHJlZ2lzdGVyZWQgYmVmb3JlIHRoZSBgZGlzcGF0Y2goKWAgc3RhcnRlZCB3aWxsIGJlIGNhbGxlZCB3aXRoIHRoZSBsYXRlc3RcbiAgICogc3RhdGUgYnkgdGhlIHRpbWUgaXQgZXhpdHMuXG4gICAqXG4gICAqIEBwYXJhbSB7RnVuY3Rpb259IGxpc3RlbmVyIEEgY2FsbGJhY2sgdG8gYmUgaW52b2tlZCBvbiBldmVyeSBkaXNwYXRjaC5cbiAgICogQHJldHVybnMge0Z1bmN0aW9ufSBBIGZ1bmN0aW9uIHRvIHJlbW92ZSB0aGlzIGNoYW5nZSBsaXN0ZW5lci5cbiAgICovXG4gIGZ1bmN0aW9uIHN1YnNjcmliZShsaXN0ZW5lcikge1xuICAgIGlmICh0eXBlb2YgbGlzdGVuZXIgIT09ICdmdW5jdGlvbicpIHtcbiAgICAgIHRocm93IG5ldyBFcnJvcignRXhwZWN0ZWQgbGlzdGVuZXIgdG8gYmUgYSBmdW5jdGlvbi4nKTtcbiAgICB9XG5cbiAgICB2YXIgaXNTdWJzY3JpYmVkID0gdHJ1ZTtcblxuICAgIGVuc3VyZUNhbk11dGF0ZU5leHRMaXN0ZW5lcnMoKTtcbiAgICBuZXh0TGlzdGVuZXJzLnB1c2gobGlzdGVuZXIpO1xuXG4gICAgcmV0dXJuIGZ1bmN0aW9uIHVuc3Vic2NyaWJlKCkge1xuICAgICAgaWYgKCFpc1N1YnNjcmliZWQpIHtcbiAgICAgICAgcmV0dXJuO1xuICAgICAgfVxuXG4gICAgICBpc1N1YnNjcmliZWQgPSBmYWxzZTtcblxuICAgICAgZW5zdXJlQ2FuTXV0YXRlTmV4dExpc3RlbmVycygpO1xuICAgICAgdmFyIGluZGV4ID0gbmV4dExpc3RlbmVycy5pbmRleE9mKGxpc3RlbmVyKTtcbiAgICAgIG5leHRMaXN0ZW5lcnMuc3BsaWNlKGluZGV4LCAxKTtcbiAgICB9O1xuICB9XG5cbiAgLyoqXG4gICAqIERpc3BhdGNoZXMgYW4gYWN0aW9uLiBJdCBpcyB0aGUgb25seSB3YXkgdG8gdHJpZ2dlciBhIHN0YXRlIGNoYW5nZS5cbiAgICpcbiAgICogVGhlIGByZWR1Y2VyYCBmdW5jdGlvbiwgdXNlZCB0byBjcmVhdGUgdGhlIHN0b3JlLCB3aWxsIGJlIGNhbGxlZCB3aXRoIHRoZVxuICAgKiBjdXJyZW50IHN0YXRlIHRyZWUgYW5kIHRoZSBnaXZlbiBgYWN0aW9uYC4gSXRzIHJldHVybiB2YWx1ZSB3aWxsXG4gICAqIGJlIGNvbnNpZGVyZWQgdGhlICoqbmV4dCoqIHN0YXRlIG9mIHRoZSB0cmVlLCBhbmQgdGhlIGNoYW5nZSBsaXN0ZW5lcnNcbiAgICogd2lsbCBiZSBub3RpZmllZC5cbiAgICpcbiAgICogVGhlIGJhc2UgaW1wbGVtZW50YXRpb24gb25seSBzdXBwb3J0cyBwbGFpbiBvYmplY3QgYWN0aW9ucy4gSWYgeW91IHdhbnQgdG9cbiAgICogZGlzcGF0Y2ggYSBQcm9taXNlLCBhbiBPYnNlcnZhYmxlLCBhIHRodW5rLCBvciBzb21ldGhpbmcgZWxzZSwgeW91IG5lZWQgdG9cbiAgICogd3JhcCB5b3VyIHN0b3JlIGNyZWF0aW5nIGZ1bmN0aW9uIGludG8gdGhlIGNvcnJlc3BvbmRpbmcgbWlkZGxld2FyZS4gRm9yXG4gICAqIGV4YW1wbGUsIHNlZSB0aGUgZG9jdW1lbnRhdGlvbiBmb3IgdGhlIGByZWR1eC10aHVua2AgcGFja2FnZS4gRXZlbiB0aGVcbiAgICogbWlkZGxld2FyZSB3aWxsIGV2ZW50dWFsbHkgZGlzcGF0Y2ggcGxhaW4gb2JqZWN0IGFjdGlvbnMgdXNpbmcgdGhpcyBtZXRob2QuXG4gICAqXG4gICAqIEBwYXJhbSB7T2JqZWN0fSBhY3Rpb24gQSBwbGFpbiBvYmplY3QgcmVwcmVzZW50aW5nIOKAnHdoYXQgY2hhbmdlZOKAnS4gSXQgaXNcbiAgICogYSBnb29kIGlkZWEgdG8ga2VlcCBhY3Rpb25zIHNlcmlhbGl6YWJsZSBzbyB5b3UgY2FuIHJlY29yZCBhbmQgcmVwbGF5IHVzZXJcbiAgICogc2Vzc2lvbnMsIG9yIHVzZSB0aGUgdGltZSB0cmF2ZWxsaW5nIGByZWR1eC1kZXZ0b29sc2AuIEFuIGFjdGlvbiBtdXN0IGhhdmVcbiAgICogYSBgdHlwZWAgcHJvcGVydHkgd2hpY2ggbWF5IG5vdCBiZSBgdW5kZWZpbmVkYC4gSXQgaXMgYSBnb29kIGlkZWEgdG8gdXNlXG4gICAqIHN0cmluZyBjb25zdGFudHMgZm9yIGFjdGlvbiB0eXBlcy5cbiAgICpcbiAgICogQHJldHVybnMge09iamVjdH0gRm9yIGNvbnZlbmllbmNlLCB0aGUgc2FtZSBhY3Rpb24gb2JqZWN0IHlvdSBkaXNwYXRjaGVkLlxuICAgKlxuICAgKiBOb3RlIHRoYXQsIGlmIHlvdSB1c2UgYSBjdXN0b20gbWlkZGxld2FyZSwgaXQgbWF5IHdyYXAgYGRpc3BhdGNoKClgIHRvXG4gICAqIHJldHVybiBzb21ldGhpbmcgZWxzZSAoZm9yIGV4YW1wbGUsIGEgUHJvbWlzZSB5b3UgY2FuIGF3YWl0KS5cbiAgICovXG4gIGZ1bmN0aW9uIGRpc3BhdGNoKGFjdGlvbikge1xuICAgIGlmICghaXNQbGFpbk9iamVjdChhY3Rpb24pKSB7XG4gICAgICB0aHJvdyBuZXcgRXJyb3IoJ0FjdGlvbnMgbXVzdCBiZSBwbGFpbiBvYmplY3RzLiAnICsgJ1VzZSBjdXN0b20gbWlkZGxld2FyZSBmb3IgYXN5bmMgYWN0aW9ucy4nKTtcbiAgICB9XG5cbiAgICBpZiAodHlwZW9mIGFjdGlvbi50eXBlID09PSAndW5kZWZpbmVkJykge1xuICAgICAgdGhyb3cgbmV3IEVycm9yKCdBY3Rpb25zIG1heSBub3QgaGF2ZSBhbiB1bmRlZmluZWQgXCJ0eXBlXCIgcHJvcGVydHkuICcgKyAnSGF2ZSB5b3UgbWlzc3BlbGxlZCBhIGNvbnN0YW50PycpO1xuICAgIH1cblxuICAgIGlmIChpc0Rpc3BhdGNoaW5nKSB7XG4gICAgICB0aHJvdyBuZXcgRXJyb3IoJ1JlZHVjZXJzIG1heSBub3QgZGlzcGF0Y2ggYWN0aW9ucy4nKTtcbiAgICB9XG5cbiAgICB0cnkge1xuICAgICAgaXNEaXNwYXRjaGluZyA9IHRydWU7XG4gICAgICBjdXJyZW50U3RhdGUgPSBjdXJyZW50UmVkdWNlcihjdXJyZW50U3RhdGUsIGFjdGlvbik7XG4gICAgfSBmaW5hbGx5IHtcbiAgICAgIGlzRGlzcGF0Y2hpbmcgPSBmYWxzZTtcbiAgICB9XG5cbiAgICB2YXIgbGlzdGVuZXJzID0gY3VycmVudExpc3RlbmVycyA9IG5leHRMaXN0ZW5lcnM7XG4gICAgZm9yICh2YXIgaSA9IDA7IGkgPCBsaXN0ZW5lcnMubGVuZ3RoOyBpKyspIHtcbiAgICAgIHZhciBsaXN0ZW5lciA9IGxpc3RlbmVyc1tpXTtcbiAgICAgIGxpc3RlbmVyKCk7XG4gICAgfVxuXG4gICAgcmV0dXJuIGFjdGlvbjtcbiAgfVxuXG4gIC8qKlxuICAgKiBSZXBsYWNlcyB0aGUgcmVkdWNlciBjdXJyZW50bHkgdXNlZCBieSB0aGUgc3RvcmUgdG8gY2FsY3VsYXRlIHRoZSBzdGF0ZS5cbiAgICpcbiAgICogWW91IG1pZ2h0IG5lZWQgdGhpcyBpZiB5b3VyIGFwcCBpbXBsZW1lbnRzIGNvZGUgc3BsaXR0aW5nIGFuZCB5b3Ugd2FudCB0b1xuICAgKiBsb2FkIHNvbWUgb2YgdGhlIHJlZHVjZXJzIGR5bmFtaWNhbGx5LiBZb3UgbWlnaHQgYWxzbyBuZWVkIHRoaXMgaWYgeW91XG4gICAqIGltcGxlbWVudCBhIGhvdCByZWxvYWRpbmcgbWVjaGFuaXNtIGZvciBSZWR1eC5cbiAgICpcbiAgICogQHBhcmFtIHtGdW5jdGlvbn0gbmV4dFJlZHVjZXIgVGhlIHJlZHVjZXIgZm9yIHRoZSBzdG9yZSB0byB1c2UgaW5zdGVhZC5cbiAgICogQHJldHVybnMge3ZvaWR9XG4gICAqL1xuICBmdW5jdGlvbiByZXBsYWNlUmVkdWNlcihuZXh0UmVkdWNlcikge1xuICAgIGlmICh0eXBlb2YgbmV4dFJlZHVjZXIgIT09ICdmdW5jdGlvbicpIHtcbiAgICAgIHRocm93IG5ldyBFcnJvcignRXhwZWN0ZWQgdGhlIG5leHRSZWR1Y2VyIHRvIGJlIGEgZnVuY3Rpb24uJyk7XG4gICAgfVxuXG4gICAgY3VycmVudFJlZHVjZXIgPSBuZXh0UmVkdWNlcjtcbiAgICBkaXNwYXRjaCh7IHR5cGU6IEFjdGlvblR5cGVzLklOSVQgfSk7XG4gIH1cblxuICAvKipcbiAgICogSW50ZXJvcGVyYWJpbGl0eSBwb2ludCBmb3Igb2JzZXJ2YWJsZS9yZWFjdGl2ZSBsaWJyYXJpZXMuXG4gICAqIEByZXR1cm5zIHtvYnNlcnZhYmxlfSBBIG1pbmltYWwgb2JzZXJ2YWJsZSBvZiBzdGF0ZSBjaGFuZ2VzLlxuICAgKiBGb3IgbW9yZSBpbmZvcm1hdGlvbiwgc2VlIHRoZSBvYnNlcnZhYmxlIHByb3Bvc2FsOlxuICAgKiBodHRwczovL2dpdGh1Yi5jb20vdGMzOS9wcm9wb3NhbC1vYnNlcnZhYmxlXG4gICAqL1xuICBmdW5jdGlvbiBvYnNlcnZhYmxlKCkge1xuICAgIHZhciBfcmVmO1xuXG4gICAgdmFyIG91dGVyU3Vic2NyaWJlID0gc3Vic2NyaWJlO1xuICAgIHJldHVybiBfcmVmID0ge1xuICAgICAgLyoqXG4gICAgICAgKiBUaGUgbWluaW1hbCBvYnNlcnZhYmxlIHN1YnNjcmlwdGlvbiBtZXRob2QuXG4gICAgICAgKiBAcGFyYW0ge09iamVjdH0gb2JzZXJ2ZXIgQW55IG9iamVjdCB0aGF0IGNhbiBiZSB1c2VkIGFzIGFuIG9ic2VydmVyLlxuICAgICAgICogVGhlIG9ic2VydmVyIG9iamVjdCBzaG91bGQgaGF2ZSBhIGBuZXh0YCBtZXRob2QuXG4gICAgICAgKiBAcmV0dXJucyB7c3Vic2NyaXB0aW9ufSBBbiBvYmplY3Qgd2l0aCBhbiBgdW5zdWJzY3JpYmVgIG1ldGhvZCB0aGF0IGNhblxuICAgICAgICogYmUgdXNlZCB0byB1bnN1YnNjcmliZSB0aGUgb2JzZXJ2YWJsZSBmcm9tIHRoZSBzdG9yZSwgYW5kIHByZXZlbnQgZnVydGhlclxuICAgICAgICogZW1pc3Npb24gb2YgdmFsdWVzIGZyb20gdGhlIG9ic2VydmFibGUuXG4gICAgICAgKi9cbiAgICAgIHN1YnNjcmliZTogZnVuY3Rpb24gc3Vic2NyaWJlKG9ic2VydmVyKSB7XG4gICAgICAgIGlmICh0eXBlb2Ygb2JzZXJ2ZXIgIT09ICdvYmplY3QnKSB7XG4gICAgICAgICAgdGhyb3cgbmV3IFR5cGVFcnJvcignRXhwZWN0ZWQgdGhlIG9ic2VydmVyIHRvIGJlIGFuIG9iamVjdC4nKTtcbiAgICAgICAgfVxuXG4gICAgICAgIGZ1bmN0aW9uIG9ic2VydmVTdGF0ZSgpIHtcbiAgICAgICAgICBpZiAob2JzZXJ2ZXIubmV4dCkge1xuICAgICAgICAgICAgb2JzZXJ2ZXIubmV4dChnZXRTdGF0ZSgpKTtcbiAgICAgICAgICB9XG4gICAgICAgIH1cblxuICAgICAgICBvYnNlcnZlU3RhdGUoKTtcbiAgICAgICAgdmFyIHVuc3Vic2NyaWJlID0gb3V0ZXJTdWJzY3JpYmUob2JzZXJ2ZVN0YXRlKTtcbiAgICAgICAgcmV0dXJuIHsgdW5zdWJzY3JpYmU6IHVuc3Vic2NyaWJlIH07XG4gICAgICB9XG4gICAgfSwgX3JlZlskJG9ic2VydmFibGVdID0gZnVuY3Rpb24gKCkge1xuICAgICAgcmV0dXJuIHRoaXM7XG4gICAgfSwgX3JlZjtcbiAgfVxuXG4gIC8vIFdoZW4gYSBzdG9yZSBpcyBjcmVhdGVkLCBhbiBcIklOSVRcIiBhY3Rpb24gaXMgZGlzcGF0Y2hlZCBzbyB0aGF0IGV2ZXJ5XG4gIC8vIHJlZHVjZXIgcmV0dXJucyB0aGVpciBpbml0aWFsIHN0YXRlLiBUaGlzIGVmZmVjdGl2ZWx5IHBvcHVsYXRlc1xuICAvLyB0aGUgaW5pdGlhbCBzdGF0ZSB0cmVlLlxuICBkaXNwYXRjaCh7IHR5cGU6IEFjdGlvblR5cGVzLklOSVQgfSk7XG5cbiAgcmV0dXJuIF9yZWYyID0ge1xuICAgIGRpc3BhdGNoOiBkaXNwYXRjaCxcbiAgICBzdWJzY3JpYmU6IHN1YnNjcmliZSxcbiAgICBnZXRTdGF0ZTogZ2V0U3RhdGUsXG4gICAgcmVwbGFjZVJlZHVjZXI6IHJlcGxhY2VSZWR1Y2VyXG4gIH0sIF9yZWYyWyQkb2JzZXJ2YWJsZV0gPSBvYnNlcnZhYmxlLCBfcmVmMjtcbn1cblxuXG4vLyBXRUJQQUNLIEZPT1RFUiAvL1xuLy8gbm9kZV9tb2R1bGVzL3JlZHV4L2VzL2NyZWF0ZVN0b3JlLmpzIl0sIm1hcHBpbmdzIjoiOzs7Ozs7Ozs7QUFxQ0E7QUFDQTtBQXRDQTtBQUNBOzs7QUFBQTtBQUNBOzs7OztBQUNBOzs7Ozs7QUFNQTtBQUNBO0FBQ0E7QUFDQTs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7OztBQUhBO0FBNkJBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7Ozs7O0FBS0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7QUF1QkE7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBOzs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7O0FBeUJBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTs7Ozs7Ozs7OztBQVVBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBOzs7Ozs7QUFNQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7Ozs7Ozs7O0FBUUE7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBdkJBO0FBeUJBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFKQTtBQU1BIiwic291cmNlUm9vdCI6IiJ9\n//# sourceURL=webpack-internal:///1\n");
+
+/***/ }),
+/* 2 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+eval("\n\nObject.defineProperty(exports, \"__esModule\", {\n  value: true\n});\n\nvar _baseGetTag = __webpack_require__(12);\n\nvar _baseGetTag2 = _interopRequireDefault(_baseGetTag);\n\nvar _getPrototype = __webpack_require__(17);\n\nvar _getPrototype2 = _interopRequireDefault(_getPrototype);\n\nvar _isObjectLike = __webpack_require__(19);\n\nvar _isObjectLike2 = _interopRequireDefault(_isObjectLike);\n\nfunction _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }\n\n/** `Object#toString` result references. */\nvar objectTag = '[object Object]';\n\n/** Used for built-in method references. */\nvar funcProto = Function.prototype,\n    objectProto = Object.prototype;\n\n/** Used to resolve the decompiled source of functions. */\nvar funcToString = funcProto.toString;\n\n/** Used to check objects for own properties. */\nvar hasOwnProperty = objectProto.hasOwnProperty;\n\n/** Used to infer the `Object` constructor. */\nvar objectCtorString = funcToString.call(Object);\n\n/**\n * Checks if `value` is a plain object, that is, an object created by the\n * `Object` constructor or one with a `[[Prototype]]` of `null`.\n *\n * @static\n * @memberOf _\n * @since 0.8.0\n * @category Lang\n * @param {*} value The value to check.\n * @returns {boolean} Returns `true` if `value` is a plain object, else `false`.\n * @example\n *\n * function Foo() {\n *   this.a = 1;\n * }\n *\n * _.isPlainObject(new Foo);\n * // => false\n *\n * _.isPlainObject([1, 2, 3]);\n * // => false\n *\n * _.isPlainObject({ 'x': 0, 'y': 0 });\n * // => true\n *\n * _.isPlainObject(Object.create(null));\n * // => true\n */\nfunction isPlainObject(value) {\n  if (!(0, _isObjectLike2.default)(value) || (0, _baseGetTag2.default)(value) != objectTag) {\n    return false;\n  }\n  var proto = (0, _getPrototype2.default)(value);\n  if (proto === null) {\n    return true;\n  }\n  var Ctor = hasOwnProperty.call(proto, 'constructor') && proto.constructor;\n  return typeof Ctor == 'function' && Ctor instanceof Ctor && funcToString.call(Ctor) == objectCtorString;\n}\n\nexports.default = isPlainObject;\n//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoiMi5qcyIsInNvdXJjZXMiOlsid2VicGFjazovLy9ub2RlX21vZHVsZXMvbG9kYXNoLWVzL2lzUGxhaW5PYmplY3QuanM/YmRlOCJdLCJzb3VyY2VzQ29udGVudCI6WyJpbXBvcnQgYmFzZUdldFRhZyBmcm9tICcuL19iYXNlR2V0VGFnLmpzJztcbmltcG9ydCBnZXRQcm90b3R5cGUgZnJvbSAnLi9fZ2V0UHJvdG90eXBlLmpzJztcbmltcG9ydCBpc09iamVjdExpa2UgZnJvbSAnLi9pc09iamVjdExpa2UuanMnO1xuXG4vKiogYE9iamVjdCN0b1N0cmluZ2AgcmVzdWx0IHJlZmVyZW5jZXMuICovXG52YXIgb2JqZWN0VGFnID0gJ1tvYmplY3QgT2JqZWN0XSc7XG5cbi8qKiBVc2VkIGZvciBidWlsdC1pbiBtZXRob2QgcmVmZXJlbmNlcy4gKi9cbnZhciBmdW5jUHJvdG8gPSBGdW5jdGlvbi5wcm90b3R5cGUsXG4gICAgb2JqZWN0UHJvdG8gPSBPYmplY3QucHJvdG90eXBlO1xuXG4vKiogVXNlZCB0byByZXNvbHZlIHRoZSBkZWNvbXBpbGVkIHNvdXJjZSBvZiBmdW5jdGlvbnMuICovXG52YXIgZnVuY1RvU3RyaW5nID0gZnVuY1Byb3RvLnRvU3RyaW5nO1xuXG4vKiogVXNlZCB0byBjaGVjayBvYmplY3RzIGZvciBvd24gcHJvcGVydGllcy4gKi9cbnZhciBoYXNPd25Qcm9wZXJ0eSA9IG9iamVjdFByb3RvLmhhc093blByb3BlcnR5O1xuXG4vKiogVXNlZCB0byBpbmZlciB0aGUgYE9iamVjdGAgY29uc3RydWN0b3IuICovXG52YXIgb2JqZWN0Q3RvclN0cmluZyA9IGZ1bmNUb1N0cmluZy5jYWxsKE9iamVjdCk7XG5cbi8qKlxuICogQ2hlY2tzIGlmIGB2YWx1ZWAgaXMgYSBwbGFpbiBvYmplY3QsIHRoYXQgaXMsIGFuIG9iamVjdCBjcmVhdGVkIGJ5IHRoZVxuICogYE9iamVjdGAgY29uc3RydWN0b3Igb3Igb25lIHdpdGggYSBgW1tQcm90b3R5cGVdXWAgb2YgYG51bGxgLlxuICpcbiAqIEBzdGF0aWNcbiAqIEBtZW1iZXJPZiBfXG4gKiBAc2luY2UgMC44LjBcbiAqIEBjYXRlZ29yeSBMYW5nXG4gKiBAcGFyYW0geyp9IHZhbHVlIFRoZSB2YWx1ZSB0byBjaGVjay5cbiAqIEByZXR1cm5zIHtib29sZWFufSBSZXR1cm5zIGB0cnVlYCBpZiBgdmFsdWVgIGlzIGEgcGxhaW4gb2JqZWN0LCBlbHNlIGBmYWxzZWAuXG4gKiBAZXhhbXBsZVxuICpcbiAqIGZ1bmN0aW9uIEZvbygpIHtcbiAqICAgdGhpcy5hID0gMTtcbiAqIH1cbiAqXG4gKiBfLmlzUGxhaW5PYmplY3QobmV3IEZvbyk7XG4gKiAvLyA9PiBmYWxzZVxuICpcbiAqIF8uaXNQbGFpbk9iamVjdChbMSwgMiwgM10pO1xuICogLy8gPT4gZmFsc2VcbiAqXG4gKiBfLmlzUGxhaW5PYmplY3QoeyAneCc6IDAsICd5JzogMCB9KTtcbiAqIC8vID0+IHRydWVcbiAqXG4gKiBfLmlzUGxhaW5PYmplY3QoT2JqZWN0LmNyZWF0ZShudWxsKSk7XG4gKiAvLyA9PiB0cnVlXG4gKi9cbmZ1bmN0aW9uIGlzUGxhaW5PYmplY3QodmFsdWUpIHtcbiAgaWYgKCFpc09iamVjdExpa2UodmFsdWUpIHx8IGJhc2VHZXRUYWcodmFsdWUpICE9IG9iamVjdFRhZykge1xuICAgIHJldHVybiBmYWxzZTtcbiAgfVxuICB2YXIgcHJvdG8gPSBnZXRQcm90b3R5cGUodmFsdWUpO1xuICBpZiAocHJvdG8gPT09IG51bGwpIHtcbiAgICByZXR1cm4gdHJ1ZTtcbiAgfVxuICB2YXIgQ3RvciA9IGhhc093blByb3BlcnR5LmNhbGwocHJvdG8sICdjb25zdHJ1Y3RvcicpICYmIHByb3RvLmNvbnN0cnVjdG9yO1xuICByZXR1cm4gdHlwZW9mIEN0b3IgPT0gJ2Z1bmN0aW9uJyAmJiBDdG9yIGluc3RhbmNlb2YgQ3RvciAmJlxuICAgIGZ1bmNUb1N0cmluZy5jYWxsKEN0b3IpID09IG9iamVjdEN0b3JTdHJpbmc7XG59XG5cbmV4cG9ydCBkZWZhdWx0IGlzUGxhaW5PYmplY3Q7XG5cblxuXG4vLyBXRUJQQUNLIEZPT1RFUiAvL1xuLy8gbm9kZV9tb2R1bGVzL2xvZGFzaC1lcy9pc1BsYWluT2JqZWN0LmpzIl0sIm1hcHBpbmdzIjoiOzs7Ozs7QUFBQTtBQUNBOzs7QUFBQTtBQUNBOzs7QUFBQTtBQUNBOzs7OztBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFBQTtBQUNBO0FBRUE7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7QUE0QkE7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFFQTtBQUNBO0FBQ0EiLCJzb3VyY2VSb290IjoiIn0=\n//# sourceURL=webpack-internal:///2\n");
+
+/***/ }),
+/* 3 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+eval("\n\nObject.defineProperty(exports, \"__esModule\", {\n  value: true\n});\n\nvar _root = __webpack_require__(13);\n\nvar _root2 = _interopRequireDefault(_root);\n\nfunction _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }\n\n/** Built-in value references. */\nvar _Symbol = _root2.default.Symbol;\n\nexports.default = _Symbol;\n//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoiMy5qcyIsInNvdXJjZXMiOlsid2VicGFjazovLy9ub2RlX21vZHVsZXMvbG9kYXNoLWVzL19TeW1ib2wuanM/MThhNSJdLCJzb3VyY2VzQ29udGVudCI6WyJpbXBvcnQgcm9vdCBmcm9tICcuL19yb290LmpzJztcblxuLyoqIEJ1aWx0LWluIHZhbHVlIHJlZmVyZW5jZXMuICovXG52YXIgU3ltYm9sID0gcm9vdC5TeW1ib2w7XG5cbmV4cG9ydCBkZWZhdWx0IFN5bWJvbDtcblxuXG5cbi8vIFdFQlBBQ0sgRk9PVEVSIC8vXG4vLyBub2RlX21vZHVsZXMvbG9kYXNoLWVzL19TeW1ib2wuanMiXSwibWFwcGluZ3MiOiI7Ozs7OztBQUFBO0FBQ0E7Ozs7O0FBQ0E7QUFDQTtBQUNBO0FBQ0EiLCJzb3VyY2VSb290IjoiIn0=\n//# sourceURL=webpack-internal:///3\n");
+
+/***/ }),
+/* 4 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+eval("\n\nvar _typeof = typeof Symbol === \"function\" && typeof Symbol.iterator === \"symbol\" ? function (obj) { return typeof obj; } : function (obj) { return obj && typeof Symbol === \"function\" && obj.constructor === Symbol && obj !== Symbol.prototype ? \"symbol\" : typeof obj; };\n\nvar g;\n\n// This works in non-strict mode\ng = function () {\n\treturn this;\n}();\n\ntry {\n\t// This works if eval is allowed (see CSP)\n\tg = g || Function(\"return this\")() || (1, eval)(\"this\");\n} catch (e) {\n\t// This works if the window reference is available\n\tif ((typeof window === \"undefined\" ? \"undefined\" : _typeof(window)) === \"object\") g = window;\n}\n\n// g can still be undefined, but nothing to do about it...\n// We return undefined, instead of nothing here, so it's\n// easier to handle this case. if(!global) { ...}\n\nmodule.exports = g;\n//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoiNC5qcyIsInNvdXJjZXMiOlsid2VicGFjazovLy9ub2RlX21vZHVsZXMvd2VicGFjay9idWlsZGluL2dsb2JhbC5qcz9mY2RmIl0sInNvdXJjZXNDb250ZW50IjpbInZhciBnO1xuXG4vLyBUaGlzIHdvcmtzIGluIG5vbi1zdHJpY3QgbW9kZVxuZyA9IChmdW5jdGlvbigpIHtcblx0cmV0dXJuIHRoaXM7XG59KSgpO1xuXG50cnkge1xuXHQvLyBUaGlzIHdvcmtzIGlmIGV2YWwgaXMgYWxsb3dlZCAoc2VlIENTUClcblx0ZyA9IGcgfHwgRnVuY3Rpb24oXCJyZXR1cm4gdGhpc1wiKSgpIHx8ICgxLGV2YWwpKFwidGhpc1wiKTtcbn0gY2F0Y2goZSkge1xuXHQvLyBUaGlzIHdvcmtzIGlmIHRoZSB3aW5kb3cgcmVmZXJlbmNlIGlzIGF2YWlsYWJsZVxuXHRpZih0eXBlb2Ygd2luZG93ID09PSBcIm9iamVjdFwiKVxuXHRcdGcgPSB3aW5kb3c7XG59XG5cbi8vIGcgY2FuIHN0aWxsIGJlIHVuZGVmaW5lZCwgYnV0IG5vdGhpbmcgdG8gZG8gYWJvdXQgaXQuLi5cbi8vIFdlIHJldHVybiB1bmRlZmluZWQsIGluc3RlYWQgb2Ygbm90aGluZyBoZXJlLCBzbyBpdCdzXG4vLyBlYXNpZXIgdG8gaGFuZGxlIHRoaXMgY2FzZS4gaWYoIWdsb2JhbCkgeyAuLi59XG5cbm1vZHVsZS5leHBvcnRzID0gZztcblxuXG5cbi8vIFdFQlBBQ0sgRk9PVEVSIC8vXG4vLyBub2RlX21vZHVsZXMvd2VicGFjay9idWlsZGluL2dsb2JhbC5qcyJdLCJtYXBwaW5ncyI6Ijs7OztBQUFBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBRUE7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0EiLCJzb3VyY2VSb290IjoiIn0=\n//# sourceURL=webpack-internal:///4\n");
+
+/***/ }),
+/* 5 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+eval("\n\nObject.defineProperty(exports, \"__esModule\", {\n  value: true\n});\nexports.default = warning;\n/**\n * Prints a warning in the console if it exists.\n *\n * @param {String} message The warning message.\n * @returns {void}\n */\nfunction warning(message) {\n  /* eslint-disable no-console */\n  if (typeof console !== 'undefined' && typeof console.error === 'function') {\n    console.error(message);\n  }\n  /* eslint-enable no-console */\n  try {\n    // This error was thrown as a convenience so that if you enable\n    // \"break on all exceptions\" in your console,\n    // it would pause the execution at this line.\n    throw new Error(message);\n    /* eslint-disable no-empty */\n  } catch (e) {}\n  /* eslint-enable no-empty */\n}\n//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoiNS5qcyIsInNvdXJjZXMiOlsid2VicGFjazovLy9ub2RlX21vZHVsZXMvcmVkdXgvZXMvdXRpbHMvd2FybmluZy5qcz9mMzViIl0sInNvdXJjZXNDb250ZW50IjpbIi8qKlxuICogUHJpbnRzIGEgd2FybmluZyBpbiB0aGUgY29uc29sZSBpZiBpdCBleGlzdHMuXG4gKlxuICogQHBhcmFtIHtTdHJpbmd9IG1lc3NhZ2UgVGhlIHdhcm5pbmcgbWVzc2FnZS5cbiAqIEByZXR1cm5zIHt2b2lkfVxuICovXG5leHBvcnQgZGVmYXVsdCBmdW5jdGlvbiB3YXJuaW5nKG1lc3NhZ2UpIHtcbiAgLyogZXNsaW50LWRpc2FibGUgbm8tY29uc29sZSAqL1xuICBpZiAodHlwZW9mIGNvbnNvbGUgIT09ICd1bmRlZmluZWQnICYmIHR5cGVvZiBjb25zb2xlLmVycm9yID09PSAnZnVuY3Rpb24nKSB7XG4gICAgY29uc29sZS5lcnJvcihtZXNzYWdlKTtcbiAgfVxuICAvKiBlc2xpbnQtZW5hYmxlIG5vLWNvbnNvbGUgKi9cbiAgdHJ5IHtcbiAgICAvLyBUaGlzIGVycm9yIHdhcyB0aHJvd24gYXMgYSBjb252ZW5pZW5jZSBzbyB0aGF0IGlmIHlvdSBlbmFibGVcbiAgICAvLyBcImJyZWFrIG9uIGFsbCBleGNlcHRpb25zXCIgaW4geW91ciBjb25zb2xlLFxuICAgIC8vIGl0IHdvdWxkIHBhdXNlIHRoZSBleGVjdXRpb24gYXQgdGhpcyBsaW5lLlxuICAgIHRocm93IG5ldyBFcnJvcihtZXNzYWdlKTtcbiAgICAvKiBlc2xpbnQtZGlzYWJsZSBuby1lbXB0eSAqL1xuICB9IGNhdGNoIChlKSB7fVxuICAvKiBlc2xpbnQtZW5hYmxlIG5vLWVtcHR5ICovXG59XG5cblxuLy8gV0VCUEFDSyBGT09URVIgLy9cbi8vIG5vZGVfbW9kdWxlcy9yZWR1eC9lcy91dGlscy93YXJuaW5nLmpzIl0sIm1hcHBpbmdzIjoiOzs7OztBQU1BO0FBTkE7Ozs7OztBQU1BO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQSIsInNvdXJjZVJvb3QiOiIifQ==\n//# sourceURL=webpack-internal:///5\n");
+
+/***/ }),
+/* 6 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+eval("\n\nObject.defineProperty(exports, \"__esModule\", {\n  value: true\n});\nexports.default = compose;\n/**\n * Composes single-argument functions from right to left. The rightmost\n * function can take multiple arguments as it provides the signature for\n * the resulting composite function.\n *\n * @param {...Function} funcs The functions to compose.\n * @returns {Function} A function obtained by composing the argument functions\n * from right to left. For example, compose(f, g, h) is identical to doing\n * (...args) => f(g(h(...args))).\n */\n\nfunction compose() {\n  for (var _len = arguments.length, funcs = Array(_len), _key = 0; _key < _len; _key++) {\n    funcs[_key] = arguments[_key];\n  }\n\n  if (funcs.length === 0) {\n    return function (arg) {\n      return arg;\n    };\n  }\n\n  if (funcs.length === 1) {\n    return funcs[0];\n  }\n\n  return funcs.reduce(function (a, b) {\n    return function () {\n      return a(b.apply(undefined, arguments));\n    };\n  });\n}\n//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoiNi5qcyIsInNvdXJjZXMiOlsid2VicGFjazovLy9ub2RlX21vZHVsZXMvcmVkdXgvZXMvY29tcG9zZS5qcz9jMWI1Il0sInNvdXJjZXNDb250ZW50IjpbIi8qKlxuICogQ29tcG9zZXMgc2luZ2xlLWFyZ3VtZW50IGZ1bmN0aW9ucyBmcm9tIHJpZ2h0IHRvIGxlZnQuIFRoZSByaWdodG1vc3RcbiAqIGZ1bmN0aW9uIGNhbiB0YWtlIG11bHRpcGxlIGFyZ3VtZW50cyBhcyBpdCBwcm92aWRlcyB0aGUgc2lnbmF0dXJlIGZvclxuICogdGhlIHJlc3VsdGluZyBjb21wb3NpdGUgZnVuY3Rpb24uXG4gKlxuICogQHBhcmFtIHsuLi5GdW5jdGlvbn0gZnVuY3MgVGhlIGZ1bmN0aW9ucyB0byBjb21wb3NlLlxuICogQHJldHVybnMge0Z1bmN0aW9ufSBBIGZ1bmN0aW9uIG9idGFpbmVkIGJ5IGNvbXBvc2luZyB0aGUgYXJndW1lbnQgZnVuY3Rpb25zXG4gKiBmcm9tIHJpZ2h0IHRvIGxlZnQuIEZvciBleGFtcGxlLCBjb21wb3NlKGYsIGcsIGgpIGlzIGlkZW50aWNhbCB0byBkb2luZ1xuICogKC4uLmFyZ3MpID0+IGYoZyhoKC4uLmFyZ3MpKSkuXG4gKi9cblxuZXhwb3J0IGRlZmF1bHQgZnVuY3Rpb24gY29tcG9zZSgpIHtcbiAgZm9yICh2YXIgX2xlbiA9IGFyZ3VtZW50cy5sZW5ndGgsIGZ1bmNzID0gQXJyYXkoX2xlbiksIF9rZXkgPSAwOyBfa2V5IDwgX2xlbjsgX2tleSsrKSB7XG4gICAgZnVuY3NbX2tleV0gPSBhcmd1bWVudHNbX2tleV07XG4gIH1cblxuICBpZiAoZnVuY3MubGVuZ3RoID09PSAwKSB7XG4gICAgcmV0dXJuIGZ1bmN0aW9uIChhcmcpIHtcbiAgICAgIHJldHVybiBhcmc7XG4gICAgfTtcbiAgfVxuXG4gIGlmIChmdW5jcy5sZW5ndGggPT09IDEpIHtcbiAgICByZXR1cm4gZnVuY3NbMF07XG4gIH1cblxuICByZXR1cm4gZnVuY3MucmVkdWNlKGZ1bmN0aW9uIChhLCBiKSB7XG4gICAgcmV0dXJuIGZ1bmN0aW9uICgpIHtcbiAgICAgIHJldHVybiBhKGIuYXBwbHkodW5kZWZpbmVkLCBhcmd1bWVudHMpKTtcbiAgICB9O1xuICB9KTtcbn1cblxuXG4vLyBXRUJQQUNLIEZPT1RFUiAvL1xuLy8gbm9kZV9tb2R1bGVzL3JlZHV4L2VzL2NvbXBvc2UuanMiXSwibWFwcGluZ3MiOiI7Ozs7O0FBV0E7QUFYQTs7Ozs7Ozs7Ozs7QUFXQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0EiLCJzb3VyY2VSb290IjoiIn0=\n//# sourceURL=webpack-internal:///6\n");
+
+/***/ }),
+/* 7 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+eval("\n\nvar _highlightRange = __webpack_require__(8);\n\nvar _colorHash = __webpack_require__(9);\n\nvar _base = __webpack_require__(10);\n\nvar _redux = __webpack_require__(11);\n\nfunction _toConsumableArray(arr) { if (Array.isArray(arr)) { for (var i = 0, arr2 = Array(arr.length); i < arr.length; i++) { arr2[i] = arr[i]; } return arr2; } else { return Array.from(arr); } }\n\nvar INITIAL_STATE = {\n  ui: {\n    isRendering: false,\n    user: 'jmakeig'\n  },\n  model: {\n    annotations: [],\n    // <https://help.github.com/articles/getting-permanent-links-to-files/>\n    href: 'https://github.com/jmakeig/markdown-annotations/blob/fa2530c83142cd1405cca52d5caa2c2c6abc66fd/Nausgaard%20ugh%20XOXO.md',\n    commit: 'fa2530c83142cd1405cca52d5caa2c2c6abc66fd',\n    content: '---\\ntitle: MarkLogic Consolidated Vision\\nauthor:\\n- Justin Makeig\\nhistory: |\\n  \\n  * Things\\n  * Stuff\\n\\n...\\n\\n## Nausgaard ugh XOXO {#nausgaard}\\n \\nKnausgaard ugh XOXO flannel pok pok marfa pork belly sustainable cronut la croix vice palo santo actually ethical. \\n\\n  * Cornhole plaid tumblr PBR&B\\n  * Semiotics echo park \\n  * iPhone post-ironic tacos banh mi. \\n  \\nHeirloom roof party godard letterpress ramps butcher single-origin coffee. Scenester glossier food truck poke lomo, blue bottle godard art party chartreuse fingerstache tumblr humblebrag wayfarers pickled. \\n\\n  1. Squid drinking vinegar chambray enamel pin. Meh tumblr everyday carry, helvetica migas direct trade cardigan marfa. \\n    1. Try-hard authentic XOXO shaman polaroid pork belly. Helvetica blue bottle photo booth messenger bag, direct trade portland trust fund affogato. \\n      1. Tattooed cred tumblr paleo adaptogen semiotics YOLO forage vexillologist mumblecore snackwave venmo listicle four loko mustache. \\n        1. 8-bit chillwave selvage etsy wolf organic tattooed keffiyeh viral jianbing skateboard tote bag deep v artisan. Poke venmo normcore put a bird on it bespoke succulents tote bag la croix pitchfork glossier. Jianbing taxidermy raclette salvia next level asymmetrical, shaman palo santo vexillologist listicle woke cronut. Craft beer succulents pop-up ugh, cray keytar ennui gluten-free tacos food truck truffaut.\\n\\nLiterally unicorn pork belly, pabst hell of tbh ramps cred. Brooklyn neutra intelligentsia artisan chartreuse. Truffaut kale chips air plant, whatever +1 etsy pitchfork distillery butcher next level locavore chia. Disrupt squid tumblr chia migas. YOLO kitsch man bun vice polaroid gentrify quinoa irony narwhal. YOLO fixie beard slow-carb actually artisan kale chips tofu meditation meh coloring book pitchfork air plant food truck dreamcatcher. Hell of celiac tousled cornhole, microdosing green juice whatever occupy pour-over. Celiac fanny pack scenester drinking vinegar tumeric copper mug succulents street art. Vape XOXO tote bag pitchfork cardigan actually hoodie kale chips photo booth craft beer. Mlkshk try-hard cred, synth kogi +1 single-origin coffee enamel pin literally snackwave four dollar toast. Raclette enamel pin hella sartorial celiac man bun copper mug squid. Godard beard gochujang, roof party poutine shabby chic etsy iceland. Swag palo santo readymade la croix.\\n\\n  * Squid drinking vinegar chambray enamel pin. Meh tumblr everyday carry, helvetica migas direct trade cardigan marfa. \\n    - Try-hard authentic XOXO shaman polaroid pork belly. Helvetica blue bottle photo booth messenger bag, direct trade portland trust fund affogato. \\n      * Tattooed cred tumblr paleo adaptogen semiotics YOLO forage vexillologist mumblecore snackwave venmo listicle four loko mustache. \\n        - 8-bit chillwave selvage etsy wolf organic tattooed keffiyeh viral jianbing skateboard tote bag deep v artisan. Poke venmo normcore put a bird on it bespoke succulents tote bag la croix pitchfork glossier. Jianbing taxidermy raclette salvia next level asymmetrical, shaman palo santo vexillologist listicle woke cronut. Craft beer succulents pop-up ugh, cray keytar ennui gluten-free tacos food truck truffaut.\\n\\n## Yuccie Craft Beer\\n\\nAustin humblebrag unicorn asymmetrical keffiyeh chillwave raw denim master cleanse microdosing before they sold out chicharrones cred. Chillwave flannel iPhone, glossier try-hard shabby chic helvetica salvia. \\n\\n  * Before they sold out normcore fixie mustache\\n    - Pop-up enamel pin marfa yr four \\n    - Loko vape stumptown. \\n  * You probably haven\\'t heard of them \\n    - Migas vaporware normcore \\n    - Helvetica drinking vinegar \\n    - Man braid jianbing kinfolk \\n      - DIY fixie master cleanse irony. \\n      \\nTattooed tilde direct trade raw denim unicorn adaptogen authentic pitchfork air plant gluten-free tacos. Lomo heirloom typewriter celiac kale chips hashtag. Humblebrag echo park artisan +1, pork belly green juice master cleanse jean shorts lumbersexual yr swag vice activated charcoal selfies. Gochujang disrupt asymmetrical 8-bit listicle man bun blog edison bulb tofu. Aesthetic iPhone subway tile green juice stumptown seitan, lomo master cleanse tbh cronut craft beer skateboard.\\n\\n## Fanny Pack Tote Bag {#tote}\\n\\n  * Vinyl af, ramps selvage chia ugh fashion axe master cleanse. Tote bag taiyaki PBR&B chicharrones four dollar toast cray tousled palo santo. Listicle asymmetrical af aesthetic. Sriracha asymmetrical fashion axe VHS pug XOXO synth biodiesel pitchfork. Lo-fi truffaut blue bottle mixtape, scenester ramps poutine. \\n  * Yr godard pickled, lo-fi asymmetrical keytar chillwave shoreditch. Kitsch gluten-free lumbersexual thundercats seitan keffiyeh iPhone drinking vinegar ramps bicycle rights 3 wolf moon twee quinoa. Bespoke bitters vinyl normcore squid. Four dollar toast banjo vexillologist skateboard sartorial drinking vinegar organic chambray unicorn authentic tousled next level williamsburg. \\n    * Direct trade master cleanse trust fund drinking vinegar literally tofu, hoodie keytar vice try-hard everyday. \\n    * Carry plaid cardigan cray. Butcher kale chips palo santo jianbing. Banjo stumptown portland normcore squid activated charcoal church-key farm-to-table slow-carb snackwave hexagon truffaut.\\n\\nFingerstache hammock bicycle rights cliche tousled freegan. Sartorial tousled kombucha cliche. Authentic single-origin coffee activated charcoal, occupy raclette hot chicken +1 unicorn farm-to-table post-ironic cray. Adaptogen thundercats mumblecore actually ennui, man bun bespoke. Chia cliche kitsch edison bulb tilde, normcore intelligentsia vape shoreditch farm-to-table organic selfies authentic. Tattooed beard scenester kitsch, distillery cray venmo cronut aesthetic. Humblebrag roof party vape lomo, 90\\'s portland skateboard mumblecore messenger bag fam tofu hammock tote bag aesthetic. Marfa aesthetic direct trade kombucha. Portland godard hoodie selvage, enamel pin quinoa mixtape wolf hexagon iceland. Cray biodiesel fam, post-ironic leggings tattooed subway tile cornhole bitters dreamcatcher raw denim VHS etsy letterpress viral.\\n\\n### Sartorial Kogi Meditation {#Meditation}\\n\\nSartorial kogi meditation gastropub, ethical shabby chic paleo asymmetrical franzen live-edge pug. Viral blog chambray bitters, tofu shabby chic kitsch pitchfork. IPhone slow-carb twee keffiyeh edison bulb. Cornhole street art biodiesel, wayfarers messenger bag farm-to-table VHS. Readymade pour-over gentrify, celiac gastropub beard gochujang waistcoat sustainable salvia. Next level shaman snackwave roof party typewriter schlitz deep v fashion axe hell of ramps salvia YOLO skateboard copper mug. Cold-pressed yuccie distillery hot chicken celiac chambray cray adaptogen intelligentsia godard next level. Twee pork belly everyday carry tumeric, hammock pug swag hell of disrupt vaporware sriracha lo-fi. Leggings chia master cleanse vegan. 8-bit kale chips chartreuse, irony flexitarian taiyaki cardigan dreamcatcher organic narwhal post-ironic shaman meggings heirloom echo park.\\n\\n  11. Squid drinking vinegar chambray enamel pin. Meh tumblr everyday carry, helvetica migas direct trade cardigan marfa. \\n    111. Try-hard authentic XOXO shaman polaroid pork belly. Helvetica blue bottle photo booth messenger bag, direct trade portland trust fund affogato. \\n      1111. Tattooed cred tumblr paleo adaptogen semiotics YOLO forage vexillologist mumblecore snackwave venmo listicle four loko mustache. \\n        11111. 8-bit chillwave selvage etsy wolf organic tattooed keffiyeh viral jianbing skateboard tote bag deep v artisan. Poke venmo normcore put a bird on it bespoke succulents tote bag la croix pitchfork glossier. Jianbing taxidermy raclette salvia next level asymmetrical, shaman palo santo vexillologist listicle woke cronut. Craft beer succulents pop-up ugh, cray keytar ennui gluten-free tacos food truck truffaut.\\n\\n\\nPickled typewriter la croix chicharrones church-key air plant hell of you probably haven\\'t heard of them waistcoat bushwick. Tbh VHS vinyl yr taiyaki cronut 90\\'s kale chips literally woke. Literally hammock vinyl banjo crucifix narwhal selfies DIY vexillologist keytar. Fixie etsy literally, gluten-free beard leggings biodiesel. Kombucha blue bottle thundercats authentic green juice. Lyft church-key air plant tousled tbh. Stumptown marfa raclette next level pabst. Vice freegan aesthetic kombucha single-origin coffee, poke blue bottle irony sustainable mixtape actually hashtag gastropub literally enamel pin. Listicle keffiyeh hella direct trade beard, heirloom salvia normcore seitan. Yuccie +1 put a bird on it pour-over celiac. Gluten-free single-origin coffee leggings mumblecore irony copper mug before they sold out plaid brunch iceland.\\n\\n## Mlkshk Deep v. Umami\\n\\nSingle-origin coffee, poke hell of pour-over disrupt fashion axe copper mug. Butcher scenester thundercats, deep v kitsch fixie 3 wolf moon taxidermy humblebrag. Post-ironic asymmetrical fingerstache keytar biodiesel. Pour-over man bun yuccie freegan wolf. Chia sartorial bespoke literally fixie meditation. Squid woke PBR&B authentic beard hashtag prism fingerstache pitchfork, YOLO before they sold out bespoke coloring book disrupt freegan. Williamsburg chia subway tile bicycle rights kale chips knausgaard, schlitz blog hell of PBR&B. Crucifix mixtape try-hard selvage. Af hexagon you probably haven\\'t heard of them narwhal man braid +1 pok pok. Put a bird on it lo-fi heirloom XOXO dreamcatcher letterpress raclette roof party biodiesel cliche microdosing single-origin coffee crucifix intelligentsia. Mustache gentrify enamel pin deep v +1 freegan air plant.\\n\\n> Wolf schlitz letterpress helvetica listicle irony man braid. Hella four dollar toast pabst tilde cray. Hot chicken palo santo aesthetic, flexitarian XOXO forage poutine vaporware vegan hammock dreamcatcher mustache. Gochujang brunch swag, next level pour-over stumptown hot chicken heirloom vegan blue bottle austin kinfolk. Everyday carry copper mug enamel pin try-hard, chillwave quinoa coloring book food truck vaporware. Try-hard vinyl cornhole, lo-fi intelligentsia bushwick man bun post-ironic forage. Drinking vinegar man bun VHS direct trade yuccie adaptogen jianbing green juice unicorn tumblr narwhal polaroid. Vegan tousled yr, retro quinoa shoreditch hammock sriracha brunch microdosing kale chips you probably haven\\'t heard of them pinterest. Neutra vice vexillologist listicle, gluten-free hot chicken readymade thundercats man braid venmo mustache wolf food truck. Selvage hammock master cleanse swag, beard neutra next level normcore lumbersexual bitters kale chips kombucha flexitarian farm-to-table. Umami palo santo pop-up, meh unicorn gentrify disrupt vaporware DIY intelligentsia.\\n\\nYuccie taxidermy deep v selfies tacos meh locavore slow-carb. Authentic tilde raw denim semiotics tbh. Vape tacos gentrify intelligentsia, poke beard seitan humblebrag raclette schlitz bespoke godard church-key everyday carry waistcoat. Banh mi jean shorts snackwave cornhole chia vice. Stumptown chicharrones photo booth vinyl, hammock pour-over af. Fanny pack asymmetrical ramps, plaid cardigan ennui actually chambray pork belly. Edison bulb copper mug asymmetrical listicle, paleo activated charcoal small batch offal sriracha keffiyeh pabst locavore banh mi waistcoat master cleanse. Cloud bread raw denim flexitarian af shaman mustache authentic cornhole tote bag tilde distillery vice. YOLO four dollar toast deep v helvetica sustainable austin jianbing distillery lumbersexual shoreditch offal. Cray swag letterpress put a bird on it actually, cold-pressed pok pok vice try-hard VHS shoreditch. Biodiesel deep v ugh poke microdosing intelligentsia. Activated charcoal chambray hell of intelligentsia actually. Echo park +1 vice, tattooed photo booth lyft poutine palo santo.\\n\\n### Forage poke gastropub retro\\n\\nCornhole pork belly green juice selfies whatever. Biodiesel aesthetic helvetica adaptogen, flannel drinking vinegar master cleanse artisan fingerstache blog copper mug organic portland raw denim. Photo booth la croix af, butcher keffiyeh mlkshk letterpress locavore. Yr unicorn raw denim skateboard PBR&B air plant jianbing vaporware seitan. Authentic bespoke tilde, trust fund selfies listicle cold-pressed kinfolk ennui normcore before they sold out wayfarers brunch disrupt. Truffaut thundercats church-key, hashtag cronut art party kale chips etsy DIY bicycle rights ramps poutine twee. Activated charcoal tumblr selfies waistcoat. Hella retro hoodie, cray knausgaard lomo semiotics roof party trust fund unicorn man braid. Taiyaki affogato glossier, unicorn green juice put a bird on it trust fund cloud bread. Poutine flexitarian pickled four loko banh mi bushwick taiyaki kitsch cliche cardigan aesthetic lomo affogato offal whatever. Activated charcoal brunch sustainable, adaptogen lumbersexual kombucha gentrify hell of. XOXO lyft edison bulb kickstarter. Iceland vexillologist master cleanse tumblr distillery small batch humblebrag.\\n\\nMan bun next level messenger bag truffaut 3 wolf moon normcore. Sartorial quinoa synth marfa. Woke tattooed snackwave church-key palo santo +1 XOXO microdosing quinoa kale chips ethical sartorial. IPhone cornhole wayfarers truffaut you probably haven\\'t heard of them. Tofu tattooed humblebrag chillwave. Raclette vegan lumbersexual artisan listicle gentrify narwhal health goth photo booth cred. Vaporware occupy retro, wolf drinking vinegar tumblr craft beer flexitarian freegan thundercats. Normcore asymmetrical try-hard, taxidermy yuccie kickstarter succulents neutra post-ironic cloud bread quinoa. Tumblr man bun microdosing selfies food truck brooklyn. Adaptogen tilde franzen slow-carb disrupt synth fixie coloring book aesthetic pinterest vice waistcoat man bun mustache. Art party af bicycle rights messenger bag, synth seitan cred snackwave hell of keffiyeh semiotics quinoa venmo vinyl knausgaard. Neutra mustache ugh cronut, occupy YOLO pop-up paleo hoodie next level. YOLO poke post-ironic thundercats you probably haven\\'t heard of them DIY poutine echo park tumeric pinterest.\\n\\nSalvia keffiyeh narwhal lomo. Brunch bitters kickstarter 8-bit hella. Selfies microdosing single-origin coffee cronut shaman 3 wolf moon edison bulb marfa activated charcoal organic asymmetrical mustache jean shorts typewriter. Flexitarian tbh ethical vegan scenester ugh poutine brooklyn cred fanny pack irony wolf. Aesthetic farm-to-table crucifix meditation activated charcoal selvage hoodie sustainable listicle pok pok blue bottle slow-carb etsy. Raclette irony kogi microdosing small batch pop-up. Artisan hell of hammock, bespoke twee af green juice. Crucifix normcore church-key williamsburg quinoa sriracha portland blue bottle iPhone chartreuse tacos. Bicycle rights deep v four loko bespoke small batch stumptown salvia vexillologist next level fingerstache cornhole succulents. Retro 8-bit 90\\'s chillwave.\\n\\n## Locavore tumblr authentic\\n\\nOffal portland retro. Pok pok cloud bread literally intelligentsia taiyaki viral vinyl kombucha. Disrupt schlitz lumbersexual ennui chia cronut 90\\'s. Echo park PBR&B migas raw denim. Marfa blue bottle microdosing street art thundercats, glossier sustainable fam coloring book yuccie waistcoat bicycle rights pinterest fanny pack. Fingerstache swag four dollar toast drinking vinegar vexillologist, godard hammock bespoke helvetica food truck ramps. 3 wolf moon marfa narwhal trust fund green juice mumblecore quinoa tilde. Iceland four loko skateboard direct trade kombucha viral lumbersexual pickled meggings fam knausgaard tote bag whatever chia gentrify. Jianbing shabby chic venmo dreamcatcher, 8-bit master cleanse pop-up. Edison bulb thundercats street art distillery blue bottle mixtape tbh you probably haven\\'t heard of them roof party chia tilde mumblecore blog cloud bread mlkshk. Air plant iceland meggings shabby chic lumbersexual leggings. Craft beer lo-fi street art godard seitan poke. Activated charcoal viral twee, pitchfork portland thundercats XOXO fanny pack umami. Migas beard YOLO ugh polaroid umami, lyft hell of heirloom ramps salvia readymade.\\n\\n### Marfa master cleanse\\n\\nSeitan, pork belly before they sold out vexillologist etsy vice brunch hot chicken XOXO meggings green juice swag mustache. Twee austin meh quinoa palo santo tousled kombucha taxidermy polaroid chambray pork belly ethical master cleanse kale chips. Activated charcoal readymade glossier tumeric bicycle rights occupy cronut hoodie. Neutra try-hard offal ethical man braid pok pok vice YOLO poutine food truck crucifix. Cronut iPhone pork belly, twee banh mi four dollar toast craft beer chia salvia. Letterpress gastropub selfies cardigan four loko health goth cliche roof party readymade. Offal squid kombucha disrupt PBR&B. Fixie ugh taxidermy aesthetic williamsburg, pork belly tattooed jean shorts lumbersexual small batch. Health goth vexillologist letterpress skateboard kombucha +1 selfies poke beard vape squid tacos neutra etsy. Heirloom snackwave drinking vinegar next level. Chambray selvage viral actually readymade wayfarers jean shorts.\\n\\n#### Pickled Godard Offal\\n\\nPlaid banjo listicle selvage iPhone. Affogato selvage tattooed readymade celiac DIY. Stumptown butcher glossier tacos. Deep v tattooed brunch pickled cray crucifix four loko. Succulents freegan pork belly offal tilde, adaptogen cloud bread. Meditation cornhole affogato street art. Af sriracha quinoa brunch drinking vinegar, subway tile vape poutine taiyaki fingerstache raw denim cardigan tbh fixie lomo. Pok pok church-key cronut, photo booth sartorial butcher gastropub hot chicken iceland. Locavore vape pinterest, meggings asymmetrical pok pok letterpress pork belly hella fingerstache. Sustainable literally meditation cold-pressed whatever glossier bushwick quinoa food truck brunch etsy cray. Before they sold out cold-pressed butcher, squid pitchfork biodiesel mumblecore yuccie coloring book semiotics gentrify. Actually cornhole taiyaki keffiyeh artisan try-hard seitan, lo-fi readymade photo booth mustache cronut. Gochujang tumeric biodiesel scenester forage.\\n\\n#### Taxidermy Bespoke Mlkshk\\n\\nDisrupt quinoa cliche. *Polaroid* unicorn selfies, bespoke shabby chic jean shorts heirloom yr stumptown fam. Letterpress kinfolk asymmetrical taiyaki health goth 3 wolf moon cred helvetica. Man braid chicharrones venmo, synth kombucha +1 post-ironic squid meggings hell of succulents selfies tumeric sriracha pickled. Unicorn street art kale chips, photo booth etsy hot chicken pour-over twee health goth. Vegan scenester before they sold out, chillwave kogi trust fund lomo freegan sriracha. Quinoa mumblecore crucifix tumblr mlkshk butcher glossier williamsburg post-ironic taiyaki literally hot chicken. Pabst photo booth church-key twee next level tilde vice. Twee butcher cray before they sold out occupy, blue bottle banjo sustainable DIY distillery kogi vape actually. Try-hard pop-up crucifix, thundercats chillwave raclette shaman migas organic. Whatever chillwave fam woke keffiyeh vaporware fashion axe viral shaman. Chartreuse pitchfork kickstarter seitan literally banh mi. Ramps subway tile brunch, intelligentsia scenester offal vexillologist. Church-key YOLO tumeric fashion axe fanny pack.\\n\\n### Iceland mumblecore normcore\\n\\nOrganic, prism succulents banjo. Knausgaard vexillologist hella, bespoke vice leggings before they sold out man bun roof party tilde chillwave banh mi 8-bit. Photo booth fixie roof party post-ironic taiyaki selvage, bitters fam taxidermy pork belly prism swag. Occupy cloud bread austin hell of selvage iceland la croix slow-carb edison bulb bicycle rights plaid typewriter copper mug normcore. Glossier prism kale chips next level drinking vinegar typewriter bespoke schlitz subway tile man braid organic jianbing kinfolk sriracha. IPhone gentrify yuccie, keytar celiac brunch gochujang venmo. Succulents meggings tbh pug dreamcatcher. Synth humblebrag tattooed tumeric, pitchfork live-edge paleo pickled enamel pin PBR&B cronut venmo gluten-free flexitarian. Aesthetic DIY mixtape brunch. Whatever franzen lomo, pork belly forage chia viral semiotics af cray food truck paleo man braid cardigan post-ironic. Poke craft beer squid kale chips pinterest. Chicharrones hella next level fashion axe, flannel 90\\'s palo santo franzen ennui vexillologist truffaut asymmetrical lo-fi beard. 8-bit schlitz health goth heirloom af art party.\\n\\nAdaptogen jean shorts franzen locavore 90\\'s blog bitters ennui edison bulb listicle pitchfork viral cornhole keytar. Gastropub intelligentsia fingerstache, four loko post-ironic stumptown cloud bread. Master cleanse craft beer heirloom hot chicken, ugh literally keffiyeh activated charcoal ramps hexagon williamsburg cardigan vinyl kale chips food truck. Green juice bicycle rights health goth vegan pop-up before they sold out. Pabst hashtag viral cred, snackwave microdosing pitchfork raclette glossier man braid keytar celiac readymade. Iceland cardigan seitan, retro ennui cred enamel pin forage vice before they sold out four loko. Fixie crucifix gochujang bespoke yr. IPhone health goth crucifix DIY pug kinfolk. Put a bird on it sustainable snackwave live-edge narwhal fam salvia austin. Waistcoat pickled organic, food truck sriracha you probably haven\\'t heard of them craft beer. Edison bulb selvage jianbing thundercats subway tile etsy. Chicharrones single-origin coffee aesthetic banjo 8-bit.\\n\\n## Brooklyn Activated Charcoal\\n\\nFour dollar toast locavore DIY echo park semiotics craft beer hashtag tattooed. Pinterest mlkshk viral helvetica, ugh chillwave cold-pressed mustache leggings fanny pack YOLO vape synth readymade blue bottle. Four loko green juice biodiesel brooklyn pickled viral. Ramps jianbing readymade, salvia af shaman chambray man braid cornhole waistcoat cred. Tattooed semiotics af wayfarers, hammock yr leggings tacos live-edge before they sold out authentic bespoke actually unicorn. Street art master cleanse hell of chartreuse pickled raclette skateboard, cred everyday carry trust fund. Occupy PBR&B twee chia succulents readymade literally neutra raw denim. Church-key knausgaard pinterest jianbing PBR&B listicle sartorial wayfarers blog disrupt poutine aesthetic bitters. Hell of butcher wolf, asymmetrical health goth cloud bread disrupt sartorial. Single-origin coffee pitchfork hammock pickled stumptown flannel, cardigan PBR&B polaroid enamel pin tilde. Yuccie master cleanse helvetica edison bulb disrupt microdosing typewriter selvage, taxidermy echo park synth craft beer 3 wolf moon +1 woke. Swag church-key stumptown, copper mug portland ethical kale chips beard. 8-bit pok pok man bun brooklyn, migas yuccie chillwave trust fund. Dreamcatcher sustainable schlitz direct trade celiac shaman knausgaard bicycle rights fam plaid subway tile man bun. Microdosing aesthetic bespoke whatever hashtag forage, XOXO paleo.\\n\\nYuccie retro kickstarter edison bulb tattooed franzen neutra, yr hexagon enamel pin distillery scenester +1 authentic. Lo-fi squid waistcoat vexillologist artisan, plaid poke vice humblebrag kitsch slow-carb iceland. Fanny pack hella mustache aesthetic. Occupy etsy jean shorts thundercats aesthetic air plant chicharrones YOLO fashion axe glossier iceland typewriter pop-up. Neutra unicorn XOXO PBR&B poke stumptown chillwave. Vaporware sartorial bespoke shabby chic seitan tilde. Skateboard pok pok adaptogen squid shoreditch. Drinking vinegar succulents cornhole hexagon iPhone adaptogen fingerstache whatever synth thundercats listicle mixtape heirloom messenger bag blue bottle. Distillery hot chicken kickstarter neutra, pickled disrupt meggings aesthetic craft beer narwhal mustache tilde selfies forage. Jianbing sartorial poutine meditation wolf, gastropub portland humblebrag. YOLO four dollar toast mustache wolf cornhole banh mi marfa sartorial tousled banjo meditation. Cold-pressed bicycle rights jean shorts distillery, pour-over poke yr fixie.\\n\\nPinterest thundercats you probably haven\\'t heard of them, drinking vinegar live-edge health goth bitters raclette migas 8-bit craft beer. Ramps taiyaki XOXO art party umami occupy etsy gastropub authentic franzen humblebrag chia quinoa selvage. Street art godard cloud bread, fashion axe kinfolk disrupt edison bulb air plant cliche hell of fam la croix. Quinoa farm-to-table taxidermy gochujang williamsburg activated charcoal narwhal kickstarter shaman vinyl typewriter kitsch. Vexillologist mumblecore raw denim cloud bread tote bag, small batch letterpress irony gentrify YOLO post-ironic umami iceland. Live-edge ramps air plant retro kombucha. Man braid polaroid gochujang, etsy waistcoat subway tile roof party shaman tumeric intelligentsia poutine raclette coloring book pop-up whatever. Freegan gastropub echo park brunch, letterpress roof party synth listicle raclette normcore keytar vaporware neutra pug. Microdosing disrupt retro 90\\'s. Heirloom food truck schlitz snackwave. Af chartreuse offal glossier cronut jianbing thundercats shabby chic bitters man braid freegan before they sold out knausgaard polaroid iceland. Vegan truffaut bitters whatever kogi. Activated charcoal irony brooklyn fashion axe letterpress forage humblebrag YOLO. Hell of tofu direct trade, aesthetic keytar snackwave PBR&B cloud bread asymmetrical yuccie succulents letterpress intelligentsia. Sriracha pitchfork kale chips, gluten-free bitters photo booth seitan lyft readymade salvia cred dreamcatcher wolf bespoke bushwick.\\n\\nGlossier cloud bread tacos, twee jean shorts vape whatever literally locavore woke dreamcatcher shabby chic narwhal. Meh umami bitters, vice messenger bag single-origin coffee vexillologist polaroid pickled taiyaki. Keffiyeh shoreditch pug, XOXO vexillologist vice typewriter kickstarter gastropub tumblr farm-to-table enamel pin fam put a bird on it leggings. Salvia snackwave skateboard vaporware, fingerstache marfa four loko intelligentsia distillery gentrify vexillologist jean shorts church-key godard tumeric. Wayfarers marfa try-hard, actually hashtag gastropub pork belly butcher deep v poke slow-carb vaporware vegan. Locavore bushwick activated charcoal migas roof party. Four loko austin live-edge jianbing migas squid. Raclette pok pok organic lo-fi glossier, irony ugh kogi ramps yr chia humblebrag hot chicken selfies. +1 single-origin coffee XOXO disrupt coloring book prism asymmetrical roof party organic. Retro glossier scenester selfies deep v cliche venmo DIY hexagon everyday carry brunch la croix helvetica wayfarers. Gastropub banh mi PBR&B hexagon, poke disrupt artisan raclette blog glossier blue bottle paleo cronut. Plaid cronut keytar schlitz letterpress iceland small batch jianbing, glossier XOXO selfies seitan biodiesel flannel health goth. Chicharrones mlkshk small batch, brooklyn neutra man braid flannel. Pour-over blog hexagon, chicharrones neutra woke adaptogen. Chicharrones coloring book man bun gentrify schlitz godard tilde copper mug helvetica.\\n\\nTaiyaki raclette hexagon, tumblr put a bird on it microdosing deep v 8-bit ethical banjo paleo next level. Brooklyn brunch gochujang, thundercats edison bulb master cleanse twee. Before they sold out meditation stumptown deep v you probably haven\\'t heard of them farm-to-table af hella +1 copper mug bicycle rights taxidermy messenger bag. Cronut echo park quinoa banh mi semiotics keytar. Irony tilde brunch fixie. Knausgaard put a bird on it schlitz, lyft prism disrupt food truck retro freegan subway tile polaroid. Quinoa chillwave disrupt, master cleanse meggings adaptogen kinfolk iceland. Everyday carry chartreuse vape prism lo-fi. Microdosing taxidermy sartorial squid selfies, bitters kinfolk.\\n\\nDrinking vinegar YOLO swag, pabst cardigan 90\\'s occupy hexagon plaid schlitz poke hot chicken banjo vape. Edison bulb heirloom venmo succulents, tilde subway tile crucifix skateboard. Vape YOLO activated charcoal craft beer ennui seitan distillery. Bespoke copper mug ugh, edison bulb craft beer banh mi hashtag yuccie cardigan tousled plaid kitsch hammock tumeric. Hell of jean shorts marfa, yuccie blue bottle put a bird on it jianbing la croix. Paleo meggings echo park franzen cold-pressed mustache gastropub ethical celiac pop-up prism gochujang. Salvia keffiyeh chillwave taxidermy. Ethical pitchfork tilde cliche polaroid beard. Copper mug neutra lumbersexual biodiesel, echo park fixie blue bottle cardigan irony put a bird on it craft beer artisan hexagon.'\n  }\n};\nINITIAL_STATE.model.annotations = decorateAnnotations([], INITIAL_STATE.ui.user);\n\n/**\n * Renders Markdown string as HTML table rows. Does not touch the live DOM. \n * \n * @param {string} md  - Markdown\n * @returns {DocumentFragment}\n */\nfunction renderMarkdown(md) {\n  var annotations = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : [];\n  var processors = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : [];\n\n  var fragment = document.createDocumentFragment();\n  if (!md) return fragment;\n  var lines = md.split(/\\n/);\n  lines.map(function (line, index) {\n    var row = document.createElement('tr');\n    row.classList.add('line');\n    row.dataset.line = index + 1;\n    row.id = 'L' + (index + 1);\n    var num = document.createElement('td');\n    num.classList.add('line-number');\n    num.dataset.line = index + 1;\n    row.appendChild(num);\n    var content = document.createElement('td');\n    content.classList.add('content');\n\n    var listMatcher = /^(\\s*)(\\*|\\-|\\d+\\.|>) /; // matches list items and quotes\n    var matches = line.match(listMatcher);\n    if (matches) {\n      var indent = matches[1].length + matches[2].length + 1;\n      content.style = 'padding-left: ' + indent + 'ch; text-indent: -' + indent + 'ch;';\n    }\n\n    var headingMatcher = /^#+ /;\n    if (line.match(headingMatcher)) {\n      content.classList.add('heading');\n    }\n\n    var quoteMatcher = /^>+ /;\n    if (line.match(quoteMatcher)) {\n      content.classList.add('quote');\n    }\n\n    var markup = document.createDocumentFragment();\n    markup.appendChild(document.createTextNode('' === line ? '\\n' : line));\n\n    content.appendChild(markup);\n    row.appendChild(content);\n    fragment.appendChild(row);\n  });\n  return fragment;\n}\n\nvar CHANGE_SELECTION = 'CHANGE_SELECTION';\nvar CANCEL_SELECTION = 'CANCEL_SELECTION';\nvar NEW_ANNOTATION = ' NEW_ANNOTATION';\nvar CHANGE_COMMENT = 'CHANGE_COMMENT';\nvar SAVE_ANNOTATION_INTENT = 'SAVE_ANNOTATION_INTENT';\nvar SAVE_ANNOTATION_RECEIPT = 'SAVE_ANNOTATION_RECEIPT';\nvar EDIT_ANNOTATION = 'EDIT_ANNOTATION';\nvar DELETE_ANNOTATION_INTENT = 'DELETE_ANNOTATION_INTENT';\nvar DELETE_ANNOTATION_RECEIPT = 'DELETE_ANNOTATION_RECEIPT';\nvar CANCEL_EDIT_ANNOTATION_RECEIPT = 'CANCEL_EDIT_ANNOTATION_RECEIPT';\n\nfunction decorateAnnotations() {\n  var annotations = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : [];\n  var user = arguments[1];\n\n  var array = [].concat(_toConsumableArray(annotations));\n  array.mine = function () {\n    if (!user) return this;\n    return this.filter(function (a) {\n      return user === a.user;\n    });\n  };\n  array.findByID = function (id) {\n    return this.find(function (a) {\n      return id === a.id;\n    });\n  };\n  array.upsert = function (annotation) {\n    if (!annotation) throw new ReferenceError('Missing annotation');\n    if (!annotation.id) throw new ReferenceError('Missing annotation.id');\n\n    var arr = [].concat(_toConsumableArray(this));\n    var existingIndex = arr.findIndex(function (a) {\n      return annotation.id === a.id;\n    });\n    if (existingIndex > -1) {\n      arr.splice(existingIndex, 1);\n    }\n    arr.push(Object.assign({}, annotation));\n\n    var documentOrder = function documentOrder(a, b) {\n      if (a.range.start.line > b.range.start.line) return true;\n      if (a.range.start.line === b.range.start.line) {\n        return a.range.start.column > b.range.start.column;\n      }\n      return false;\n    };\n    return decorateAnnotations(arr.sort(documentOrder), user);\n  };\n  array.delete = function (id) {\n    var arr = [].concat(_toConsumableArray(this));\n    var existingIndex = arr.findIndex(function (a) {\n      return id === a.id;\n    });\n    if (existingIndex > -1) {\n      arr.splice(existingIndex, 1);\n    }\n    return decorateAnnotations(arr, user);\n  };\n  array.clearUnsaved = function () {\n    return decorateAnnotations(array.filter(function (a) {\n      return !!a.timestamp;\n    }));\n  };\n  array.toJSON = function () {\n    return this.filter(function (a) {\n      return !a.isDirty;\n    });\n  };\n  return array;\n}\n\n/**\n * Redux reducer. Make sure nothing mutates the\n * state in-place.\n * \n * @param {Object} state - current state\n * @param {Object} action \n * @returns {Object} - new state\n */\nfunction reducer(state, action) {\n  switch (action.type) {\n    case CHANGE_SELECTION:\n      var tmp0 = Object.assign({}, state);\n      tmp0.ui = Object.assign({}, tmp0.ui);\n      tmp0.ui.position = action.position;\n      tmp0.ui.selection = action.selection;\n      return tmp0;\n    case CANCEL_SELECTION:\n      var tmp7 = Object.assign({}, state);\n      tmp7.ui = Object.assign({}, tmp7.ui);\n      delete tmp7.ui.selection;\n      delete tmp7.ui.position;\n      return tmp7;\n    case NEW_ANNOTATION:\n      var id = uuidv4();\n      var tmp = Object.assign({}, state);\n      tmp.ui = Object.assign({}, tmp.ui);\n      delete tmp.ui.selection;\n      delete tmp.ui.position;\n      tmp.ui.activeAnnotationID = id;\n      tmp.model.annotations = decorateAnnotations(state.model.annotations.clearUnsaved(), tmp.ui.user);\n      tmp.model.annotations = tmp.model.annotations.upsert({\n        isDirty: true,\n        id: id,\n        timestamp: null,\n        user: state.ui.user,\n        comment: '',\n        range: {\n          start: {\n            line: state.ui.selection.start.line,\n            column: state.ui.selection.start.column\n          },\n          end: {\n            line: state.ui.selection.end.line,\n            column: state.ui.selection.end.column\n          }\n        }\n      });\n      return tmp;\n    case SAVE_ANNOTATION_INTENT:\n      var tmp3 = Object.assign({}, state);\n      tmp3.model = Object.assign({}, state.model);\n      tmp3.model.annotations = state.model.annotations.upsert(Object.assign({}, state.model.annotations.findByID(state.ui.activeAnnotationID), {\n        timestamp: new Date().toISOString(),\n        comment: action.comment\n      }));\n      return tmp3;\n    case SAVE_ANNOTATION_RECEIPT:\n      var tmp4 = Object.assign({}, state);\n      tmp4.model = Object.assign({}, state.model);\n      tmp4.model.annotations = decorateAnnotations(state.model.annotations, tmp4.ui.user).upsert(Object.assign({},\n      // FIXME: This should be passed in the action\n      state.model.annotations.findByID(state.ui.activeAnnotationID)));\n      delete tmp4.model.annotations.findByID(state.ui.activeAnnotationID).isDirty;\n      tmp4.ui = { isRendering: state.ui.isRendering, user: state.ui.user };\n      return tmp4;\n    case EDIT_ANNOTATION:\n      var tmp5 = Object.assign({}, state);\n      tmp5.ui = Object.assign({}, state.ui);\n      tmp5.ui.activeAnnotationID = action.id;\n      return tmp5;\n    // case DELETE_ANNOTATION_INTENT:\n    case DELETE_ANNOTATION_RECEIPT:\n      var tmp6 = Object.assign({}, state);\n      tmp6.model = Object.assign({}, state.model);\n      tmp6.model.annotations = state.model.annotations.delete(state.ui.activeAnnotationID);\n      tmp6.ui = Object.assign({}, state.ui);\n      delete tmp6.ui.activeAnnotationID;\n      return tmp6;\n    case CANCEL_EDIT_ANNOTATION_RECEIPT:\n      var tmp8 = Object.assign({}, state);\n      tmp8.model = Object.assign({}, state.model);\n      tmp8.model.annotations = decorateAnnotations(state.model.annotations.clearUnsaved(), state.ui.user);\n      tmp8.ui = Object.assign({}, state.ui);\n      delete tmp8.ui.activeAnnotationID;\n      return tmp8;\n    default:\n      return INITIAL_STATE;\n  }\n}\n// <https://stackoverflow.com/a/2117523/563324>\nfunction uuidv4() {\n  return ([1e7] + -1e3 + -4e3 + -8e3 + -1e11).replace(/[018]/g, function (c) {\n    return (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16);\n  });\n}\n\nvar store = (0, _redux.createStore)(reducer, (0, _redux.applyMiddleware)(function (store) {\n  return function (next) {\n    return function (action) {\n      console.log('Dispatching', action);\n      var result = next(action);\n      console.log('Next state', store.getState());\n      return result;\n    };\n  };\n}));\n\nstore.subscribe(render, INITIAL_STATE);\nstore.delayedDispatch = debounce(store.dispatch, 250);\n\n/**\n * Render global state to the live DOM.\n * \n * @return {undefined}\n */\nfunction render() {\n  console.time('render');\n  // It’s odd that the state isn’t passed to the subscriber.\n  // Need to get the state from the global store itself.\n  var state = store.getState();\n\n  state.ui.isRendering = true;\n\n  console.time('renderMarkdown');\n  replaceChildren(renderMarkdown(state.model.content, state.model.annotations), document.querySelector('tbody'));\n  console.timeEnd('renderMarkdown');\n  renderAnnotations(state.model.annotations);\n\n  document.querySelector('#Comment').value = state.ui.activeAnnotationID ? state.model.annotations.findByID(state.ui.activeAnnotationID).comment || '' : '';\n\n  var selAnn = document.querySelector('#SelectAnnotation');\n  if (state.ui.position) {\n    selAnn.style.display = 'unset';\n    selAnn.style.top = state.ui.position.y + 'px';\n    selAnn.style.left = state.ui.position.x + 'px';\n    selAnn.querySelector('button').focus();\n    restoreSelection(state.ui.selection);\n  } else {\n    selAnn.style.display = 'none';\n    selAnn.style.top = '-100px';\n    selAnn.style.left = '-100px';\n  }\n\n  document.querySelector('#Comment').disabled = !state.ui.activeAnnotationID;\n\n  var active = state.model.annotations.findByID(state.ui.activeAnnotationID);\n  document.querySelector('#SaveAnnotation').disabled = !active || document.querySelector('#Comment').value.length === 0;\n  document.querySelector('#DeleteAnnotation').disabled = !active;\n\n  // FIXME: This is ugly and brittle\n  if (!active || !active.timestamp) {\n    console.log('hide delete');\n    document.querySelector('#DeleteAnnotation').style.display = 'none';\n  } else {\n    document.querySelector('#DeleteAnnotation').style.display = 'unset';\n  }\n  document.querySelector('#CancelEditAnnotation').disabled = !active;\n\n  var download = document.querySelector('#Download');\n  // FIXME: The `toJSON` call is weird.\n  // The effect is “those that have been saved\". Maybe just a rename\n  // of `clearUnsaved` to `onlyPersisted`?\n  if (state.model.annotations && state.model.annotations.toJSON().length > 0) {\n    download.href = 'data:text/markdown;charset=utf-8;base64,' + _base.Base64.encode(state.model.content + '\\n\\n' + serializeAnnotations(state.model.annotations));\n    download.download = decodeURIComponent(state.model.href.split('/').pop());\n    download.style.display = 'unset';\n  } else {\n    download.style.display = 'none';\n  }\n\n  state.ui.isRendering = false;\n  console.timeEnd('render');\n}\n\nfunction serializeAnnotations(annotations) {\n  if (!annotations || 0 === annotations.length) {\n    return '';\n  }\n  var NAMESPACE = 'http://marklogic.com/annotations';\n  var annotationsJSON = JSON.stringify(annotations, null, 2);\n  return '<!--- ' + NAMESPACE + '\\n\\n' + annotationsJSON + '\\n\\n--->';\n}\n\nfunction restoreSelection(range) {\n  if (!range) return;\n  var r = rangeFromOffsets(document.querySelector('#L' + range.start.line + '>td.content'), range.start.column, document.querySelector('#L' + range.end.line + '>td.content'), range.end.column);\n  var selection = window.getSelection();\n  selection.removeAllRanges();\n  selection.addRange(r);\n}\n\n/**\n * Assumes the Markdown DOM has been rendered. Works on the live DOM.\n * Probably should make this async for lots of annotations.\n * \n * @param {Array<Annotation>} annotations \n * @return undefined\n */\nfunction renderAnnotations(annotations) {\n  var state = store.getState();\n  // Highlight annotations. Requires that DOM is already committed above\n\n  var _loop = function _loop(annotation) {\n    renderAnnotation(annotation, state.model.annotations.mine().some(function (a) {\n      return annotation.id === a.id;\n    }), state.ui.activeAnnotationID === annotation.id);\n  };\n\n  var _iteratorNormalCompletion = true;\n  var _didIteratorError = false;\n  var _iteratorError = undefined;\n\n  try {\n    for (var _iterator = annotations[Symbol.iterator](), _step; !(_iteratorNormalCompletion = (_step = _iterator.next()).done); _iteratorNormalCompletion = true) {\n      var annotation = _step.value;\n\n      _loop(annotation);\n    }\n  } catch (err) {\n    _didIteratorError = true;\n    _iteratorError = err;\n  } finally {\n    try {\n      if (!_iteratorNormalCompletion && _iterator.return) {\n        _iterator.return();\n      }\n    } finally {\n      if (_didIteratorError) {\n        throw _iteratorError;\n      }\n    }\n  }\n}\n\nfunction renderAnnotation(annotation) {\n  var isMine = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : false;\n  var isActive = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : false;\n\n  if (!annotation) return;\n  var r = rangeFromOffsets(document.querySelector('#L' + annotation.range.start.line + '>td.content'), annotation.range.start.column, document.querySelector('#L' + annotation.range.end.line + '>td.content'), annotation.range.end.column);\n  (0, _highlightRange.highlightRange)(r, function () {\n    var span = document.createElement('span');\n    span.classList.add('annotation');\n    span.dataset.annotationId = annotation.id;\n    if (isMine) {\n      span.classList.add('mine');\n    }\n    if (isActive) {\n      span.classList.add('active');\n    }\n    span.style.backgroundColor = 'rgba(' + new _colorHash.ColorHash().rgb(annotation.user).join(', ') + ', 0.5)';\n    return span;\n  });\n}\n\n/**\n * Replaces the entire contents of `oldNode` with `newChild`.\n * It’s generally advisable to use a `DocumentFragment` for the\n * the replacement.\n * \n * @param {Node|DocumentFragment} newChild \n * @param {Node} oldNode \n * @returns {Node}  - The new parent wrapper\n */\nfunction replaceChildren(newChild, oldNode) {\n  if (!oldNode) return;\n  var tmpParent = document.createElement(oldNode.tagName);\n  if (newChild) {\n    tmpParent.appendChild(newChild);\n  }\n  oldNode.parentNode.replaceChild(tmpParent, oldNode);\n  return tmpParent;\n}\n\ndocument.addEventListener('DOMContentLoaded', function (evt) {\n  render();\n  document.addEventListener('click', function (evt) {\n    console.log('evt.target.classList', evt.target.classList);\n    if (evt.target && evt.target.matches('#SaveAnnotation')) {\n      store.dispatch({\n        type: SAVE_ANNOTATION_INTENT,\n        comment: document.querySelector('#Comment').value\n      });\n      store.dispatch({\n        type: SAVE_ANNOTATION_RECEIPT\n      });\n    }\n    if (evt.target && evt.target.matches('#DeleteAnnotation')) {\n      store.dispatch({\n        type: DELETE_ANNOTATION_RECEIPT\n      });\n    }\n    if (evt.target && evt.target.matches('#CancelEditAnnotation')) {\n      store.dispatch({ type: CANCEL_EDIT_ANNOTATION_RECEIPT });\n    }\n    if (evt.target && evt.target.matches('#SelectAnnotation>button')) {\n      store.dispatch({\n        type: NEW_ANNOTATION\n      });\n      var commentEl = document.querySelector('#Comment');\n      commentEl.focus();\n      commentEl.setSelectionRange(commentEl.value.length, commentEl.value.length);\n    }\n    if (evt.target.matches('.annotation.mine')) {\n      var annotationEl = evt.target;\n      store.dispatch({\n        type: EDIT_ANNOTATION,\n        id: annotationEl.dataset.annotationId\n      });\n      var _commentEl = document.querySelector('#Comment');\n      _commentEl.focus();\n      _commentEl.setSelectionRange(_commentEl.value.length, _commentEl.value.length);\n    }\n  });\n\n  document.addEventListener('input', function (evt) {\n    if (store.getState().ui.isRendering) {\n      evt.stopPropagation();\n      return;\n    }\n    var state = store.getState();\n    if (evt.target && evt.target.matches('#Comment')) {\n      var active = state.model.annotations.findByID(state.ui.activeAnnotationID);\n      document.querySelector('#SaveAnnotation').disabled = !active || document.querySelector('#Comment').value.length === 0;\n    }\n  });\n\n  var isSelecting = false;\n  document.addEventListener('selectionchange', function (evt) {\n    isSelecting = !window.getSelection().isCollapsed;\n  });\n  document.addEventListener('mouseup', function (evt) {\n    if (isSelecting) {\n      store.dispatch({\n        type: CHANGE_SELECTION,\n        selection: getRange(window.getSelection()),\n        position: { x: evt.pageX, y: evt.pageY }\n      });\n      isSelecting = false;\n    } else {\n      if (store.getState().ui.selection) {\n        store.dispatch({ type: CANCEL_SELECTION });\n      }\n    }\n  });\n});\n\n/**\n * Returns a function, that, as long as it continues to be invoked, will not\n * be triggered. The function will be called after it stops being called for\n * N milliseconds. If `immediate` is passed, trigger the function on the\n * leading edge, instead of the trailing.\n * \n * @see https://davidwalsh.name/javascript-debounce-function\n * \n * @param {function} func \n * @param {number} [wait=500] \n * @param {boolean} [immediate=false] \n * @returns {function}\n */\nfunction debounce(func) {\n  var wait = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : 500;\n  var immediate = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : false;\n\n  var timeout;\n  return function () {\n    var context = this,\n        args = arguments;\n    var later = function later() {\n      timeout = null;\n      if (!immediate) func.apply(context, args);\n    };\n    var callNow = immediate && !timeout;\n    clearTimeout(timeout);\n    timeout = setTimeout(later, wait);\n    if (callNow) func.apply(context, args);\n  };\n}\n\n/**\n * The number of characters from the start of the parent node\n * to the child node, flattening all intervening children, \n * plus the offset in the child node.\n * \n * @example <div>ab<a>cd<a>ef</a>f</a>gh</div>\n *          textOffsetFromNode(div, a[1], 1) // 5 = 'ab' + 'cd' + 1\n * \n * @param {Node} parent \n * @param {Node} child \n * @param {number} [childOffset = 0]\n */\nfunction textOffsetFromNode(parent, child) {\n  var childOffset = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : 0;\n\n  if (!parent) return;\n  if (!child) return offset;\n  // console.log('textOffsetFromNode', parent, child, childOffset);\n  var iter = document.createNodeIterator(parent, NodeFilter.SHOW_TEXT);\n\n  var node = void 0;\n  var offset = 0;\n  while (iter.nextNode()) {\n    node = iter.referenceNode;\n    if (node === child) {\n      return offset + childOffset;\n    }\n    if (Node.TEXT_NODE === node.nodeType) {\n      offset += node.textContent.length;\n    }\n  }\n  throw new Error('Couldn\\u2019t find ' + String(child) + ' as a child of ' + String(parent));\n}\n\n/**\n * Given a node, find its parent line number, \n * delegating to `getLine()`.\n * \n * @param {Node} node \n * @param {string} [matcher = 'tr.line']\n * @return {number}\n */\nfunction getLineNumber(node) {\n  var matcher = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : 'tr.line';\n\n  return parseInt(getLine(node, matcher).dataset.line, 10);\n}\n\n/**\n * Given a node, find its parent line.\n * \n * @param {Node} node \n * @param {string} [matcher = 'tr.line']\n */\nfunction getLine(node) {\n  var matcher = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : 'tr.line';\n\n  do {\n    if (node.matches && node.matches(matcher)) {\n      return node;\n    }\n  } while (node = node.parentNode);\n  return undefined;\n}\n\n/**\n * Given a `Selection`, determine the `Range`, where\n * `start` is always before `end`, regardless \n * from which direction the selection was made.\n * \n * @param {Selection} selection \n * @returns {Object} - `{ start: number, end: number };\n */\nfunction getRange(selection) {\n  if (!selection) return;\n  if (!(selection instanceof Selection)) throw new TypeError(String(selection.constructor.name));\n  var anchor = {\n    line: getLineNumber(selection.anchorNode),\n    column: textOffsetFromNode(getLine(selection.anchorNode), selection.anchorNode, selection.anchorOffset)\n  };\n  var focus = {\n    line: getLineNumber(selection.focusNode),\n    column: textOffsetFromNode(getLine(selection.focusNode), selection.focusNode, selection.focusOffset)\n  };\n  // console.log('getRange', anchor, focus);\n  if (anchor.line < focus.line || anchor.line === focus.line && anchor.column <= focus.column) {\n    return {\n      start: anchor,\n      end: focus\n    };\n  } else {\n    return {\n      start: focus,\n      end: anchor\n    };\n  }\n}\n\n/**\n * \n * @param {Node} parentStart \n * @param {number} start \n * @param {Node} parentEnd \n * @param {number} end \n * @return {Range} \n */\nfunction rangeFromOffsets(parentStart) {\n  var start = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : 0;\n  var parentEnd = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : parentStart;\n  var end = arguments.length > 3 && arguments[3] !== undefined ? arguments[3] : 0;\n\n  // console.log('rangeFromOffsets', parentStart, start, parentEnd, end);\n  var range = document.createRange();\n  var s = nodeFromTextOffset(parentStart, start);\n  var e = nodeFromTextOffset(parentEnd, end);\n  // console.log('rangeFromOffsets#nodeFromTextOffset', s, e);\n  range.setStart(childTextNodeOrSelf(s.node), s.offset);\n  range.setEnd(childTextNodeOrSelf(e.node), e.offset);\n\n  return range;\n}\n\n/**\n * \n * @param {Node} parent \n * @param {number} offset \n * @return {Object} - `{ node: Node, offset: number }`\n */\nfunction nodeFromTextOffset(parent) {\n  var offset = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : 0;\n\n  if (!parent) return;\n  // console.log('nodeFromTextOffset', parent, offset);\n\n  var iter = document.createNodeIterator(parent, NodeFilter.SHOW_TEXT);\n\n  var counter = -1;\n  var node = void 0;\n  var last = void 0;\n  // Find the start node (could we somehow skip this seemingly needless search?)\n  while (counter < offset && iter.nextNode()) {\n    node = iter.referenceNode;\n    if (node.nodeType === Node.TEXT_NODE) {\n      last = offset - counter - 1;\n      counter += node.textContent.length;\n    }\n  }\n  return { node: node, offset: last };\n}\n\n/**\n * Descendent-or-self until you get a `TextNode`\n * \n * @param {Node} node \n * @return {TextNode} - Or `undefined` if there are not text \n *                      children, e.g. `<br/>`\n */\nfunction childTextNodeOrSelf(node) {\n  if (!node) return;\n  if (!(node instanceof Node)) throw new TypeError(node.constructor.name);\n\n  if (Node.TEXT_NODE === node.nodeType) {\n    return node;\n  }\n  if (node.firstChild) {\n    return childTextNodeOrSelf(node.firstChild);\n  }\n  return undefined;\n}\n//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoiNy5qcyIsInNvdXJjZXMiOlsid2VicGFjazovLy9zcmMvYW5ub3RhdGUuanM/NGZkNCJdLCJzb3VyY2VzQ29udGVudCI6WyJpbXBvcnQgeyBoaWdobGlnaHRSYW5nZSB9IGZyb20gJy4vaGlnaGxpZ2h0LXJhbmdlLmpzJztcbmltcG9ydCB7IENvbG9ySGFzaCB9IGZyb20gJy4vY29sb3ItaGFzaC5qcyc7XG5pbXBvcnQgeyBCYXNlNjQgfSBmcm9tICcuL2Jhc2U2NC5qcyc7XG5pbXBvcnQgeyBjcmVhdGVTdG9yZSwgYXBwbHlNaWRkbGV3YXJlIH0gZnJvbSAncmVkdXgnO1xuXG5jb25zdCBJTklUSUFMX1NUQVRFID0ge1xuICB1aToge1xuICAgIGlzUmVuZGVyaW5nOiBmYWxzZSxcbiAgICB1c2VyOiAnam1ha2VpZycsXG4gIH0sXG4gIG1vZGVsOiB7XG4gICAgYW5ub3RhdGlvbnM6IFtdLFxuICAgIC8vIDxodHRwczovL2hlbHAuZ2l0aHViLmNvbS9hcnRpY2xlcy9nZXR0aW5nLXBlcm1hbmVudC1saW5rcy10by1maWxlcy8+XG4gICAgaHJlZjpcbiAgICAgICdodHRwczovL2dpdGh1Yi5jb20vam1ha2VpZy9tYXJrZG93bi1hbm5vdGF0aW9ucy9ibG9iL2ZhMjUzMGM4MzE0MmNkMTQwNWNjYTUyZDVjYWEyYzJjNmFiYzY2ZmQvTmF1c2dhYXJkJTIwdWdoJTIwWE9YTy5tZCcsXG4gICAgY29tbWl0OiAnZmEyNTMwYzgzMTQyY2QxNDA1Y2NhNTJkNWNhYTJjMmM2YWJjNjZmZCcsXG4gICAgY29udGVudDogYC0tLVxudGl0bGU6IE1hcmtMb2dpYyBDb25zb2xpZGF0ZWQgVmlzaW9uXG5hdXRob3I6XG4tIEp1c3RpbiBNYWtlaWdcbmhpc3Rvcnk6IHxcbiAgXG4gICogVGhpbmdzXG4gICogU3R1ZmZcblxuLi4uXG5cbiMjIE5hdXNnYWFyZCB1Z2ggWE9YTyB7I25hdXNnYWFyZH1cbiBcbktuYXVzZ2FhcmQgdWdoIFhPWE8gZmxhbm5lbCBwb2sgcG9rIG1hcmZhIHBvcmsgYmVsbHkgc3VzdGFpbmFibGUgY3JvbnV0IGxhIGNyb2l4IHZpY2UgcGFsbyBzYW50byBhY3R1YWxseSBldGhpY2FsLiBcblxuICAqIENvcm5ob2xlIHBsYWlkIHR1bWJsciBQQlImQlxuICAqIFNlbWlvdGljcyBlY2hvIHBhcmsgXG4gICogaVBob25lIHBvc3QtaXJvbmljIHRhY29zIGJhbmggbWkuIFxuICBcbkhlaXJsb29tIHJvb2YgcGFydHkgZ29kYXJkIGxldHRlcnByZXNzIHJhbXBzIGJ1dGNoZXIgc2luZ2xlLW9yaWdpbiBjb2ZmZWUuIFNjZW5lc3RlciBnbG9zc2llciBmb29kIHRydWNrIHBva2UgbG9tbywgYmx1ZSBib3R0bGUgZ29kYXJkIGFydCBwYXJ0eSBjaGFydHJldXNlIGZpbmdlcnN0YWNoZSB0dW1ibHIgaHVtYmxlYnJhZyB3YXlmYXJlcnMgcGlja2xlZC4gXG5cbiAgMS4gU3F1aWQgZHJpbmtpbmcgdmluZWdhciBjaGFtYnJheSBlbmFtZWwgcGluLiBNZWggdHVtYmxyIGV2ZXJ5ZGF5IGNhcnJ5LCBoZWx2ZXRpY2EgbWlnYXMgZGlyZWN0IHRyYWRlIGNhcmRpZ2FuIG1hcmZhLiBcbiAgICAxLiBUcnktaGFyZCBhdXRoZW50aWMgWE9YTyBzaGFtYW4gcG9sYXJvaWQgcG9yayBiZWxseS4gSGVsdmV0aWNhIGJsdWUgYm90dGxlIHBob3RvIGJvb3RoIG1lc3NlbmdlciBiYWcsIGRpcmVjdCB0cmFkZSBwb3J0bGFuZCB0cnVzdCBmdW5kIGFmZm9nYXRvLiBcbiAgICAgIDEuIFRhdHRvb2VkIGNyZWQgdHVtYmxyIHBhbGVvIGFkYXB0b2dlbiBzZW1pb3RpY3MgWU9MTyBmb3JhZ2UgdmV4aWxsb2xvZ2lzdCBtdW1ibGVjb3JlIHNuYWNrd2F2ZSB2ZW5tbyBsaXN0aWNsZSBmb3VyIGxva28gbXVzdGFjaGUuIFxuICAgICAgICAxLiA4LWJpdCBjaGlsbHdhdmUgc2VsdmFnZSBldHN5IHdvbGYgb3JnYW5pYyB0YXR0b29lZCBrZWZmaXllaCB2aXJhbCBqaWFuYmluZyBza2F0ZWJvYXJkIHRvdGUgYmFnIGRlZXAgdiBhcnRpc2FuLiBQb2tlIHZlbm1vIG5vcm1jb3JlIHB1dCBhIGJpcmQgb24gaXQgYmVzcG9rZSBzdWNjdWxlbnRzIHRvdGUgYmFnIGxhIGNyb2l4IHBpdGNoZm9yayBnbG9zc2llci4gSmlhbmJpbmcgdGF4aWRlcm15IHJhY2xldHRlIHNhbHZpYSBuZXh0IGxldmVsIGFzeW1tZXRyaWNhbCwgc2hhbWFuIHBhbG8gc2FudG8gdmV4aWxsb2xvZ2lzdCBsaXN0aWNsZSB3b2tlIGNyb251dC4gQ3JhZnQgYmVlciBzdWNjdWxlbnRzIHBvcC11cCB1Z2gsIGNyYXkga2V5dGFyIGVubnVpIGdsdXRlbi1mcmVlIHRhY29zIGZvb2QgdHJ1Y2sgdHJ1ZmZhdXQuXG5cbkxpdGVyYWxseSB1bmljb3JuIHBvcmsgYmVsbHksIHBhYnN0IGhlbGwgb2YgdGJoIHJhbXBzIGNyZWQuIEJyb29rbHluIG5ldXRyYSBpbnRlbGxpZ2VudHNpYSBhcnRpc2FuIGNoYXJ0cmV1c2UuIFRydWZmYXV0IGthbGUgY2hpcHMgYWlyIHBsYW50LCB3aGF0ZXZlciArMSBldHN5IHBpdGNoZm9yayBkaXN0aWxsZXJ5IGJ1dGNoZXIgbmV4dCBsZXZlbCBsb2Nhdm9yZSBjaGlhLiBEaXNydXB0IHNxdWlkIHR1bWJsciBjaGlhIG1pZ2FzLiBZT0xPIGtpdHNjaCBtYW4gYnVuIHZpY2UgcG9sYXJvaWQgZ2VudHJpZnkgcXVpbm9hIGlyb255IG5hcndoYWwuIFlPTE8gZml4aWUgYmVhcmQgc2xvdy1jYXJiIGFjdHVhbGx5IGFydGlzYW4ga2FsZSBjaGlwcyB0b2Z1IG1lZGl0YXRpb24gbWVoIGNvbG9yaW5nIGJvb2sgcGl0Y2hmb3JrIGFpciBwbGFudCBmb29kIHRydWNrIGRyZWFtY2F0Y2hlci4gSGVsbCBvZiBjZWxpYWMgdG91c2xlZCBjb3JuaG9sZSwgbWljcm9kb3NpbmcgZ3JlZW4ganVpY2Ugd2hhdGV2ZXIgb2NjdXB5IHBvdXItb3Zlci4gQ2VsaWFjIGZhbm55IHBhY2sgc2NlbmVzdGVyIGRyaW5raW5nIHZpbmVnYXIgdHVtZXJpYyBjb3BwZXIgbXVnIHN1Y2N1bGVudHMgc3RyZWV0IGFydC4gVmFwZSBYT1hPIHRvdGUgYmFnIHBpdGNoZm9yayBjYXJkaWdhbiBhY3R1YWxseSBob29kaWUga2FsZSBjaGlwcyBwaG90byBib290aCBjcmFmdCBiZWVyLiBNbGtzaGsgdHJ5LWhhcmQgY3JlZCwgc3ludGgga29naSArMSBzaW5nbGUtb3JpZ2luIGNvZmZlZSBlbmFtZWwgcGluIGxpdGVyYWxseSBzbmFja3dhdmUgZm91ciBkb2xsYXIgdG9hc3QuIFJhY2xldHRlIGVuYW1lbCBwaW4gaGVsbGEgc2FydG9yaWFsIGNlbGlhYyBtYW4gYnVuIGNvcHBlciBtdWcgc3F1aWQuIEdvZGFyZCBiZWFyZCBnb2NodWphbmcsIHJvb2YgcGFydHkgcG91dGluZSBzaGFiYnkgY2hpYyBldHN5IGljZWxhbmQuIFN3YWcgcGFsbyBzYW50byByZWFkeW1hZGUgbGEgY3JvaXguXG5cbiAgKiBTcXVpZCBkcmlua2luZyB2aW5lZ2FyIGNoYW1icmF5IGVuYW1lbCBwaW4uIE1laCB0dW1ibHIgZXZlcnlkYXkgY2FycnksIGhlbHZldGljYSBtaWdhcyBkaXJlY3QgdHJhZGUgY2FyZGlnYW4gbWFyZmEuIFxuICAgIC0gVHJ5LWhhcmQgYXV0aGVudGljIFhPWE8gc2hhbWFuIHBvbGFyb2lkIHBvcmsgYmVsbHkuIEhlbHZldGljYSBibHVlIGJvdHRsZSBwaG90byBib290aCBtZXNzZW5nZXIgYmFnLCBkaXJlY3QgdHJhZGUgcG9ydGxhbmQgdHJ1c3QgZnVuZCBhZmZvZ2F0by4gXG4gICAgICAqIFRhdHRvb2VkIGNyZWQgdHVtYmxyIHBhbGVvIGFkYXB0b2dlbiBzZW1pb3RpY3MgWU9MTyBmb3JhZ2UgdmV4aWxsb2xvZ2lzdCBtdW1ibGVjb3JlIHNuYWNrd2F2ZSB2ZW5tbyBsaXN0aWNsZSBmb3VyIGxva28gbXVzdGFjaGUuIFxuICAgICAgICAtIDgtYml0IGNoaWxsd2F2ZSBzZWx2YWdlIGV0c3kgd29sZiBvcmdhbmljIHRhdHRvb2VkIGtlZmZpeWVoIHZpcmFsIGppYW5iaW5nIHNrYXRlYm9hcmQgdG90ZSBiYWcgZGVlcCB2IGFydGlzYW4uIFBva2UgdmVubW8gbm9ybWNvcmUgcHV0IGEgYmlyZCBvbiBpdCBiZXNwb2tlIHN1Y2N1bGVudHMgdG90ZSBiYWcgbGEgY3JvaXggcGl0Y2hmb3JrIGdsb3NzaWVyLiBKaWFuYmluZyB0YXhpZGVybXkgcmFjbGV0dGUgc2FsdmlhIG5leHQgbGV2ZWwgYXN5bW1ldHJpY2FsLCBzaGFtYW4gcGFsbyBzYW50byB2ZXhpbGxvbG9naXN0IGxpc3RpY2xlIHdva2UgY3JvbnV0LiBDcmFmdCBiZWVyIHN1Y2N1bGVudHMgcG9wLXVwIHVnaCwgY3JheSBrZXl0YXIgZW5udWkgZ2x1dGVuLWZyZWUgdGFjb3MgZm9vZCB0cnVjayB0cnVmZmF1dC5cblxuIyMgWXVjY2llIENyYWZ0IEJlZXJcblxuQXVzdGluIGh1bWJsZWJyYWcgdW5pY29ybiBhc3ltbWV0cmljYWwga2VmZml5ZWggY2hpbGx3YXZlIHJhdyBkZW5pbSBtYXN0ZXIgY2xlYW5zZSBtaWNyb2Rvc2luZyBiZWZvcmUgdGhleSBzb2xkIG91dCBjaGljaGFycm9uZXMgY3JlZC4gQ2hpbGx3YXZlIGZsYW5uZWwgaVBob25lLCBnbG9zc2llciB0cnktaGFyZCBzaGFiYnkgY2hpYyBoZWx2ZXRpY2Egc2FsdmlhLiBcblxuICAqIEJlZm9yZSB0aGV5IHNvbGQgb3V0IG5vcm1jb3JlIGZpeGllIG11c3RhY2hlXG4gICAgLSBQb3AtdXAgZW5hbWVsIHBpbiBtYXJmYSB5ciBmb3VyIFxuICAgIC0gTG9rbyB2YXBlIHN0dW1wdG93bi4gXG4gICogWW91IHByb2JhYmx5IGhhdmVuJ3QgaGVhcmQgb2YgdGhlbSBcbiAgICAtIE1pZ2FzIHZhcG9yd2FyZSBub3JtY29yZSBcbiAgICAtIEhlbHZldGljYSBkcmlua2luZyB2aW5lZ2FyIFxuICAgIC0gTWFuIGJyYWlkIGppYW5iaW5nIGtpbmZvbGsgXG4gICAgICAtIERJWSBmaXhpZSBtYXN0ZXIgY2xlYW5zZSBpcm9ueS4gXG4gICAgICBcblRhdHRvb2VkIHRpbGRlIGRpcmVjdCB0cmFkZSByYXcgZGVuaW0gdW5pY29ybiBhZGFwdG9nZW4gYXV0aGVudGljIHBpdGNoZm9yayBhaXIgcGxhbnQgZ2x1dGVuLWZyZWUgdGFjb3MuIExvbW8gaGVpcmxvb20gdHlwZXdyaXRlciBjZWxpYWMga2FsZSBjaGlwcyBoYXNodGFnLiBIdW1ibGVicmFnIGVjaG8gcGFyayBhcnRpc2FuICsxLCBwb3JrIGJlbGx5IGdyZWVuIGp1aWNlIG1hc3RlciBjbGVhbnNlIGplYW4gc2hvcnRzIGx1bWJlcnNleHVhbCB5ciBzd2FnIHZpY2UgYWN0aXZhdGVkIGNoYXJjb2FsIHNlbGZpZXMuIEdvY2h1amFuZyBkaXNydXB0IGFzeW1tZXRyaWNhbCA4LWJpdCBsaXN0aWNsZSBtYW4gYnVuIGJsb2cgZWRpc29uIGJ1bGIgdG9mdS4gQWVzdGhldGljIGlQaG9uZSBzdWJ3YXkgdGlsZSBncmVlbiBqdWljZSBzdHVtcHRvd24gc2VpdGFuLCBsb21vIG1hc3RlciBjbGVhbnNlIHRiaCBjcm9udXQgY3JhZnQgYmVlciBza2F0ZWJvYXJkLlxuXG4jIyBGYW5ueSBQYWNrIFRvdGUgQmFnIHsjdG90ZX1cblxuICAqIFZpbnlsIGFmLCByYW1wcyBzZWx2YWdlIGNoaWEgdWdoIGZhc2hpb24gYXhlIG1hc3RlciBjbGVhbnNlLiBUb3RlIGJhZyB0YWl5YWtpIFBCUiZCIGNoaWNoYXJyb25lcyBmb3VyIGRvbGxhciB0b2FzdCBjcmF5IHRvdXNsZWQgcGFsbyBzYW50by4gTGlzdGljbGUgYXN5bW1ldHJpY2FsIGFmIGFlc3RoZXRpYy4gU3JpcmFjaGEgYXN5bW1ldHJpY2FsIGZhc2hpb24gYXhlIFZIUyBwdWcgWE9YTyBzeW50aCBiaW9kaWVzZWwgcGl0Y2hmb3JrLiBMby1maSB0cnVmZmF1dCBibHVlIGJvdHRsZSBtaXh0YXBlLCBzY2VuZXN0ZXIgcmFtcHMgcG91dGluZS4gXG4gICogWXIgZ29kYXJkIHBpY2tsZWQsIGxvLWZpIGFzeW1tZXRyaWNhbCBrZXl0YXIgY2hpbGx3YXZlIHNob3JlZGl0Y2guIEtpdHNjaCBnbHV0ZW4tZnJlZSBsdW1iZXJzZXh1YWwgdGh1bmRlcmNhdHMgc2VpdGFuIGtlZmZpeWVoIGlQaG9uZSBkcmlua2luZyB2aW5lZ2FyIHJhbXBzIGJpY3ljbGUgcmlnaHRzIDMgd29sZiBtb29uIHR3ZWUgcXVpbm9hLiBCZXNwb2tlIGJpdHRlcnMgdmlueWwgbm9ybWNvcmUgc3F1aWQuIEZvdXIgZG9sbGFyIHRvYXN0IGJhbmpvIHZleGlsbG9sb2dpc3Qgc2thdGVib2FyZCBzYXJ0b3JpYWwgZHJpbmtpbmcgdmluZWdhciBvcmdhbmljIGNoYW1icmF5IHVuaWNvcm4gYXV0aGVudGljIHRvdXNsZWQgbmV4dCBsZXZlbCB3aWxsaWFtc2J1cmcuIFxuICAgICogRGlyZWN0IHRyYWRlIG1hc3RlciBjbGVhbnNlIHRydXN0IGZ1bmQgZHJpbmtpbmcgdmluZWdhciBsaXRlcmFsbHkgdG9mdSwgaG9vZGllIGtleXRhciB2aWNlIHRyeS1oYXJkIGV2ZXJ5ZGF5LiBcbiAgICAqIENhcnJ5IHBsYWlkIGNhcmRpZ2FuIGNyYXkuIEJ1dGNoZXIga2FsZSBjaGlwcyBwYWxvIHNhbnRvIGppYW5iaW5nLiBCYW5qbyBzdHVtcHRvd24gcG9ydGxhbmQgbm9ybWNvcmUgc3F1aWQgYWN0aXZhdGVkIGNoYXJjb2FsIGNodXJjaC1rZXkgZmFybS10by10YWJsZSBzbG93LWNhcmIgc25hY2t3YXZlIGhleGFnb24gdHJ1ZmZhdXQuXG5cbkZpbmdlcnN0YWNoZSBoYW1tb2NrIGJpY3ljbGUgcmlnaHRzIGNsaWNoZSB0b3VzbGVkIGZyZWVnYW4uIFNhcnRvcmlhbCB0b3VzbGVkIGtvbWJ1Y2hhIGNsaWNoZS4gQXV0aGVudGljIHNpbmdsZS1vcmlnaW4gY29mZmVlIGFjdGl2YXRlZCBjaGFyY29hbCwgb2NjdXB5IHJhY2xldHRlIGhvdCBjaGlja2VuICsxIHVuaWNvcm4gZmFybS10by10YWJsZSBwb3N0LWlyb25pYyBjcmF5LiBBZGFwdG9nZW4gdGh1bmRlcmNhdHMgbXVtYmxlY29yZSBhY3R1YWxseSBlbm51aSwgbWFuIGJ1biBiZXNwb2tlLiBDaGlhIGNsaWNoZSBraXRzY2ggZWRpc29uIGJ1bGIgdGlsZGUsIG5vcm1jb3JlIGludGVsbGlnZW50c2lhIHZhcGUgc2hvcmVkaXRjaCBmYXJtLXRvLXRhYmxlIG9yZ2FuaWMgc2VsZmllcyBhdXRoZW50aWMuIFRhdHRvb2VkIGJlYXJkIHNjZW5lc3RlciBraXRzY2gsIGRpc3RpbGxlcnkgY3JheSB2ZW5tbyBjcm9udXQgYWVzdGhldGljLiBIdW1ibGVicmFnIHJvb2YgcGFydHkgdmFwZSBsb21vLCA5MCdzIHBvcnRsYW5kIHNrYXRlYm9hcmQgbXVtYmxlY29yZSBtZXNzZW5nZXIgYmFnIGZhbSB0b2Z1IGhhbW1vY2sgdG90ZSBiYWcgYWVzdGhldGljLiBNYXJmYSBhZXN0aGV0aWMgZGlyZWN0IHRyYWRlIGtvbWJ1Y2hhLiBQb3J0bGFuZCBnb2RhcmQgaG9vZGllIHNlbHZhZ2UsIGVuYW1lbCBwaW4gcXVpbm9hIG1peHRhcGUgd29sZiBoZXhhZ29uIGljZWxhbmQuIENyYXkgYmlvZGllc2VsIGZhbSwgcG9zdC1pcm9uaWMgbGVnZ2luZ3MgdGF0dG9vZWQgc3Vid2F5IHRpbGUgY29ybmhvbGUgYml0dGVycyBkcmVhbWNhdGNoZXIgcmF3IGRlbmltIFZIUyBldHN5IGxldHRlcnByZXNzIHZpcmFsLlxuXG4jIyMgU2FydG9yaWFsIEtvZ2kgTWVkaXRhdGlvbiB7I01lZGl0YXRpb259XG5cblNhcnRvcmlhbCBrb2dpIG1lZGl0YXRpb24gZ2FzdHJvcHViLCBldGhpY2FsIHNoYWJieSBjaGljIHBhbGVvIGFzeW1tZXRyaWNhbCBmcmFuemVuIGxpdmUtZWRnZSBwdWcuIFZpcmFsIGJsb2cgY2hhbWJyYXkgYml0dGVycywgdG9mdSBzaGFiYnkgY2hpYyBraXRzY2ggcGl0Y2hmb3JrLiBJUGhvbmUgc2xvdy1jYXJiIHR3ZWUga2VmZml5ZWggZWRpc29uIGJ1bGIuIENvcm5ob2xlIHN0cmVldCBhcnQgYmlvZGllc2VsLCB3YXlmYXJlcnMgbWVzc2VuZ2VyIGJhZyBmYXJtLXRvLXRhYmxlIFZIUy4gUmVhZHltYWRlIHBvdXItb3ZlciBnZW50cmlmeSwgY2VsaWFjIGdhc3Ryb3B1YiBiZWFyZCBnb2NodWphbmcgd2Fpc3Rjb2F0IHN1c3RhaW5hYmxlIHNhbHZpYS4gTmV4dCBsZXZlbCBzaGFtYW4gc25hY2t3YXZlIHJvb2YgcGFydHkgdHlwZXdyaXRlciBzY2hsaXR6IGRlZXAgdiBmYXNoaW9uIGF4ZSBoZWxsIG9mIHJhbXBzIHNhbHZpYSBZT0xPIHNrYXRlYm9hcmQgY29wcGVyIG11Zy4gQ29sZC1wcmVzc2VkIHl1Y2NpZSBkaXN0aWxsZXJ5IGhvdCBjaGlja2VuIGNlbGlhYyBjaGFtYnJheSBjcmF5IGFkYXB0b2dlbiBpbnRlbGxpZ2VudHNpYSBnb2RhcmQgbmV4dCBsZXZlbC4gVHdlZSBwb3JrIGJlbGx5IGV2ZXJ5ZGF5IGNhcnJ5IHR1bWVyaWMsIGhhbW1vY2sgcHVnIHN3YWcgaGVsbCBvZiBkaXNydXB0IHZhcG9yd2FyZSBzcmlyYWNoYSBsby1maS4gTGVnZ2luZ3MgY2hpYSBtYXN0ZXIgY2xlYW5zZSB2ZWdhbi4gOC1iaXQga2FsZSBjaGlwcyBjaGFydHJldXNlLCBpcm9ueSBmbGV4aXRhcmlhbiB0YWl5YWtpIGNhcmRpZ2FuIGRyZWFtY2F0Y2hlciBvcmdhbmljIG5hcndoYWwgcG9zdC1pcm9uaWMgc2hhbWFuIG1lZ2dpbmdzIGhlaXJsb29tIGVjaG8gcGFyay5cblxuICAxMS4gU3F1aWQgZHJpbmtpbmcgdmluZWdhciBjaGFtYnJheSBlbmFtZWwgcGluLiBNZWggdHVtYmxyIGV2ZXJ5ZGF5IGNhcnJ5LCBoZWx2ZXRpY2EgbWlnYXMgZGlyZWN0IHRyYWRlIGNhcmRpZ2FuIG1hcmZhLiBcbiAgICAxMTEuIFRyeS1oYXJkIGF1dGhlbnRpYyBYT1hPIHNoYW1hbiBwb2xhcm9pZCBwb3JrIGJlbGx5LiBIZWx2ZXRpY2EgYmx1ZSBib3R0bGUgcGhvdG8gYm9vdGggbWVzc2VuZ2VyIGJhZywgZGlyZWN0IHRyYWRlIHBvcnRsYW5kIHRydXN0IGZ1bmQgYWZmb2dhdG8uIFxuICAgICAgMTExMS4gVGF0dG9vZWQgY3JlZCB0dW1ibHIgcGFsZW8gYWRhcHRvZ2VuIHNlbWlvdGljcyBZT0xPIGZvcmFnZSB2ZXhpbGxvbG9naXN0IG11bWJsZWNvcmUgc25hY2t3YXZlIHZlbm1vIGxpc3RpY2xlIGZvdXIgbG9rbyBtdXN0YWNoZS4gXG4gICAgICAgIDExMTExLiA4LWJpdCBjaGlsbHdhdmUgc2VsdmFnZSBldHN5IHdvbGYgb3JnYW5pYyB0YXR0b29lZCBrZWZmaXllaCB2aXJhbCBqaWFuYmluZyBza2F0ZWJvYXJkIHRvdGUgYmFnIGRlZXAgdiBhcnRpc2FuLiBQb2tlIHZlbm1vIG5vcm1jb3JlIHB1dCBhIGJpcmQgb24gaXQgYmVzcG9rZSBzdWNjdWxlbnRzIHRvdGUgYmFnIGxhIGNyb2l4IHBpdGNoZm9yayBnbG9zc2llci4gSmlhbmJpbmcgdGF4aWRlcm15IHJhY2xldHRlIHNhbHZpYSBuZXh0IGxldmVsIGFzeW1tZXRyaWNhbCwgc2hhbWFuIHBhbG8gc2FudG8gdmV4aWxsb2xvZ2lzdCBsaXN0aWNsZSB3b2tlIGNyb251dC4gQ3JhZnQgYmVlciBzdWNjdWxlbnRzIHBvcC11cCB1Z2gsIGNyYXkga2V5dGFyIGVubnVpIGdsdXRlbi1mcmVlIHRhY29zIGZvb2QgdHJ1Y2sgdHJ1ZmZhdXQuXG5cblxuUGlja2xlZCB0eXBld3JpdGVyIGxhIGNyb2l4IGNoaWNoYXJyb25lcyBjaHVyY2gta2V5IGFpciBwbGFudCBoZWxsIG9mIHlvdSBwcm9iYWJseSBoYXZlbid0IGhlYXJkIG9mIHRoZW0gd2Fpc3Rjb2F0IGJ1c2h3aWNrLiBUYmggVkhTIHZpbnlsIHlyIHRhaXlha2kgY3JvbnV0IDkwJ3Mga2FsZSBjaGlwcyBsaXRlcmFsbHkgd29rZS4gTGl0ZXJhbGx5IGhhbW1vY2sgdmlueWwgYmFuam8gY3J1Y2lmaXggbmFyd2hhbCBzZWxmaWVzIERJWSB2ZXhpbGxvbG9naXN0IGtleXRhci4gRml4aWUgZXRzeSBsaXRlcmFsbHksIGdsdXRlbi1mcmVlIGJlYXJkIGxlZ2dpbmdzIGJpb2RpZXNlbC4gS29tYnVjaGEgYmx1ZSBib3R0bGUgdGh1bmRlcmNhdHMgYXV0aGVudGljIGdyZWVuIGp1aWNlLiBMeWZ0IGNodXJjaC1rZXkgYWlyIHBsYW50IHRvdXNsZWQgdGJoLiBTdHVtcHRvd24gbWFyZmEgcmFjbGV0dGUgbmV4dCBsZXZlbCBwYWJzdC4gVmljZSBmcmVlZ2FuIGFlc3RoZXRpYyBrb21idWNoYSBzaW5nbGUtb3JpZ2luIGNvZmZlZSwgcG9rZSBibHVlIGJvdHRsZSBpcm9ueSBzdXN0YWluYWJsZSBtaXh0YXBlIGFjdHVhbGx5IGhhc2h0YWcgZ2FzdHJvcHViIGxpdGVyYWxseSBlbmFtZWwgcGluLiBMaXN0aWNsZSBrZWZmaXllaCBoZWxsYSBkaXJlY3QgdHJhZGUgYmVhcmQsIGhlaXJsb29tIHNhbHZpYSBub3JtY29yZSBzZWl0YW4uIFl1Y2NpZSArMSBwdXQgYSBiaXJkIG9uIGl0IHBvdXItb3ZlciBjZWxpYWMuIEdsdXRlbi1mcmVlIHNpbmdsZS1vcmlnaW4gY29mZmVlIGxlZ2dpbmdzIG11bWJsZWNvcmUgaXJvbnkgY29wcGVyIG11ZyBiZWZvcmUgdGhleSBzb2xkIG91dCBwbGFpZCBicnVuY2ggaWNlbGFuZC5cblxuIyMgTWxrc2hrIERlZXAgdi4gVW1hbWlcblxuU2luZ2xlLW9yaWdpbiBjb2ZmZWUsIHBva2UgaGVsbCBvZiBwb3VyLW92ZXIgZGlzcnVwdCBmYXNoaW9uIGF4ZSBjb3BwZXIgbXVnLiBCdXRjaGVyIHNjZW5lc3RlciB0aHVuZGVyY2F0cywgZGVlcCB2IGtpdHNjaCBmaXhpZSAzIHdvbGYgbW9vbiB0YXhpZGVybXkgaHVtYmxlYnJhZy4gUG9zdC1pcm9uaWMgYXN5bW1ldHJpY2FsIGZpbmdlcnN0YWNoZSBrZXl0YXIgYmlvZGllc2VsLiBQb3VyLW92ZXIgbWFuIGJ1biB5dWNjaWUgZnJlZWdhbiB3b2xmLiBDaGlhIHNhcnRvcmlhbCBiZXNwb2tlIGxpdGVyYWxseSBmaXhpZSBtZWRpdGF0aW9uLiBTcXVpZCB3b2tlIFBCUiZCIGF1dGhlbnRpYyBiZWFyZCBoYXNodGFnIHByaXNtIGZpbmdlcnN0YWNoZSBwaXRjaGZvcmssIFlPTE8gYmVmb3JlIHRoZXkgc29sZCBvdXQgYmVzcG9rZSBjb2xvcmluZyBib29rIGRpc3J1cHQgZnJlZWdhbi4gV2lsbGlhbXNidXJnIGNoaWEgc3Vid2F5IHRpbGUgYmljeWNsZSByaWdodHMga2FsZSBjaGlwcyBrbmF1c2dhYXJkLCBzY2hsaXR6IGJsb2cgaGVsbCBvZiBQQlImQi4gQ3J1Y2lmaXggbWl4dGFwZSB0cnktaGFyZCBzZWx2YWdlLiBBZiBoZXhhZ29uIHlvdSBwcm9iYWJseSBoYXZlbid0IGhlYXJkIG9mIHRoZW0gbmFyd2hhbCBtYW4gYnJhaWQgKzEgcG9rIHBvay4gUHV0IGEgYmlyZCBvbiBpdCBsby1maSBoZWlybG9vbSBYT1hPIGRyZWFtY2F0Y2hlciBsZXR0ZXJwcmVzcyByYWNsZXR0ZSByb29mIHBhcnR5IGJpb2RpZXNlbCBjbGljaGUgbWljcm9kb3Npbmcgc2luZ2xlLW9yaWdpbiBjb2ZmZWUgY3J1Y2lmaXggaW50ZWxsaWdlbnRzaWEuIE11c3RhY2hlIGdlbnRyaWZ5IGVuYW1lbCBwaW4gZGVlcCB2ICsxIGZyZWVnYW4gYWlyIHBsYW50LlxuXG4+IFdvbGYgc2NobGl0eiBsZXR0ZXJwcmVzcyBoZWx2ZXRpY2EgbGlzdGljbGUgaXJvbnkgbWFuIGJyYWlkLiBIZWxsYSBmb3VyIGRvbGxhciB0b2FzdCBwYWJzdCB0aWxkZSBjcmF5LiBIb3QgY2hpY2tlbiBwYWxvIHNhbnRvIGFlc3RoZXRpYywgZmxleGl0YXJpYW4gWE9YTyBmb3JhZ2UgcG91dGluZSB2YXBvcndhcmUgdmVnYW4gaGFtbW9jayBkcmVhbWNhdGNoZXIgbXVzdGFjaGUuIEdvY2h1amFuZyBicnVuY2ggc3dhZywgbmV4dCBsZXZlbCBwb3VyLW92ZXIgc3R1bXB0b3duIGhvdCBjaGlja2VuIGhlaXJsb29tIHZlZ2FuIGJsdWUgYm90dGxlIGF1c3RpbiBraW5mb2xrLiBFdmVyeWRheSBjYXJyeSBjb3BwZXIgbXVnIGVuYW1lbCBwaW4gdHJ5LWhhcmQsIGNoaWxsd2F2ZSBxdWlub2EgY29sb3JpbmcgYm9vayBmb29kIHRydWNrIHZhcG9yd2FyZS4gVHJ5LWhhcmQgdmlueWwgY29ybmhvbGUsIGxvLWZpIGludGVsbGlnZW50c2lhIGJ1c2h3aWNrIG1hbiBidW4gcG9zdC1pcm9uaWMgZm9yYWdlLiBEcmlua2luZyB2aW5lZ2FyIG1hbiBidW4gVkhTIGRpcmVjdCB0cmFkZSB5dWNjaWUgYWRhcHRvZ2VuIGppYW5iaW5nIGdyZWVuIGp1aWNlIHVuaWNvcm4gdHVtYmxyIG5hcndoYWwgcG9sYXJvaWQuIFZlZ2FuIHRvdXNsZWQgeXIsIHJldHJvIHF1aW5vYSBzaG9yZWRpdGNoIGhhbW1vY2sgc3JpcmFjaGEgYnJ1bmNoIG1pY3JvZG9zaW5nIGthbGUgY2hpcHMgeW91IHByb2JhYmx5IGhhdmVuJ3QgaGVhcmQgb2YgdGhlbSBwaW50ZXJlc3QuIE5ldXRyYSB2aWNlIHZleGlsbG9sb2dpc3QgbGlzdGljbGUsIGdsdXRlbi1mcmVlIGhvdCBjaGlja2VuIHJlYWR5bWFkZSB0aHVuZGVyY2F0cyBtYW4gYnJhaWQgdmVubW8gbXVzdGFjaGUgd29sZiBmb29kIHRydWNrLiBTZWx2YWdlIGhhbW1vY2sgbWFzdGVyIGNsZWFuc2Ugc3dhZywgYmVhcmQgbmV1dHJhIG5leHQgbGV2ZWwgbm9ybWNvcmUgbHVtYmVyc2V4dWFsIGJpdHRlcnMga2FsZSBjaGlwcyBrb21idWNoYSBmbGV4aXRhcmlhbiBmYXJtLXRvLXRhYmxlLiBVbWFtaSBwYWxvIHNhbnRvIHBvcC11cCwgbWVoIHVuaWNvcm4gZ2VudHJpZnkgZGlzcnVwdCB2YXBvcndhcmUgRElZIGludGVsbGlnZW50c2lhLlxuXG5ZdWNjaWUgdGF4aWRlcm15IGRlZXAgdiBzZWxmaWVzIHRhY29zIG1laCBsb2Nhdm9yZSBzbG93LWNhcmIuIEF1dGhlbnRpYyB0aWxkZSByYXcgZGVuaW0gc2VtaW90aWNzIHRiaC4gVmFwZSB0YWNvcyBnZW50cmlmeSBpbnRlbGxpZ2VudHNpYSwgcG9rZSBiZWFyZCBzZWl0YW4gaHVtYmxlYnJhZyByYWNsZXR0ZSBzY2hsaXR6IGJlc3Bva2UgZ29kYXJkIGNodXJjaC1rZXkgZXZlcnlkYXkgY2Fycnkgd2Fpc3Rjb2F0LiBCYW5oIG1pIGplYW4gc2hvcnRzIHNuYWNrd2F2ZSBjb3JuaG9sZSBjaGlhIHZpY2UuIFN0dW1wdG93biBjaGljaGFycm9uZXMgcGhvdG8gYm9vdGggdmlueWwsIGhhbW1vY2sgcG91ci1vdmVyIGFmLiBGYW5ueSBwYWNrIGFzeW1tZXRyaWNhbCByYW1wcywgcGxhaWQgY2FyZGlnYW4gZW5udWkgYWN0dWFsbHkgY2hhbWJyYXkgcG9yayBiZWxseS4gRWRpc29uIGJ1bGIgY29wcGVyIG11ZyBhc3ltbWV0cmljYWwgbGlzdGljbGUsIHBhbGVvIGFjdGl2YXRlZCBjaGFyY29hbCBzbWFsbCBiYXRjaCBvZmZhbCBzcmlyYWNoYSBrZWZmaXllaCBwYWJzdCBsb2Nhdm9yZSBiYW5oIG1pIHdhaXN0Y29hdCBtYXN0ZXIgY2xlYW5zZS4gQ2xvdWQgYnJlYWQgcmF3IGRlbmltIGZsZXhpdGFyaWFuIGFmIHNoYW1hbiBtdXN0YWNoZSBhdXRoZW50aWMgY29ybmhvbGUgdG90ZSBiYWcgdGlsZGUgZGlzdGlsbGVyeSB2aWNlLiBZT0xPIGZvdXIgZG9sbGFyIHRvYXN0IGRlZXAgdiBoZWx2ZXRpY2Egc3VzdGFpbmFibGUgYXVzdGluIGppYW5iaW5nIGRpc3RpbGxlcnkgbHVtYmVyc2V4dWFsIHNob3JlZGl0Y2ggb2ZmYWwuIENyYXkgc3dhZyBsZXR0ZXJwcmVzcyBwdXQgYSBiaXJkIG9uIGl0IGFjdHVhbGx5LCBjb2xkLXByZXNzZWQgcG9rIHBvayB2aWNlIHRyeS1oYXJkIFZIUyBzaG9yZWRpdGNoLiBCaW9kaWVzZWwgZGVlcCB2IHVnaCBwb2tlIG1pY3JvZG9zaW5nIGludGVsbGlnZW50c2lhLiBBY3RpdmF0ZWQgY2hhcmNvYWwgY2hhbWJyYXkgaGVsbCBvZiBpbnRlbGxpZ2VudHNpYSBhY3R1YWxseS4gRWNobyBwYXJrICsxIHZpY2UsIHRhdHRvb2VkIHBob3RvIGJvb3RoIGx5ZnQgcG91dGluZSBwYWxvIHNhbnRvLlxuXG4jIyMgRm9yYWdlIHBva2UgZ2FzdHJvcHViIHJldHJvXG5cbkNvcm5ob2xlIHBvcmsgYmVsbHkgZ3JlZW4ganVpY2Ugc2VsZmllcyB3aGF0ZXZlci4gQmlvZGllc2VsIGFlc3RoZXRpYyBoZWx2ZXRpY2EgYWRhcHRvZ2VuLCBmbGFubmVsIGRyaW5raW5nIHZpbmVnYXIgbWFzdGVyIGNsZWFuc2UgYXJ0aXNhbiBmaW5nZXJzdGFjaGUgYmxvZyBjb3BwZXIgbXVnIG9yZ2FuaWMgcG9ydGxhbmQgcmF3IGRlbmltLiBQaG90byBib290aCBsYSBjcm9peCBhZiwgYnV0Y2hlciBrZWZmaXllaCBtbGtzaGsgbGV0dGVycHJlc3MgbG9jYXZvcmUuIFlyIHVuaWNvcm4gcmF3IGRlbmltIHNrYXRlYm9hcmQgUEJSJkIgYWlyIHBsYW50IGppYW5iaW5nIHZhcG9yd2FyZSBzZWl0YW4uIEF1dGhlbnRpYyBiZXNwb2tlIHRpbGRlLCB0cnVzdCBmdW5kIHNlbGZpZXMgbGlzdGljbGUgY29sZC1wcmVzc2VkIGtpbmZvbGsgZW5udWkgbm9ybWNvcmUgYmVmb3JlIHRoZXkgc29sZCBvdXQgd2F5ZmFyZXJzIGJydW5jaCBkaXNydXB0LiBUcnVmZmF1dCB0aHVuZGVyY2F0cyBjaHVyY2gta2V5LCBoYXNodGFnIGNyb251dCBhcnQgcGFydHkga2FsZSBjaGlwcyBldHN5IERJWSBiaWN5Y2xlIHJpZ2h0cyByYW1wcyBwb3V0aW5lIHR3ZWUuIEFjdGl2YXRlZCBjaGFyY29hbCB0dW1ibHIgc2VsZmllcyB3YWlzdGNvYXQuIEhlbGxhIHJldHJvIGhvb2RpZSwgY3JheSBrbmF1c2dhYXJkIGxvbW8gc2VtaW90aWNzIHJvb2YgcGFydHkgdHJ1c3QgZnVuZCB1bmljb3JuIG1hbiBicmFpZC4gVGFpeWFraSBhZmZvZ2F0byBnbG9zc2llciwgdW5pY29ybiBncmVlbiBqdWljZSBwdXQgYSBiaXJkIG9uIGl0IHRydXN0IGZ1bmQgY2xvdWQgYnJlYWQuIFBvdXRpbmUgZmxleGl0YXJpYW4gcGlja2xlZCBmb3VyIGxva28gYmFuaCBtaSBidXNod2ljayB0YWl5YWtpIGtpdHNjaCBjbGljaGUgY2FyZGlnYW4gYWVzdGhldGljIGxvbW8gYWZmb2dhdG8gb2ZmYWwgd2hhdGV2ZXIuIEFjdGl2YXRlZCBjaGFyY29hbCBicnVuY2ggc3VzdGFpbmFibGUsIGFkYXB0b2dlbiBsdW1iZXJzZXh1YWwga29tYnVjaGEgZ2VudHJpZnkgaGVsbCBvZi4gWE9YTyBseWZ0IGVkaXNvbiBidWxiIGtpY2tzdGFydGVyLiBJY2VsYW5kIHZleGlsbG9sb2dpc3QgbWFzdGVyIGNsZWFuc2UgdHVtYmxyIGRpc3RpbGxlcnkgc21hbGwgYmF0Y2ggaHVtYmxlYnJhZy5cblxuTWFuIGJ1biBuZXh0IGxldmVsIG1lc3NlbmdlciBiYWcgdHJ1ZmZhdXQgMyB3b2xmIG1vb24gbm9ybWNvcmUuIFNhcnRvcmlhbCBxdWlub2Egc3ludGggbWFyZmEuIFdva2UgdGF0dG9vZWQgc25hY2t3YXZlIGNodXJjaC1rZXkgcGFsbyBzYW50byArMSBYT1hPIG1pY3JvZG9zaW5nIHF1aW5vYSBrYWxlIGNoaXBzIGV0aGljYWwgc2FydG9yaWFsLiBJUGhvbmUgY29ybmhvbGUgd2F5ZmFyZXJzIHRydWZmYXV0IHlvdSBwcm9iYWJseSBoYXZlbid0IGhlYXJkIG9mIHRoZW0uIFRvZnUgdGF0dG9vZWQgaHVtYmxlYnJhZyBjaGlsbHdhdmUuIFJhY2xldHRlIHZlZ2FuIGx1bWJlcnNleHVhbCBhcnRpc2FuIGxpc3RpY2xlIGdlbnRyaWZ5IG5hcndoYWwgaGVhbHRoIGdvdGggcGhvdG8gYm9vdGggY3JlZC4gVmFwb3J3YXJlIG9jY3VweSByZXRybywgd29sZiBkcmlua2luZyB2aW5lZ2FyIHR1bWJsciBjcmFmdCBiZWVyIGZsZXhpdGFyaWFuIGZyZWVnYW4gdGh1bmRlcmNhdHMuIE5vcm1jb3JlIGFzeW1tZXRyaWNhbCB0cnktaGFyZCwgdGF4aWRlcm15IHl1Y2NpZSBraWNrc3RhcnRlciBzdWNjdWxlbnRzIG5ldXRyYSBwb3N0LWlyb25pYyBjbG91ZCBicmVhZCBxdWlub2EuIFR1bWJsciBtYW4gYnVuIG1pY3JvZG9zaW5nIHNlbGZpZXMgZm9vZCB0cnVjayBicm9va2x5bi4gQWRhcHRvZ2VuIHRpbGRlIGZyYW56ZW4gc2xvdy1jYXJiIGRpc3J1cHQgc3ludGggZml4aWUgY29sb3JpbmcgYm9vayBhZXN0aGV0aWMgcGludGVyZXN0IHZpY2Ugd2Fpc3Rjb2F0IG1hbiBidW4gbXVzdGFjaGUuIEFydCBwYXJ0eSBhZiBiaWN5Y2xlIHJpZ2h0cyBtZXNzZW5nZXIgYmFnLCBzeW50aCBzZWl0YW4gY3JlZCBzbmFja3dhdmUgaGVsbCBvZiBrZWZmaXllaCBzZW1pb3RpY3MgcXVpbm9hIHZlbm1vIHZpbnlsIGtuYXVzZ2FhcmQuIE5ldXRyYSBtdXN0YWNoZSB1Z2ggY3JvbnV0LCBvY2N1cHkgWU9MTyBwb3AtdXAgcGFsZW8gaG9vZGllIG5leHQgbGV2ZWwuIFlPTE8gcG9rZSBwb3N0LWlyb25pYyB0aHVuZGVyY2F0cyB5b3UgcHJvYmFibHkgaGF2ZW4ndCBoZWFyZCBvZiB0aGVtIERJWSBwb3V0aW5lIGVjaG8gcGFyayB0dW1lcmljIHBpbnRlcmVzdC5cblxuU2FsdmlhIGtlZmZpeWVoIG5hcndoYWwgbG9tby4gQnJ1bmNoIGJpdHRlcnMga2lja3N0YXJ0ZXIgOC1iaXQgaGVsbGEuIFNlbGZpZXMgbWljcm9kb3Npbmcgc2luZ2xlLW9yaWdpbiBjb2ZmZWUgY3JvbnV0IHNoYW1hbiAzIHdvbGYgbW9vbiBlZGlzb24gYnVsYiBtYXJmYSBhY3RpdmF0ZWQgY2hhcmNvYWwgb3JnYW5pYyBhc3ltbWV0cmljYWwgbXVzdGFjaGUgamVhbiBzaG9ydHMgdHlwZXdyaXRlci4gRmxleGl0YXJpYW4gdGJoIGV0aGljYWwgdmVnYW4gc2NlbmVzdGVyIHVnaCBwb3V0aW5lIGJyb29rbHluIGNyZWQgZmFubnkgcGFjayBpcm9ueSB3b2xmLiBBZXN0aGV0aWMgZmFybS10by10YWJsZSBjcnVjaWZpeCBtZWRpdGF0aW9uIGFjdGl2YXRlZCBjaGFyY29hbCBzZWx2YWdlIGhvb2RpZSBzdXN0YWluYWJsZSBsaXN0aWNsZSBwb2sgcG9rIGJsdWUgYm90dGxlIHNsb3ctY2FyYiBldHN5LiBSYWNsZXR0ZSBpcm9ueSBrb2dpIG1pY3JvZG9zaW5nIHNtYWxsIGJhdGNoIHBvcC11cC4gQXJ0aXNhbiBoZWxsIG9mIGhhbW1vY2ssIGJlc3Bva2UgdHdlZSBhZiBncmVlbiBqdWljZS4gQ3J1Y2lmaXggbm9ybWNvcmUgY2h1cmNoLWtleSB3aWxsaWFtc2J1cmcgcXVpbm9hIHNyaXJhY2hhIHBvcnRsYW5kIGJsdWUgYm90dGxlIGlQaG9uZSBjaGFydHJldXNlIHRhY29zLiBCaWN5Y2xlIHJpZ2h0cyBkZWVwIHYgZm91ciBsb2tvIGJlc3Bva2Ugc21hbGwgYmF0Y2ggc3R1bXB0b3duIHNhbHZpYSB2ZXhpbGxvbG9naXN0IG5leHQgbGV2ZWwgZmluZ2Vyc3RhY2hlIGNvcm5ob2xlIHN1Y2N1bGVudHMuIFJldHJvIDgtYml0IDkwJ3MgY2hpbGx3YXZlLlxuXG4jIyBMb2Nhdm9yZSB0dW1ibHIgYXV0aGVudGljXG5cbk9mZmFsIHBvcnRsYW5kIHJldHJvLiBQb2sgcG9rIGNsb3VkIGJyZWFkIGxpdGVyYWxseSBpbnRlbGxpZ2VudHNpYSB0YWl5YWtpIHZpcmFsIHZpbnlsIGtvbWJ1Y2hhLiBEaXNydXB0IHNjaGxpdHogbHVtYmVyc2V4dWFsIGVubnVpIGNoaWEgY3JvbnV0IDkwJ3MuIEVjaG8gcGFyayBQQlImQiBtaWdhcyByYXcgZGVuaW0uIE1hcmZhIGJsdWUgYm90dGxlIG1pY3JvZG9zaW5nIHN0cmVldCBhcnQgdGh1bmRlcmNhdHMsIGdsb3NzaWVyIHN1c3RhaW5hYmxlIGZhbSBjb2xvcmluZyBib29rIHl1Y2NpZSB3YWlzdGNvYXQgYmljeWNsZSByaWdodHMgcGludGVyZXN0IGZhbm55IHBhY2suIEZpbmdlcnN0YWNoZSBzd2FnIGZvdXIgZG9sbGFyIHRvYXN0IGRyaW5raW5nIHZpbmVnYXIgdmV4aWxsb2xvZ2lzdCwgZ29kYXJkIGhhbW1vY2sgYmVzcG9rZSBoZWx2ZXRpY2EgZm9vZCB0cnVjayByYW1wcy4gMyB3b2xmIG1vb24gbWFyZmEgbmFyd2hhbCB0cnVzdCBmdW5kIGdyZWVuIGp1aWNlIG11bWJsZWNvcmUgcXVpbm9hIHRpbGRlLiBJY2VsYW5kIGZvdXIgbG9rbyBza2F0ZWJvYXJkIGRpcmVjdCB0cmFkZSBrb21idWNoYSB2aXJhbCBsdW1iZXJzZXh1YWwgcGlja2xlZCBtZWdnaW5ncyBmYW0ga25hdXNnYWFyZCB0b3RlIGJhZyB3aGF0ZXZlciBjaGlhIGdlbnRyaWZ5LiBKaWFuYmluZyBzaGFiYnkgY2hpYyB2ZW5tbyBkcmVhbWNhdGNoZXIsIDgtYml0IG1hc3RlciBjbGVhbnNlIHBvcC11cC4gRWRpc29uIGJ1bGIgdGh1bmRlcmNhdHMgc3RyZWV0IGFydCBkaXN0aWxsZXJ5IGJsdWUgYm90dGxlIG1peHRhcGUgdGJoIHlvdSBwcm9iYWJseSBoYXZlbid0IGhlYXJkIG9mIHRoZW0gcm9vZiBwYXJ0eSBjaGlhIHRpbGRlIG11bWJsZWNvcmUgYmxvZyBjbG91ZCBicmVhZCBtbGtzaGsuIEFpciBwbGFudCBpY2VsYW5kIG1lZ2dpbmdzIHNoYWJieSBjaGljIGx1bWJlcnNleHVhbCBsZWdnaW5ncy4gQ3JhZnQgYmVlciBsby1maSBzdHJlZXQgYXJ0IGdvZGFyZCBzZWl0YW4gcG9rZS4gQWN0aXZhdGVkIGNoYXJjb2FsIHZpcmFsIHR3ZWUsIHBpdGNoZm9yayBwb3J0bGFuZCB0aHVuZGVyY2F0cyBYT1hPIGZhbm55IHBhY2sgdW1hbWkuIE1pZ2FzIGJlYXJkIFlPTE8gdWdoIHBvbGFyb2lkIHVtYW1pLCBseWZ0IGhlbGwgb2YgaGVpcmxvb20gcmFtcHMgc2FsdmlhIHJlYWR5bWFkZS5cblxuIyMjIE1hcmZhIG1hc3RlciBjbGVhbnNlXG5cblNlaXRhbiwgcG9yayBiZWxseSBiZWZvcmUgdGhleSBzb2xkIG91dCB2ZXhpbGxvbG9naXN0IGV0c3kgdmljZSBicnVuY2ggaG90IGNoaWNrZW4gWE9YTyBtZWdnaW5ncyBncmVlbiBqdWljZSBzd2FnIG11c3RhY2hlLiBUd2VlIGF1c3RpbiBtZWggcXVpbm9hIHBhbG8gc2FudG8gdG91c2xlZCBrb21idWNoYSB0YXhpZGVybXkgcG9sYXJvaWQgY2hhbWJyYXkgcG9yayBiZWxseSBldGhpY2FsIG1hc3RlciBjbGVhbnNlIGthbGUgY2hpcHMuIEFjdGl2YXRlZCBjaGFyY29hbCByZWFkeW1hZGUgZ2xvc3NpZXIgdHVtZXJpYyBiaWN5Y2xlIHJpZ2h0cyBvY2N1cHkgY3JvbnV0IGhvb2RpZS4gTmV1dHJhIHRyeS1oYXJkIG9mZmFsIGV0aGljYWwgbWFuIGJyYWlkIHBvayBwb2sgdmljZSBZT0xPIHBvdXRpbmUgZm9vZCB0cnVjayBjcnVjaWZpeC4gQ3JvbnV0IGlQaG9uZSBwb3JrIGJlbGx5LCB0d2VlIGJhbmggbWkgZm91ciBkb2xsYXIgdG9hc3QgY3JhZnQgYmVlciBjaGlhIHNhbHZpYS4gTGV0dGVycHJlc3MgZ2FzdHJvcHViIHNlbGZpZXMgY2FyZGlnYW4gZm91ciBsb2tvIGhlYWx0aCBnb3RoIGNsaWNoZSByb29mIHBhcnR5IHJlYWR5bWFkZS4gT2ZmYWwgc3F1aWQga29tYnVjaGEgZGlzcnVwdCBQQlImQi4gRml4aWUgdWdoIHRheGlkZXJteSBhZXN0aGV0aWMgd2lsbGlhbXNidXJnLCBwb3JrIGJlbGx5IHRhdHRvb2VkIGplYW4gc2hvcnRzIGx1bWJlcnNleHVhbCBzbWFsbCBiYXRjaC4gSGVhbHRoIGdvdGggdmV4aWxsb2xvZ2lzdCBsZXR0ZXJwcmVzcyBza2F0ZWJvYXJkIGtvbWJ1Y2hhICsxIHNlbGZpZXMgcG9rZSBiZWFyZCB2YXBlIHNxdWlkIHRhY29zIG5ldXRyYSBldHN5LiBIZWlybG9vbSBzbmFja3dhdmUgZHJpbmtpbmcgdmluZWdhciBuZXh0IGxldmVsLiBDaGFtYnJheSBzZWx2YWdlIHZpcmFsIGFjdHVhbGx5IHJlYWR5bWFkZSB3YXlmYXJlcnMgamVhbiBzaG9ydHMuXG5cbiMjIyMgUGlja2xlZCBHb2RhcmQgT2ZmYWxcblxuUGxhaWQgYmFuam8gbGlzdGljbGUgc2VsdmFnZSBpUGhvbmUuIEFmZm9nYXRvIHNlbHZhZ2UgdGF0dG9vZWQgcmVhZHltYWRlIGNlbGlhYyBESVkuIFN0dW1wdG93biBidXRjaGVyIGdsb3NzaWVyIHRhY29zLiBEZWVwIHYgdGF0dG9vZWQgYnJ1bmNoIHBpY2tsZWQgY3JheSBjcnVjaWZpeCBmb3VyIGxva28uIFN1Y2N1bGVudHMgZnJlZWdhbiBwb3JrIGJlbGx5IG9mZmFsIHRpbGRlLCBhZGFwdG9nZW4gY2xvdWQgYnJlYWQuIE1lZGl0YXRpb24gY29ybmhvbGUgYWZmb2dhdG8gc3RyZWV0IGFydC4gQWYgc3JpcmFjaGEgcXVpbm9hIGJydW5jaCBkcmlua2luZyB2aW5lZ2FyLCBzdWJ3YXkgdGlsZSB2YXBlIHBvdXRpbmUgdGFpeWFraSBmaW5nZXJzdGFjaGUgcmF3IGRlbmltIGNhcmRpZ2FuIHRiaCBmaXhpZSBsb21vLiBQb2sgcG9rIGNodXJjaC1rZXkgY3JvbnV0LCBwaG90byBib290aCBzYXJ0b3JpYWwgYnV0Y2hlciBnYXN0cm9wdWIgaG90IGNoaWNrZW4gaWNlbGFuZC4gTG9jYXZvcmUgdmFwZSBwaW50ZXJlc3QsIG1lZ2dpbmdzIGFzeW1tZXRyaWNhbCBwb2sgcG9rIGxldHRlcnByZXNzIHBvcmsgYmVsbHkgaGVsbGEgZmluZ2Vyc3RhY2hlLiBTdXN0YWluYWJsZSBsaXRlcmFsbHkgbWVkaXRhdGlvbiBjb2xkLXByZXNzZWQgd2hhdGV2ZXIgZ2xvc3NpZXIgYnVzaHdpY2sgcXVpbm9hIGZvb2QgdHJ1Y2sgYnJ1bmNoIGV0c3kgY3JheS4gQmVmb3JlIHRoZXkgc29sZCBvdXQgY29sZC1wcmVzc2VkIGJ1dGNoZXIsIHNxdWlkIHBpdGNoZm9yayBiaW9kaWVzZWwgbXVtYmxlY29yZSB5dWNjaWUgY29sb3JpbmcgYm9vayBzZW1pb3RpY3MgZ2VudHJpZnkuIEFjdHVhbGx5IGNvcm5ob2xlIHRhaXlha2kga2VmZml5ZWggYXJ0aXNhbiB0cnktaGFyZCBzZWl0YW4sIGxvLWZpIHJlYWR5bWFkZSBwaG90byBib290aCBtdXN0YWNoZSBjcm9udXQuIEdvY2h1amFuZyB0dW1lcmljIGJpb2RpZXNlbCBzY2VuZXN0ZXIgZm9yYWdlLlxuXG4jIyMjIFRheGlkZXJteSBCZXNwb2tlIE1sa3Noa1xuXG5EaXNydXB0IHF1aW5vYSBjbGljaGUuICpQb2xhcm9pZCogdW5pY29ybiBzZWxmaWVzLCBiZXNwb2tlIHNoYWJieSBjaGljIGplYW4gc2hvcnRzIGhlaXJsb29tIHlyIHN0dW1wdG93biBmYW0uIExldHRlcnByZXNzIGtpbmZvbGsgYXN5bW1ldHJpY2FsIHRhaXlha2kgaGVhbHRoIGdvdGggMyB3b2xmIG1vb24gY3JlZCBoZWx2ZXRpY2EuIE1hbiBicmFpZCBjaGljaGFycm9uZXMgdmVubW8sIHN5bnRoIGtvbWJ1Y2hhICsxIHBvc3QtaXJvbmljIHNxdWlkIG1lZ2dpbmdzIGhlbGwgb2Ygc3VjY3VsZW50cyBzZWxmaWVzIHR1bWVyaWMgc3JpcmFjaGEgcGlja2xlZC4gVW5pY29ybiBzdHJlZXQgYXJ0IGthbGUgY2hpcHMsIHBob3RvIGJvb3RoIGV0c3kgaG90IGNoaWNrZW4gcG91ci1vdmVyIHR3ZWUgaGVhbHRoIGdvdGguIFZlZ2FuIHNjZW5lc3RlciBiZWZvcmUgdGhleSBzb2xkIG91dCwgY2hpbGx3YXZlIGtvZ2kgdHJ1c3QgZnVuZCBsb21vIGZyZWVnYW4gc3JpcmFjaGEuIFF1aW5vYSBtdW1ibGVjb3JlIGNydWNpZml4IHR1bWJsciBtbGtzaGsgYnV0Y2hlciBnbG9zc2llciB3aWxsaWFtc2J1cmcgcG9zdC1pcm9uaWMgdGFpeWFraSBsaXRlcmFsbHkgaG90IGNoaWNrZW4uIFBhYnN0IHBob3RvIGJvb3RoIGNodXJjaC1rZXkgdHdlZSBuZXh0IGxldmVsIHRpbGRlIHZpY2UuIFR3ZWUgYnV0Y2hlciBjcmF5IGJlZm9yZSB0aGV5IHNvbGQgb3V0IG9jY3VweSwgYmx1ZSBib3R0bGUgYmFuam8gc3VzdGFpbmFibGUgRElZIGRpc3RpbGxlcnkga29naSB2YXBlIGFjdHVhbGx5LiBUcnktaGFyZCBwb3AtdXAgY3J1Y2lmaXgsIHRodW5kZXJjYXRzIGNoaWxsd2F2ZSByYWNsZXR0ZSBzaGFtYW4gbWlnYXMgb3JnYW5pYy4gV2hhdGV2ZXIgY2hpbGx3YXZlIGZhbSB3b2tlIGtlZmZpeWVoIHZhcG9yd2FyZSBmYXNoaW9uIGF4ZSB2aXJhbCBzaGFtYW4uIENoYXJ0cmV1c2UgcGl0Y2hmb3JrIGtpY2tzdGFydGVyIHNlaXRhbiBsaXRlcmFsbHkgYmFuaCBtaS4gUmFtcHMgc3Vid2F5IHRpbGUgYnJ1bmNoLCBpbnRlbGxpZ2VudHNpYSBzY2VuZXN0ZXIgb2ZmYWwgdmV4aWxsb2xvZ2lzdC4gQ2h1cmNoLWtleSBZT0xPIHR1bWVyaWMgZmFzaGlvbiBheGUgZmFubnkgcGFjay5cblxuIyMjIEljZWxhbmQgbXVtYmxlY29yZSBub3JtY29yZVxuXG5PcmdhbmljLCBwcmlzbSBzdWNjdWxlbnRzIGJhbmpvLiBLbmF1c2dhYXJkIHZleGlsbG9sb2dpc3QgaGVsbGEsIGJlc3Bva2UgdmljZSBsZWdnaW5ncyBiZWZvcmUgdGhleSBzb2xkIG91dCBtYW4gYnVuIHJvb2YgcGFydHkgdGlsZGUgY2hpbGx3YXZlIGJhbmggbWkgOC1iaXQuIFBob3RvIGJvb3RoIGZpeGllIHJvb2YgcGFydHkgcG9zdC1pcm9uaWMgdGFpeWFraSBzZWx2YWdlLCBiaXR0ZXJzIGZhbSB0YXhpZGVybXkgcG9yayBiZWxseSBwcmlzbSBzd2FnLiBPY2N1cHkgY2xvdWQgYnJlYWQgYXVzdGluIGhlbGwgb2Ygc2VsdmFnZSBpY2VsYW5kIGxhIGNyb2l4IHNsb3ctY2FyYiBlZGlzb24gYnVsYiBiaWN5Y2xlIHJpZ2h0cyBwbGFpZCB0eXBld3JpdGVyIGNvcHBlciBtdWcgbm9ybWNvcmUuIEdsb3NzaWVyIHByaXNtIGthbGUgY2hpcHMgbmV4dCBsZXZlbCBkcmlua2luZyB2aW5lZ2FyIHR5cGV3cml0ZXIgYmVzcG9rZSBzY2hsaXR6IHN1YndheSB0aWxlIG1hbiBicmFpZCBvcmdhbmljIGppYW5iaW5nIGtpbmZvbGsgc3JpcmFjaGEuIElQaG9uZSBnZW50cmlmeSB5dWNjaWUsIGtleXRhciBjZWxpYWMgYnJ1bmNoIGdvY2h1amFuZyB2ZW5tby4gU3VjY3VsZW50cyBtZWdnaW5ncyB0YmggcHVnIGRyZWFtY2F0Y2hlci4gU3ludGggaHVtYmxlYnJhZyB0YXR0b29lZCB0dW1lcmljLCBwaXRjaGZvcmsgbGl2ZS1lZGdlIHBhbGVvIHBpY2tsZWQgZW5hbWVsIHBpbiBQQlImQiBjcm9udXQgdmVubW8gZ2x1dGVuLWZyZWUgZmxleGl0YXJpYW4uIEFlc3RoZXRpYyBESVkgbWl4dGFwZSBicnVuY2guIFdoYXRldmVyIGZyYW56ZW4gbG9tbywgcG9yayBiZWxseSBmb3JhZ2UgY2hpYSB2aXJhbCBzZW1pb3RpY3MgYWYgY3JheSBmb29kIHRydWNrIHBhbGVvIG1hbiBicmFpZCBjYXJkaWdhbiBwb3N0LWlyb25pYy4gUG9rZSBjcmFmdCBiZWVyIHNxdWlkIGthbGUgY2hpcHMgcGludGVyZXN0LiBDaGljaGFycm9uZXMgaGVsbGEgbmV4dCBsZXZlbCBmYXNoaW9uIGF4ZSwgZmxhbm5lbCA5MCdzIHBhbG8gc2FudG8gZnJhbnplbiBlbm51aSB2ZXhpbGxvbG9naXN0IHRydWZmYXV0IGFzeW1tZXRyaWNhbCBsby1maSBiZWFyZC4gOC1iaXQgc2NobGl0eiBoZWFsdGggZ290aCBoZWlybG9vbSBhZiBhcnQgcGFydHkuXG5cbkFkYXB0b2dlbiBqZWFuIHNob3J0cyBmcmFuemVuIGxvY2F2b3JlIDkwJ3MgYmxvZyBiaXR0ZXJzIGVubnVpIGVkaXNvbiBidWxiIGxpc3RpY2xlIHBpdGNoZm9yayB2aXJhbCBjb3JuaG9sZSBrZXl0YXIuIEdhc3Ryb3B1YiBpbnRlbGxpZ2VudHNpYSBmaW5nZXJzdGFjaGUsIGZvdXIgbG9rbyBwb3N0LWlyb25pYyBzdHVtcHRvd24gY2xvdWQgYnJlYWQuIE1hc3RlciBjbGVhbnNlIGNyYWZ0IGJlZXIgaGVpcmxvb20gaG90IGNoaWNrZW4sIHVnaCBsaXRlcmFsbHkga2VmZml5ZWggYWN0aXZhdGVkIGNoYXJjb2FsIHJhbXBzIGhleGFnb24gd2lsbGlhbXNidXJnIGNhcmRpZ2FuIHZpbnlsIGthbGUgY2hpcHMgZm9vZCB0cnVjay4gR3JlZW4ganVpY2UgYmljeWNsZSByaWdodHMgaGVhbHRoIGdvdGggdmVnYW4gcG9wLXVwIGJlZm9yZSB0aGV5IHNvbGQgb3V0LiBQYWJzdCBoYXNodGFnIHZpcmFsIGNyZWQsIHNuYWNrd2F2ZSBtaWNyb2Rvc2luZyBwaXRjaGZvcmsgcmFjbGV0dGUgZ2xvc3NpZXIgbWFuIGJyYWlkIGtleXRhciBjZWxpYWMgcmVhZHltYWRlLiBJY2VsYW5kIGNhcmRpZ2FuIHNlaXRhbiwgcmV0cm8gZW5udWkgY3JlZCBlbmFtZWwgcGluIGZvcmFnZSB2aWNlIGJlZm9yZSB0aGV5IHNvbGQgb3V0IGZvdXIgbG9rby4gRml4aWUgY3J1Y2lmaXggZ29jaHVqYW5nIGJlc3Bva2UgeXIuIElQaG9uZSBoZWFsdGggZ290aCBjcnVjaWZpeCBESVkgcHVnIGtpbmZvbGsuIFB1dCBhIGJpcmQgb24gaXQgc3VzdGFpbmFibGUgc25hY2t3YXZlIGxpdmUtZWRnZSBuYXJ3aGFsIGZhbSBzYWx2aWEgYXVzdGluLiBXYWlzdGNvYXQgcGlja2xlZCBvcmdhbmljLCBmb29kIHRydWNrIHNyaXJhY2hhIHlvdSBwcm9iYWJseSBoYXZlbid0IGhlYXJkIG9mIHRoZW0gY3JhZnQgYmVlci4gRWRpc29uIGJ1bGIgc2VsdmFnZSBqaWFuYmluZyB0aHVuZGVyY2F0cyBzdWJ3YXkgdGlsZSBldHN5LiBDaGljaGFycm9uZXMgc2luZ2xlLW9yaWdpbiBjb2ZmZWUgYWVzdGhldGljIGJhbmpvIDgtYml0LlxuXG4jIyBCcm9va2x5biBBY3RpdmF0ZWQgQ2hhcmNvYWxcblxuRm91ciBkb2xsYXIgdG9hc3QgbG9jYXZvcmUgRElZIGVjaG8gcGFyayBzZW1pb3RpY3MgY3JhZnQgYmVlciBoYXNodGFnIHRhdHRvb2VkLiBQaW50ZXJlc3QgbWxrc2hrIHZpcmFsIGhlbHZldGljYSwgdWdoIGNoaWxsd2F2ZSBjb2xkLXByZXNzZWQgbXVzdGFjaGUgbGVnZ2luZ3MgZmFubnkgcGFjayBZT0xPIHZhcGUgc3ludGggcmVhZHltYWRlIGJsdWUgYm90dGxlLiBGb3VyIGxva28gZ3JlZW4ganVpY2UgYmlvZGllc2VsIGJyb29rbHluIHBpY2tsZWQgdmlyYWwuIFJhbXBzIGppYW5iaW5nIHJlYWR5bWFkZSwgc2FsdmlhIGFmIHNoYW1hbiBjaGFtYnJheSBtYW4gYnJhaWQgY29ybmhvbGUgd2Fpc3Rjb2F0IGNyZWQuIFRhdHRvb2VkIHNlbWlvdGljcyBhZiB3YXlmYXJlcnMsIGhhbW1vY2sgeXIgbGVnZ2luZ3MgdGFjb3MgbGl2ZS1lZGdlIGJlZm9yZSB0aGV5IHNvbGQgb3V0IGF1dGhlbnRpYyBiZXNwb2tlIGFjdHVhbGx5IHVuaWNvcm4uIFN0cmVldCBhcnQgbWFzdGVyIGNsZWFuc2UgaGVsbCBvZiBjaGFydHJldXNlIHBpY2tsZWQgcmFjbGV0dGUgc2thdGVib2FyZCwgY3JlZCBldmVyeWRheSBjYXJyeSB0cnVzdCBmdW5kLiBPY2N1cHkgUEJSJkIgdHdlZSBjaGlhIHN1Y2N1bGVudHMgcmVhZHltYWRlIGxpdGVyYWxseSBuZXV0cmEgcmF3IGRlbmltLiBDaHVyY2gta2V5IGtuYXVzZ2FhcmQgcGludGVyZXN0IGppYW5iaW5nIFBCUiZCIGxpc3RpY2xlIHNhcnRvcmlhbCB3YXlmYXJlcnMgYmxvZyBkaXNydXB0IHBvdXRpbmUgYWVzdGhldGljIGJpdHRlcnMuIEhlbGwgb2YgYnV0Y2hlciB3b2xmLCBhc3ltbWV0cmljYWwgaGVhbHRoIGdvdGggY2xvdWQgYnJlYWQgZGlzcnVwdCBzYXJ0b3JpYWwuIFNpbmdsZS1vcmlnaW4gY29mZmVlIHBpdGNoZm9yayBoYW1tb2NrIHBpY2tsZWQgc3R1bXB0b3duIGZsYW5uZWwsIGNhcmRpZ2FuIFBCUiZCIHBvbGFyb2lkIGVuYW1lbCBwaW4gdGlsZGUuIFl1Y2NpZSBtYXN0ZXIgY2xlYW5zZSBoZWx2ZXRpY2EgZWRpc29uIGJ1bGIgZGlzcnVwdCBtaWNyb2Rvc2luZyB0eXBld3JpdGVyIHNlbHZhZ2UsIHRheGlkZXJteSBlY2hvIHBhcmsgc3ludGggY3JhZnQgYmVlciAzIHdvbGYgbW9vbiArMSB3b2tlLiBTd2FnIGNodXJjaC1rZXkgc3R1bXB0b3duLCBjb3BwZXIgbXVnIHBvcnRsYW5kIGV0aGljYWwga2FsZSBjaGlwcyBiZWFyZC4gOC1iaXQgcG9rIHBvayBtYW4gYnVuIGJyb29rbHluLCBtaWdhcyB5dWNjaWUgY2hpbGx3YXZlIHRydXN0IGZ1bmQuIERyZWFtY2F0Y2hlciBzdXN0YWluYWJsZSBzY2hsaXR6IGRpcmVjdCB0cmFkZSBjZWxpYWMgc2hhbWFuIGtuYXVzZ2FhcmQgYmljeWNsZSByaWdodHMgZmFtIHBsYWlkIHN1YndheSB0aWxlIG1hbiBidW4uIE1pY3JvZG9zaW5nIGFlc3RoZXRpYyBiZXNwb2tlIHdoYXRldmVyIGhhc2h0YWcgZm9yYWdlLCBYT1hPIHBhbGVvLlxuXG5ZdWNjaWUgcmV0cm8ga2lja3N0YXJ0ZXIgZWRpc29uIGJ1bGIgdGF0dG9vZWQgZnJhbnplbiBuZXV0cmEsIHlyIGhleGFnb24gZW5hbWVsIHBpbiBkaXN0aWxsZXJ5IHNjZW5lc3RlciArMSBhdXRoZW50aWMuIExvLWZpIHNxdWlkIHdhaXN0Y29hdCB2ZXhpbGxvbG9naXN0IGFydGlzYW4sIHBsYWlkIHBva2UgdmljZSBodW1ibGVicmFnIGtpdHNjaCBzbG93LWNhcmIgaWNlbGFuZC4gRmFubnkgcGFjayBoZWxsYSBtdXN0YWNoZSBhZXN0aGV0aWMuIE9jY3VweSBldHN5IGplYW4gc2hvcnRzIHRodW5kZXJjYXRzIGFlc3RoZXRpYyBhaXIgcGxhbnQgY2hpY2hhcnJvbmVzIFlPTE8gZmFzaGlvbiBheGUgZ2xvc3NpZXIgaWNlbGFuZCB0eXBld3JpdGVyIHBvcC11cC4gTmV1dHJhIHVuaWNvcm4gWE9YTyBQQlImQiBwb2tlIHN0dW1wdG93biBjaGlsbHdhdmUuIFZhcG9yd2FyZSBzYXJ0b3JpYWwgYmVzcG9rZSBzaGFiYnkgY2hpYyBzZWl0YW4gdGlsZGUuIFNrYXRlYm9hcmQgcG9rIHBvayBhZGFwdG9nZW4gc3F1aWQgc2hvcmVkaXRjaC4gRHJpbmtpbmcgdmluZWdhciBzdWNjdWxlbnRzIGNvcm5ob2xlIGhleGFnb24gaVBob25lIGFkYXB0b2dlbiBmaW5nZXJzdGFjaGUgd2hhdGV2ZXIgc3ludGggdGh1bmRlcmNhdHMgbGlzdGljbGUgbWl4dGFwZSBoZWlybG9vbSBtZXNzZW5nZXIgYmFnIGJsdWUgYm90dGxlLiBEaXN0aWxsZXJ5IGhvdCBjaGlja2VuIGtpY2tzdGFydGVyIG5ldXRyYSwgcGlja2xlZCBkaXNydXB0IG1lZ2dpbmdzIGFlc3RoZXRpYyBjcmFmdCBiZWVyIG5hcndoYWwgbXVzdGFjaGUgdGlsZGUgc2VsZmllcyBmb3JhZ2UuIEppYW5iaW5nIHNhcnRvcmlhbCBwb3V0aW5lIG1lZGl0YXRpb24gd29sZiwgZ2FzdHJvcHViIHBvcnRsYW5kIGh1bWJsZWJyYWcuIFlPTE8gZm91ciBkb2xsYXIgdG9hc3QgbXVzdGFjaGUgd29sZiBjb3JuaG9sZSBiYW5oIG1pIG1hcmZhIHNhcnRvcmlhbCB0b3VzbGVkIGJhbmpvIG1lZGl0YXRpb24uIENvbGQtcHJlc3NlZCBiaWN5Y2xlIHJpZ2h0cyBqZWFuIHNob3J0cyBkaXN0aWxsZXJ5LCBwb3VyLW92ZXIgcG9rZSB5ciBmaXhpZS5cblxuUGludGVyZXN0IHRodW5kZXJjYXRzIHlvdSBwcm9iYWJseSBoYXZlbid0IGhlYXJkIG9mIHRoZW0sIGRyaW5raW5nIHZpbmVnYXIgbGl2ZS1lZGdlIGhlYWx0aCBnb3RoIGJpdHRlcnMgcmFjbGV0dGUgbWlnYXMgOC1iaXQgY3JhZnQgYmVlci4gUmFtcHMgdGFpeWFraSBYT1hPIGFydCBwYXJ0eSB1bWFtaSBvY2N1cHkgZXRzeSBnYXN0cm9wdWIgYXV0aGVudGljIGZyYW56ZW4gaHVtYmxlYnJhZyBjaGlhIHF1aW5vYSBzZWx2YWdlLiBTdHJlZXQgYXJ0IGdvZGFyZCBjbG91ZCBicmVhZCwgZmFzaGlvbiBheGUga2luZm9sayBkaXNydXB0IGVkaXNvbiBidWxiIGFpciBwbGFudCBjbGljaGUgaGVsbCBvZiBmYW0gbGEgY3JvaXguIFF1aW5vYSBmYXJtLXRvLXRhYmxlIHRheGlkZXJteSBnb2NodWphbmcgd2lsbGlhbXNidXJnIGFjdGl2YXRlZCBjaGFyY29hbCBuYXJ3aGFsIGtpY2tzdGFydGVyIHNoYW1hbiB2aW55bCB0eXBld3JpdGVyIGtpdHNjaC4gVmV4aWxsb2xvZ2lzdCBtdW1ibGVjb3JlIHJhdyBkZW5pbSBjbG91ZCBicmVhZCB0b3RlIGJhZywgc21hbGwgYmF0Y2ggbGV0dGVycHJlc3MgaXJvbnkgZ2VudHJpZnkgWU9MTyBwb3N0LWlyb25pYyB1bWFtaSBpY2VsYW5kLiBMaXZlLWVkZ2UgcmFtcHMgYWlyIHBsYW50IHJldHJvIGtvbWJ1Y2hhLiBNYW4gYnJhaWQgcG9sYXJvaWQgZ29jaHVqYW5nLCBldHN5IHdhaXN0Y29hdCBzdWJ3YXkgdGlsZSByb29mIHBhcnR5IHNoYW1hbiB0dW1lcmljIGludGVsbGlnZW50c2lhIHBvdXRpbmUgcmFjbGV0dGUgY29sb3JpbmcgYm9vayBwb3AtdXAgd2hhdGV2ZXIuIEZyZWVnYW4gZ2FzdHJvcHViIGVjaG8gcGFyayBicnVuY2gsIGxldHRlcnByZXNzIHJvb2YgcGFydHkgc3ludGggbGlzdGljbGUgcmFjbGV0dGUgbm9ybWNvcmUga2V5dGFyIHZhcG9yd2FyZSBuZXV0cmEgcHVnLiBNaWNyb2Rvc2luZyBkaXNydXB0IHJldHJvIDkwJ3MuIEhlaXJsb29tIGZvb2QgdHJ1Y2sgc2NobGl0eiBzbmFja3dhdmUuIEFmIGNoYXJ0cmV1c2Ugb2ZmYWwgZ2xvc3NpZXIgY3JvbnV0IGppYW5iaW5nIHRodW5kZXJjYXRzIHNoYWJieSBjaGljIGJpdHRlcnMgbWFuIGJyYWlkIGZyZWVnYW4gYmVmb3JlIHRoZXkgc29sZCBvdXQga25hdXNnYWFyZCBwb2xhcm9pZCBpY2VsYW5kLiBWZWdhbiB0cnVmZmF1dCBiaXR0ZXJzIHdoYXRldmVyIGtvZ2kuIEFjdGl2YXRlZCBjaGFyY29hbCBpcm9ueSBicm9va2x5biBmYXNoaW9uIGF4ZSBsZXR0ZXJwcmVzcyBmb3JhZ2UgaHVtYmxlYnJhZyBZT0xPLiBIZWxsIG9mIHRvZnUgZGlyZWN0IHRyYWRlLCBhZXN0aGV0aWMga2V5dGFyIHNuYWNrd2F2ZSBQQlImQiBjbG91ZCBicmVhZCBhc3ltbWV0cmljYWwgeXVjY2llIHN1Y2N1bGVudHMgbGV0dGVycHJlc3MgaW50ZWxsaWdlbnRzaWEuIFNyaXJhY2hhIHBpdGNoZm9yayBrYWxlIGNoaXBzLCBnbHV0ZW4tZnJlZSBiaXR0ZXJzIHBob3RvIGJvb3RoIHNlaXRhbiBseWZ0IHJlYWR5bWFkZSBzYWx2aWEgY3JlZCBkcmVhbWNhdGNoZXIgd29sZiBiZXNwb2tlIGJ1c2h3aWNrLlxuXG5HbG9zc2llciBjbG91ZCBicmVhZCB0YWNvcywgdHdlZSBqZWFuIHNob3J0cyB2YXBlIHdoYXRldmVyIGxpdGVyYWxseSBsb2Nhdm9yZSB3b2tlIGRyZWFtY2F0Y2hlciBzaGFiYnkgY2hpYyBuYXJ3aGFsLiBNZWggdW1hbWkgYml0dGVycywgdmljZSBtZXNzZW5nZXIgYmFnIHNpbmdsZS1vcmlnaW4gY29mZmVlIHZleGlsbG9sb2dpc3QgcG9sYXJvaWQgcGlja2xlZCB0YWl5YWtpLiBLZWZmaXllaCBzaG9yZWRpdGNoIHB1ZywgWE9YTyB2ZXhpbGxvbG9naXN0IHZpY2UgdHlwZXdyaXRlciBraWNrc3RhcnRlciBnYXN0cm9wdWIgdHVtYmxyIGZhcm0tdG8tdGFibGUgZW5hbWVsIHBpbiBmYW0gcHV0IGEgYmlyZCBvbiBpdCBsZWdnaW5ncy4gU2FsdmlhIHNuYWNrd2F2ZSBza2F0ZWJvYXJkIHZhcG9yd2FyZSwgZmluZ2Vyc3RhY2hlIG1hcmZhIGZvdXIgbG9rbyBpbnRlbGxpZ2VudHNpYSBkaXN0aWxsZXJ5IGdlbnRyaWZ5IHZleGlsbG9sb2dpc3QgamVhbiBzaG9ydHMgY2h1cmNoLWtleSBnb2RhcmQgdHVtZXJpYy4gV2F5ZmFyZXJzIG1hcmZhIHRyeS1oYXJkLCBhY3R1YWxseSBoYXNodGFnIGdhc3Ryb3B1YiBwb3JrIGJlbGx5IGJ1dGNoZXIgZGVlcCB2IHBva2Ugc2xvdy1jYXJiIHZhcG9yd2FyZSB2ZWdhbi4gTG9jYXZvcmUgYnVzaHdpY2sgYWN0aXZhdGVkIGNoYXJjb2FsIG1pZ2FzIHJvb2YgcGFydHkuIEZvdXIgbG9rbyBhdXN0aW4gbGl2ZS1lZGdlIGppYW5iaW5nIG1pZ2FzIHNxdWlkLiBSYWNsZXR0ZSBwb2sgcG9rIG9yZ2FuaWMgbG8tZmkgZ2xvc3NpZXIsIGlyb255IHVnaCBrb2dpIHJhbXBzIHlyIGNoaWEgaHVtYmxlYnJhZyBob3QgY2hpY2tlbiBzZWxmaWVzLiArMSBzaW5nbGUtb3JpZ2luIGNvZmZlZSBYT1hPIGRpc3J1cHQgY29sb3JpbmcgYm9vayBwcmlzbSBhc3ltbWV0cmljYWwgcm9vZiBwYXJ0eSBvcmdhbmljLiBSZXRybyBnbG9zc2llciBzY2VuZXN0ZXIgc2VsZmllcyBkZWVwIHYgY2xpY2hlIHZlbm1vIERJWSBoZXhhZ29uIGV2ZXJ5ZGF5IGNhcnJ5IGJydW5jaCBsYSBjcm9peCBoZWx2ZXRpY2Egd2F5ZmFyZXJzLiBHYXN0cm9wdWIgYmFuaCBtaSBQQlImQiBoZXhhZ29uLCBwb2tlIGRpc3J1cHQgYXJ0aXNhbiByYWNsZXR0ZSBibG9nIGdsb3NzaWVyIGJsdWUgYm90dGxlIHBhbGVvIGNyb251dC4gUGxhaWQgY3JvbnV0IGtleXRhciBzY2hsaXR6IGxldHRlcnByZXNzIGljZWxhbmQgc21hbGwgYmF0Y2ggamlhbmJpbmcsIGdsb3NzaWVyIFhPWE8gc2VsZmllcyBzZWl0YW4gYmlvZGllc2VsIGZsYW5uZWwgaGVhbHRoIGdvdGguIENoaWNoYXJyb25lcyBtbGtzaGsgc21hbGwgYmF0Y2gsIGJyb29rbHluIG5ldXRyYSBtYW4gYnJhaWQgZmxhbm5lbC4gUG91ci1vdmVyIGJsb2cgaGV4YWdvbiwgY2hpY2hhcnJvbmVzIG5ldXRyYSB3b2tlIGFkYXB0b2dlbi4gQ2hpY2hhcnJvbmVzIGNvbG9yaW5nIGJvb2sgbWFuIGJ1biBnZW50cmlmeSBzY2hsaXR6IGdvZGFyZCB0aWxkZSBjb3BwZXIgbXVnIGhlbHZldGljYS5cblxuVGFpeWFraSByYWNsZXR0ZSBoZXhhZ29uLCB0dW1ibHIgcHV0IGEgYmlyZCBvbiBpdCBtaWNyb2Rvc2luZyBkZWVwIHYgOC1iaXQgZXRoaWNhbCBiYW5qbyBwYWxlbyBuZXh0IGxldmVsLiBCcm9va2x5biBicnVuY2ggZ29jaHVqYW5nLCB0aHVuZGVyY2F0cyBlZGlzb24gYnVsYiBtYXN0ZXIgY2xlYW5zZSB0d2VlLiBCZWZvcmUgdGhleSBzb2xkIG91dCBtZWRpdGF0aW9uIHN0dW1wdG93biBkZWVwIHYgeW91IHByb2JhYmx5IGhhdmVuJ3QgaGVhcmQgb2YgdGhlbSBmYXJtLXRvLXRhYmxlIGFmIGhlbGxhICsxIGNvcHBlciBtdWcgYmljeWNsZSByaWdodHMgdGF4aWRlcm15IG1lc3NlbmdlciBiYWcuIENyb251dCBlY2hvIHBhcmsgcXVpbm9hIGJhbmggbWkgc2VtaW90aWNzIGtleXRhci4gSXJvbnkgdGlsZGUgYnJ1bmNoIGZpeGllLiBLbmF1c2dhYXJkIHB1dCBhIGJpcmQgb24gaXQgc2NobGl0eiwgbHlmdCBwcmlzbSBkaXNydXB0IGZvb2QgdHJ1Y2sgcmV0cm8gZnJlZWdhbiBzdWJ3YXkgdGlsZSBwb2xhcm9pZC4gUXVpbm9hIGNoaWxsd2F2ZSBkaXNydXB0LCBtYXN0ZXIgY2xlYW5zZSBtZWdnaW5ncyBhZGFwdG9nZW4ga2luZm9sayBpY2VsYW5kLiBFdmVyeWRheSBjYXJyeSBjaGFydHJldXNlIHZhcGUgcHJpc20gbG8tZmkuIE1pY3JvZG9zaW5nIHRheGlkZXJteSBzYXJ0b3JpYWwgc3F1aWQgc2VsZmllcywgYml0dGVycyBraW5mb2xrLlxuXG5Ecmlua2luZyB2aW5lZ2FyIFlPTE8gc3dhZywgcGFic3QgY2FyZGlnYW4gOTAncyBvY2N1cHkgaGV4YWdvbiBwbGFpZCBzY2hsaXR6IHBva2UgaG90IGNoaWNrZW4gYmFuam8gdmFwZS4gRWRpc29uIGJ1bGIgaGVpcmxvb20gdmVubW8gc3VjY3VsZW50cywgdGlsZGUgc3Vid2F5IHRpbGUgY3J1Y2lmaXggc2thdGVib2FyZC4gVmFwZSBZT0xPIGFjdGl2YXRlZCBjaGFyY29hbCBjcmFmdCBiZWVyIGVubnVpIHNlaXRhbiBkaXN0aWxsZXJ5LiBCZXNwb2tlIGNvcHBlciBtdWcgdWdoLCBlZGlzb24gYnVsYiBjcmFmdCBiZWVyIGJhbmggbWkgaGFzaHRhZyB5dWNjaWUgY2FyZGlnYW4gdG91c2xlZCBwbGFpZCBraXRzY2ggaGFtbW9jayB0dW1lcmljLiBIZWxsIG9mIGplYW4gc2hvcnRzIG1hcmZhLCB5dWNjaWUgYmx1ZSBib3R0bGUgcHV0IGEgYmlyZCBvbiBpdCBqaWFuYmluZyBsYSBjcm9peC4gUGFsZW8gbWVnZ2luZ3MgZWNobyBwYXJrIGZyYW56ZW4gY29sZC1wcmVzc2VkIG11c3RhY2hlIGdhc3Ryb3B1YiBldGhpY2FsIGNlbGlhYyBwb3AtdXAgcHJpc20gZ29jaHVqYW5nLiBTYWx2aWEga2VmZml5ZWggY2hpbGx3YXZlIHRheGlkZXJteS4gRXRoaWNhbCBwaXRjaGZvcmsgdGlsZGUgY2xpY2hlIHBvbGFyb2lkIGJlYXJkLiBDb3BwZXIgbXVnIG5ldXRyYSBsdW1iZXJzZXh1YWwgYmlvZGllc2VsLCBlY2hvIHBhcmsgZml4aWUgYmx1ZSBib3R0bGUgY2FyZGlnYW4gaXJvbnkgcHV0IGEgYmlyZCBvbiBpdCBjcmFmdCBiZWVyIGFydGlzYW4gaGV4YWdvbi5gLFxuICB9LFxufTtcbklOSVRJQUxfU1RBVEUubW9kZWwuYW5ub3RhdGlvbnMgPSBkZWNvcmF0ZUFubm90YXRpb25zKFxuICBbXSxcbiAgSU5JVElBTF9TVEFURS51aS51c2VyXG4pO1xuXG4vKipcbiAqIFJlbmRlcnMgTWFya2Rvd24gc3RyaW5nIGFzIEhUTUwgdGFibGUgcm93cy4gRG9lcyBub3QgdG91Y2ggdGhlIGxpdmUgRE9NLiBcbiAqIFxuICogQHBhcmFtIHtzdHJpbmd9IG1kICAtIE1hcmtkb3duXG4gKiBAcmV0dXJucyB7RG9jdW1lbnRGcmFnbWVudH1cbiAqL1xuZnVuY3Rpb24gcmVuZGVyTWFya2Rvd24obWQsIGFubm90YXRpb25zID0gW10sIHByb2Nlc3NvcnMgPSBbXSkge1xuICBjb25zdCBmcmFnbWVudCA9IGRvY3VtZW50LmNyZWF0ZURvY3VtZW50RnJhZ21lbnQoKTtcbiAgaWYgKCFtZCkgcmV0dXJuIGZyYWdtZW50O1xuICBjb25zdCBsaW5lcyA9IG1kLnNwbGl0KC9cXG4vKTtcbiAgbGluZXMubWFwKChsaW5lLCBpbmRleCkgPT4ge1xuICAgIGNvbnN0IHJvdyA9IGRvY3VtZW50LmNyZWF0ZUVsZW1lbnQoJ3RyJyk7XG4gICAgcm93LmNsYXNzTGlzdC5hZGQoJ2xpbmUnKTtcbiAgICByb3cuZGF0YXNldC5saW5lID0gaW5kZXggKyAxO1xuICAgIHJvdy5pZCA9IGBMJHtpbmRleCArIDF9YDtcbiAgICBjb25zdCBudW0gPSBkb2N1bWVudC5jcmVhdGVFbGVtZW50KCd0ZCcpO1xuICAgIG51bS5jbGFzc0xpc3QuYWRkKCdsaW5lLW51bWJlcicpO1xuICAgIG51bS5kYXRhc2V0LmxpbmUgPSBpbmRleCArIDE7XG4gICAgcm93LmFwcGVuZENoaWxkKG51bSk7XG4gICAgY29uc3QgY29udGVudCA9IGRvY3VtZW50LmNyZWF0ZUVsZW1lbnQoJ3RkJyk7XG4gICAgY29udGVudC5jbGFzc0xpc3QuYWRkKCdjb250ZW50Jyk7XG5cbiAgICBjb25zdCBsaXN0TWF0Y2hlciA9IC9eKFxccyopKFxcKnxcXC18XFxkK1xcLnw+KSAvOyAvLyBtYXRjaGVzIGxpc3QgaXRlbXMgYW5kIHF1b3Rlc1xuICAgIGNvbnN0IG1hdGNoZXMgPSBsaW5lLm1hdGNoKGxpc3RNYXRjaGVyKTtcbiAgICBpZiAobWF0Y2hlcykge1xuICAgICAgY29uc3QgaW5kZW50ID0gbWF0Y2hlc1sxXS5sZW5ndGggKyBtYXRjaGVzWzJdLmxlbmd0aCArIDE7XG4gICAgICBjb250ZW50LnN0eWxlID0gYHBhZGRpbmctbGVmdDogJHtpbmRlbnR9Y2g7IHRleHQtaW5kZW50OiAtJHtpbmRlbnR9Y2g7YDtcbiAgICB9XG5cbiAgICBjb25zdCBoZWFkaW5nTWF0Y2hlciA9IC9eIysgLztcbiAgICBpZiAobGluZS5tYXRjaChoZWFkaW5nTWF0Y2hlcikpIHtcbiAgICAgIGNvbnRlbnQuY2xhc3NMaXN0LmFkZCgnaGVhZGluZycpO1xuICAgIH1cblxuICAgIGNvbnN0IHF1b3RlTWF0Y2hlciA9IC9ePisgLztcbiAgICBpZiAobGluZS5tYXRjaChxdW90ZU1hdGNoZXIpKSB7XG4gICAgICBjb250ZW50LmNsYXNzTGlzdC5hZGQoJ3F1b3RlJyk7XG4gICAgfVxuXG4gICAgY29uc3QgbWFya3VwID0gZG9jdW1lbnQuY3JlYXRlRG9jdW1lbnRGcmFnbWVudCgpO1xuICAgIG1hcmt1cC5hcHBlbmRDaGlsZChkb2N1bWVudC5jcmVhdGVUZXh0Tm9kZSgnJyA9PT0gbGluZSA/ICdcXG4nIDogbGluZSkpO1xuXG4gICAgY29udGVudC5hcHBlbmRDaGlsZChtYXJrdXApO1xuICAgIHJvdy5hcHBlbmRDaGlsZChjb250ZW50KTtcbiAgICBmcmFnbWVudC5hcHBlbmRDaGlsZChyb3cpO1xuICB9KTtcbiAgcmV0dXJuIGZyYWdtZW50O1xufVxuXG5jb25zdCBDSEFOR0VfU0VMRUNUSU9OID0gJ0NIQU5HRV9TRUxFQ1RJT04nO1xuY29uc3QgQ0FOQ0VMX1NFTEVDVElPTiA9ICdDQU5DRUxfU0VMRUNUSU9OJztcbmNvbnN0IE5FV19BTk5PVEFUSU9OID0gJyBORVdfQU5OT1RBVElPTic7XG5jb25zdCBDSEFOR0VfQ09NTUVOVCA9ICdDSEFOR0VfQ09NTUVOVCc7XG5jb25zdCBTQVZFX0FOTk9UQVRJT05fSU5URU5UID0gJ1NBVkVfQU5OT1RBVElPTl9JTlRFTlQnO1xuY29uc3QgU0FWRV9BTk5PVEFUSU9OX1JFQ0VJUFQgPSAnU0FWRV9BTk5PVEFUSU9OX1JFQ0VJUFQnO1xuY29uc3QgRURJVF9BTk5PVEFUSU9OID0gJ0VESVRfQU5OT1RBVElPTic7XG5jb25zdCBERUxFVEVfQU5OT1RBVElPTl9JTlRFTlQgPSAnREVMRVRFX0FOTk9UQVRJT05fSU5URU5UJztcbmNvbnN0IERFTEVURV9BTk5PVEFUSU9OX1JFQ0VJUFQgPSAnREVMRVRFX0FOTk9UQVRJT05fUkVDRUlQVCc7XG5jb25zdCBDQU5DRUxfRURJVF9BTk5PVEFUSU9OX1JFQ0VJUFQgPSAnQ0FOQ0VMX0VESVRfQU5OT1RBVElPTl9SRUNFSVBUJztcblxuZnVuY3Rpb24gZGVjb3JhdGVBbm5vdGF0aW9ucyhhbm5vdGF0aW9ucyA9IFtdLCB1c2VyKSB7XG4gIGNvbnN0IGFycmF5ID0gWy4uLmFubm90YXRpb25zXTtcbiAgYXJyYXkubWluZSA9IGZ1bmN0aW9uKCkge1xuICAgIGlmICghdXNlcikgcmV0dXJuIHRoaXM7XG4gICAgcmV0dXJuIHRoaXMuZmlsdGVyKGEgPT4gdXNlciA9PT0gYS51c2VyKTtcbiAgfTtcbiAgYXJyYXkuZmluZEJ5SUQgPSBmdW5jdGlvbihpZCkge1xuICAgIHJldHVybiB0aGlzLmZpbmQoYSA9PiBpZCA9PT0gYS5pZCk7XG4gIH07XG4gIGFycmF5LnVwc2VydCA9IGZ1bmN0aW9uKGFubm90YXRpb24pIHtcbiAgICBpZiAoIWFubm90YXRpb24pIHRocm93IG5ldyBSZWZlcmVuY2VFcnJvcihgTWlzc2luZyBhbm5vdGF0aW9uYCk7XG4gICAgaWYgKCFhbm5vdGF0aW9uLmlkKSB0aHJvdyBuZXcgUmVmZXJlbmNlRXJyb3IoYE1pc3NpbmcgYW5ub3RhdGlvbi5pZGApO1xuXG4gICAgY29uc3QgYXJyID0gWy4uLnRoaXNdO1xuICAgIGNvbnN0IGV4aXN0aW5nSW5kZXggPSBhcnIuZmluZEluZGV4KGEgPT4gYW5ub3RhdGlvbi5pZCA9PT0gYS5pZCk7XG4gICAgaWYgKGV4aXN0aW5nSW5kZXggPiAtMSkge1xuICAgICAgYXJyLnNwbGljZShleGlzdGluZ0luZGV4LCAxKTtcbiAgICB9XG4gICAgYXJyLnB1c2goT2JqZWN0LmFzc2lnbih7fSwgYW5ub3RhdGlvbikpO1xuXG4gICAgY29uc3QgZG9jdW1lbnRPcmRlciA9IChhLCBiKSA9PiB7XG4gICAgICBpZiAoYS5yYW5nZS5zdGFydC5saW5lID4gYi5yYW5nZS5zdGFydC5saW5lKSByZXR1cm4gdHJ1ZTtcbiAgICAgIGlmIChhLnJhbmdlLnN0YXJ0LmxpbmUgPT09IGIucmFuZ2Uuc3RhcnQubGluZSkge1xuICAgICAgICByZXR1cm4gYS5yYW5nZS5zdGFydC5jb2x1bW4gPiBiLnJhbmdlLnN0YXJ0LmNvbHVtbjtcbiAgICAgIH1cbiAgICAgIHJldHVybiBmYWxzZTtcbiAgICB9O1xuICAgIHJldHVybiBkZWNvcmF0ZUFubm90YXRpb25zKGFyci5zb3J0KGRvY3VtZW50T3JkZXIpLCB1c2VyKTtcbiAgfTtcbiAgYXJyYXkuZGVsZXRlID0gZnVuY3Rpb24oaWQpIHtcbiAgICBjb25zdCBhcnIgPSBbLi4udGhpc107XG4gICAgY29uc3QgZXhpc3RpbmdJbmRleCA9IGFyci5maW5kSW5kZXgoYSA9PiBpZCA9PT0gYS5pZCk7XG4gICAgaWYgKGV4aXN0aW5nSW5kZXggPiAtMSkge1xuICAgICAgYXJyLnNwbGljZShleGlzdGluZ0luZGV4LCAxKTtcbiAgICB9XG4gICAgcmV0dXJuIGRlY29yYXRlQW5ub3RhdGlvbnMoYXJyLCB1c2VyKTtcbiAgfTtcbiAgYXJyYXkuY2xlYXJVbnNhdmVkID0gZnVuY3Rpb24oKSB7XG4gICAgcmV0dXJuIGRlY29yYXRlQW5ub3RhdGlvbnMoYXJyYXkuZmlsdGVyKGEgPT4gISFhLnRpbWVzdGFtcCkpO1xuICB9O1xuICBhcnJheS50b0pTT04gPSBmdW5jdGlvbigpIHtcbiAgICByZXR1cm4gdGhpcy5maWx0ZXIoYSA9PiAhYS5pc0RpcnR5KTtcbiAgfTtcbiAgcmV0dXJuIGFycmF5O1xufVxuXG4vKipcbiAqIFJlZHV4IHJlZHVjZXIuIE1ha2Ugc3VyZSBub3RoaW5nIG11dGF0ZXMgdGhlXG4gKiBzdGF0ZSBpbi1wbGFjZS5cbiAqIFxuICogQHBhcmFtIHtPYmplY3R9IHN0YXRlIC0gY3VycmVudCBzdGF0ZVxuICogQHBhcmFtIHtPYmplY3R9IGFjdGlvbiBcbiAqIEByZXR1cm5zIHtPYmplY3R9IC0gbmV3IHN0YXRlXG4gKi9cbmZ1bmN0aW9uIHJlZHVjZXIoc3RhdGUsIGFjdGlvbikge1xuICBzd2l0Y2ggKGFjdGlvbi50eXBlKSB7XG4gICAgY2FzZSBDSEFOR0VfU0VMRUNUSU9OOlxuICAgICAgY29uc3QgdG1wMCA9IE9iamVjdC5hc3NpZ24oe30sIHN0YXRlKTtcbiAgICAgIHRtcDAudWkgPSBPYmplY3QuYXNzaWduKHt9LCB0bXAwLnVpKTtcbiAgICAgIHRtcDAudWkucG9zaXRpb24gPSBhY3Rpb24ucG9zaXRpb247XG4gICAgICB0bXAwLnVpLnNlbGVjdGlvbiA9IGFjdGlvbi5zZWxlY3Rpb247XG4gICAgICByZXR1cm4gdG1wMDtcbiAgICBjYXNlIENBTkNFTF9TRUxFQ1RJT046XG4gICAgICBjb25zdCB0bXA3ID0gT2JqZWN0LmFzc2lnbih7fSwgc3RhdGUpO1xuICAgICAgdG1wNy51aSA9IE9iamVjdC5hc3NpZ24oe30sIHRtcDcudWkpO1xuICAgICAgZGVsZXRlIHRtcDcudWkuc2VsZWN0aW9uO1xuICAgICAgZGVsZXRlIHRtcDcudWkucG9zaXRpb247XG4gICAgICByZXR1cm4gdG1wNztcbiAgICBjYXNlIE5FV19BTk5PVEFUSU9OOlxuICAgICAgY29uc3QgaWQgPSB1dWlkdjQoKTtcbiAgICAgIGNvbnN0IHRtcCA9IE9iamVjdC5hc3NpZ24oe30sIHN0YXRlKTtcbiAgICAgIHRtcC51aSA9IE9iamVjdC5hc3NpZ24oe30sIHRtcC51aSk7XG4gICAgICBkZWxldGUgdG1wLnVpLnNlbGVjdGlvbjtcbiAgICAgIGRlbGV0ZSB0bXAudWkucG9zaXRpb247XG4gICAgICB0bXAudWkuYWN0aXZlQW5ub3RhdGlvbklEID0gaWQ7XG4gICAgICB0bXAubW9kZWwuYW5ub3RhdGlvbnMgPSBkZWNvcmF0ZUFubm90YXRpb25zKFxuICAgICAgICBzdGF0ZS5tb2RlbC5hbm5vdGF0aW9ucy5jbGVhclVuc2F2ZWQoKSxcbiAgICAgICAgdG1wLnVpLnVzZXJcbiAgICAgICk7XG4gICAgICB0bXAubW9kZWwuYW5ub3RhdGlvbnMgPSB0bXAubW9kZWwuYW5ub3RhdGlvbnMudXBzZXJ0KHtcbiAgICAgICAgaXNEaXJ0eTogdHJ1ZSxcbiAgICAgICAgaWQ6IGlkLFxuICAgICAgICB0aW1lc3RhbXA6IG51bGwsXG4gICAgICAgIHVzZXI6IHN0YXRlLnVpLnVzZXIsXG4gICAgICAgIGNvbW1lbnQ6ICcnLFxuICAgICAgICByYW5nZToge1xuICAgICAgICAgIHN0YXJ0OiB7XG4gICAgICAgICAgICBsaW5lOiBzdGF0ZS51aS5zZWxlY3Rpb24uc3RhcnQubGluZSxcbiAgICAgICAgICAgIGNvbHVtbjogc3RhdGUudWkuc2VsZWN0aW9uLnN0YXJ0LmNvbHVtbixcbiAgICAgICAgICB9LFxuICAgICAgICAgIGVuZDoge1xuICAgICAgICAgICAgbGluZTogc3RhdGUudWkuc2VsZWN0aW9uLmVuZC5saW5lLFxuICAgICAgICAgICAgY29sdW1uOiBzdGF0ZS51aS5zZWxlY3Rpb24uZW5kLmNvbHVtbixcbiAgICAgICAgICB9LFxuICAgICAgICB9LFxuICAgICAgfSk7XG4gICAgICByZXR1cm4gdG1wO1xuICAgIGNhc2UgU0FWRV9BTk5PVEFUSU9OX0lOVEVOVDpcbiAgICAgIGNvbnN0IHRtcDMgPSBPYmplY3QuYXNzaWduKHt9LCBzdGF0ZSk7XG4gICAgICB0bXAzLm1vZGVsID0gT2JqZWN0LmFzc2lnbih7fSwgc3RhdGUubW9kZWwpO1xuICAgICAgdG1wMy5tb2RlbC5hbm5vdGF0aW9ucyA9IHN0YXRlLm1vZGVsLmFubm90YXRpb25zLnVwc2VydChcbiAgICAgICAgT2JqZWN0LmFzc2lnbihcbiAgICAgICAgICB7fSxcbiAgICAgICAgICBzdGF0ZS5tb2RlbC5hbm5vdGF0aW9ucy5maW5kQnlJRChzdGF0ZS51aS5hY3RpdmVBbm5vdGF0aW9uSUQpLFxuICAgICAgICAgIHtcbiAgICAgICAgICAgIHRpbWVzdGFtcDogbmV3IERhdGUoKS50b0lTT1N0cmluZygpLFxuICAgICAgICAgICAgY29tbWVudDogYWN0aW9uLmNvbW1lbnQsXG4gICAgICAgICAgfVxuICAgICAgICApXG4gICAgICApO1xuICAgICAgcmV0dXJuIHRtcDM7XG4gICAgY2FzZSBTQVZFX0FOTk9UQVRJT05fUkVDRUlQVDpcbiAgICAgIGNvbnN0IHRtcDQgPSBPYmplY3QuYXNzaWduKHt9LCBzdGF0ZSk7XG4gICAgICB0bXA0Lm1vZGVsID0gT2JqZWN0LmFzc2lnbih7fSwgc3RhdGUubW9kZWwpO1xuICAgICAgdG1wNC5tb2RlbC5hbm5vdGF0aW9ucyA9IGRlY29yYXRlQW5ub3RhdGlvbnMoXG4gICAgICAgIHN0YXRlLm1vZGVsLmFubm90YXRpb25zLFxuICAgICAgICB0bXA0LnVpLnVzZXJcbiAgICAgICkudXBzZXJ0KFxuICAgICAgICBPYmplY3QuYXNzaWduKFxuICAgICAgICAgIHt9LFxuICAgICAgICAgIC8vIEZJWE1FOiBUaGlzIHNob3VsZCBiZSBwYXNzZWQgaW4gdGhlIGFjdGlvblxuICAgICAgICAgIHN0YXRlLm1vZGVsLmFubm90YXRpb25zLmZpbmRCeUlEKHN0YXRlLnVpLmFjdGl2ZUFubm90YXRpb25JRClcbiAgICAgICAgKVxuICAgICAgKTtcbiAgICAgIGRlbGV0ZSB0bXA0Lm1vZGVsLmFubm90YXRpb25zLmZpbmRCeUlEKHN0YXRlLnVpLmFjdGl2ZUFubm90YXRpb25JRClcbiAgICAgICAgLmlzRGlydHk7XG4gICAgICB0bXA0LnVpID0geyBpc1JlbmRlcmluZzogc3RhdGUudWkuaXNSZW5kZXJpbmcsIHVzZXI6IHN0YXRlLnVpLnVzZXIgfTtcbiAgICAgIHJldHVybiB0bXA0O1xuICAgIGNhc2UgRURJVF9BTk5PVEFUSU9OOlxuICAgICAgY29uc3QgdG1wNSA9IE9iamVjdC5hc3NpZ24oe30sIHN0YXRlKTtcbiAgICAgIHRtcDUudWkgPSBPYmplY3QuYXNzaWduKHt9LCBzdGF0ZS51aSk7XG4gICAgICB0bXA1LnVpLmFjdGl2ZUFubm90YXRpb25JRCA9IGFjdGlvbi5pZDtcbiAgICAgIHJldHVybiB0bXA1O1xuICAgIC8vIGNhc2UgREVMRVRFX0FOTk9UQVRJT05fSU5URU5UOlxuICAgIGNhc2UgREVMRVRFX0FOTk9UQVRJT05fUkVDRUlQVDpcbiAgICAgIGNvbnN0IHRtcDYgPSBPYmplY3QuYXNzaWduKHt9LCBzdGF0ZSk7XG4gICAgICB0bXA2Lm1vZGVsID0gT2JqZWN0LmFzc2lnbih7fSwgc3RhdGUubW9kZWwpO1xuICAgICAgdG1wNi5tb2RlbC5hbm5vdGF0aW9ucyA9IHN0YXRlLm1vZGVsLmFubm90YXRpb25zLmRlbGV0ZShcbiAgICAgICAgc3RhdGUudWkuYWN0aXZlQW5ub3RhdGlvbklEXG4gICAgICApO1xuICAgICAgdG1wNi51aSA9IE9iamVjdC5hc3NpZ24oe30sIHN0YXRlLnVpKTtcbiAgICAgIGRlbGV0ZSB0bXA2LnVpLmFjdGl2ZUFubm90YXRpb25JRDtcbiAgICAgIHJldHVybiB0bXA2O1xuICAgIGNhc2UgQ0FOQ0VMX0VESVRfQU5OT1RBVElPTl9SRUNFSVBUOlxuICAgICAgY29uc3QgdG1wOCA9IE9iamVjdC5hc3NpZ24oe30sIHN0YXRlKTtcbiAgICAgIHRtcDgubW9kZWwgPSBPYmplY3QuYXNzaWduKHt9LCBzdGF0ZS5tb2RlbCk7XG4gICAgICB0bXA4Lm1vZGVsLmFubm90YXRpb25zID0gZGVjb3JhdGVBbm5vdGF0aW9ucyhcbiAgICAgICAgc3RhdGUubW9kZWwuYW5ub3RhdGlvbnMuY2xlYXJVbnNhdmVkKCksXG4gICAgICAgIHN0YXRlLnVpLnVzZXJcbiAgICAgICk7XG4gICAgICB0bXA4LnVpID0gT2JqZWN0LmFzc2lnbih7fSwgc3RhdGUudWkpO1xuICAgICAgZGVsZXRlIHRtcDgudWkuYWN0aXZlQW5ub3RhdGlvbklEO1xuICAgICAgcmV0dXJuIHRtcDg7XG4gICAgZGVmYXVsdDpcbiAgICAgIHJldHVybiBJTklUSUFMX1NUQVRFO1xuICB9XG59XG4vLyA8aHR0cHM6Ly9zdGFja292ZXJmbG93LmNvbS9hLzIxMTc1MjMvNTYzMzI0PlxuZnVuY3Rpb24gdXVpZHY0KCkge1xuICByZXR1cm4gKFsxZTddICsgLTFlMyArIC00ZTMgKyAtOGUzICsgLTFlMTEpLnJlcGxhY2UoL1swMThdL2csIGMgPT5cbiAgICAoYyBeXG4gICAgICAoY3J5cHRvLmdldFJhbmRvbVZhbHVlcyhuZXcgVWludDhBcnJheSgxKSlbMF0gJiAoMTUgPj4gKGMgLyA0KSkpXG4gICAgKS50b1N0cmluZygxNilcbiAgKTtcbn1cblxuY29uc3Qgc3RvcmUgPSBjcmVhdGVTdG9yZShcbiAgcmVkdWNlcixcbiAgYXBwbHlNaWRkbGV3YXJlKHN0b3JlID0+IG5leHQgPT4gYWN0aW9uID0+IHtcbiAgICBjb25zb2xlLmxvZygnRGlzcGF0Y2hpbmcnLCBhY3Rpb24pO1xuICAgIGNvbnN0IHJlc3VsdCA9IG5leHQoYWN0aW9uKTtcbiAgICBjb25zb2xlLmxvZygnTmV4dCBzdGF0ZScsIHN0b3JlLmdldFN0YXRlKCkpO1xuICAgIHJldHVybiByZXN1bHQ7XG4gIH0pXG4pO1xuXG5zdG9yZS5zdWJzY3JpYmUocmVuZGVyLCBJTklUSUFMX1NUQVRFKTtcbnN0b3JlLmRlbGF5ZWREaXNwYXRjaCA9IGRlYm91bmNlKHN0b3JlLmRpc3BhdGNoLCAyNTApO1xuXG4vKipcbiAqIFJlbmRlciBnbG9iYWwgc3RhdGUgdG8gdGhlIGxpdmUgRE9NLlxuICogXG4gKiBAcmV0dXJuIHt1bmRlZmluZWR9XG4gKi9cbmZ1bmN0aW9uIHJlbmRlcigpIHtcbiAgY29uc29sZS50aW1lKCdyZW5kZXInKTtcbiAgLy8gSXTigJlzIG9kZCB0aGF0IHRoZSBzdGF0ZSBpc27igJl0IHBhc3NlZCB0byB0aGUgc3Vic2NyaWJlci5cbiAgLy8gTmVlZCB0byBnZXQgdGhlIHN0YXRlIGZyb20gdGhlIGdsb2JhbCBzdG9yZSBpdHNlbGYuXG4gIGNvbnN0IHN0YXRlID0gc3RvcmUuZ2V0U3RhdGUoKTtcblxuICBzdGF0ZS51aS5pc1JlbmRlcmluZyA9IHRydWU7XG5cbiAgY29uc29sZS50aW1lKCdyZW5kZXJNYXJrZG93bicpO1xuICByZXBsYWNlQ2hpbGRyZW4oXG4gICAgcmVuZGVyTWFya2Rvd24oc3RhdGUubW9kZWwuY29udGVudCwgc3RhdGUubW9kZWwuYW5ub3RhdGlvbnMpLFxuICAgIGRvY3VtZW50LnF1ZXJ5U2VsZWN0b3IoJ3Rib2R5JylcbiAgKTtcbiAgY29uc29sZS50aW1lRW5kKCdyZW5kZXJNYXJrZG93bicpO1xuICByZW5kZXJBbm5vdGF0aW9ucyhzdGF0ZS5tb2RlbC5hbm5vdGF0aW9ucyk7XG5cbiAgZG9jdW1lbnQucXVlcnlTZWxlY3RvcignI0NvbW1lbnQnKS52YWx1ZSA9IHN0YXRlLnVpLmFjdGl2ZUFubm90YXRpb25JRFxuICAgID8gc3RhdGUubW9kZWwuYW5ub3RhdGlvbnMuZmluZEJ5SUQoc3RhdGUudWkuYWN0aXZlQW5ub3RhdGlvbklEKS5jb21tZW50IHx8XG4gICAgICAnJ1xuICAgIDogJyc7XG5cbiAgY29uc3Qgc2VsQW5uID0gZG9jdW1lbnQucXVlcnlTZWxlY3RvcignI1NlbGVjdEFubm90YXRpb24nKTtcbiAgaWYgKHN0YXRlLnVpLnBvc2l0aW9uKSB7XG4gICAgc2VsQW5uLnN0eWxlLmRpc3BsYXkgPSAndW5zZXQnO1xuICAgIHNlbEFubi5zdHlsZS50b3AgPSBgJHtzdGF0ZS51aS5wb3NpdGlvbi55fXB4YDtcbiAgICBzZWxBbm4uc3R5bGUubGVmdCA9IGAke3N0YXRlLnVpLnBvc2l0aW9uLnh9cHhgO1xuICAgIHNlbEFubi5xdWVyeVNlbGVjdG9yKCdidXR0b24nKS5mb2N1cygpO1xuICAgIHJlc3RvcmVTZWxlY3Rpb24oc3RhdGUudWkuc2VsZWN0aW9uKTtcbiAgfSBlbHNlIHtcbiAgICBzZWxBbm4uc3R5bGUuZGlzcGxheSA9ICdub25lJztcbiAgICBzZWxBbm4uc3R5bGUudG9wID0gYC0xMDBweGA7XG4gICAgc2VsQW5uLnN0eWxlLmxlZnQgPSBgLTEwMHB4YDtcbiAgfVxuXG4gIGRvY3VtZW50LnF1ZXJ5U2VsZWN0b3IoJyNDb21tZW50JykuZGlzYWJsZWQgPSAhc3RhdGUudWkuYWN0aXZlQW5ub3RhdGlvbklEO1xuXG4gIGNvbnN0IGFjdGl2ZSA9IHN0YXRlLm1vZGVsLmFubm90YXRpb25zLmZpbmRCeUlEKHN0YXRlLnVpLmFjdGl2ZUFubm90YXRpb25JRCk7XG4gIGRvY3VtZW50LnF1ZXJ5U2VsZWN0b3IoJyNTYXZlQW5ub3RhdGlvbicpLmRpc2FibGVkID1cbiAgICAhYWN0aXZlIHx8IGRvY3VtZW50LnF1ZXJ5U2VsZWN0b3IoJyNDb21tZW50JykudmFsdWUubGVuZ3RoID09PSAwO1xuICBkb2N1bWVudC5xdWVyeVNlbGVjdG9yKCcjRGVsZXRlQW5ub3RhdGlvbicpLmRpc2FibGVkID0gIWFjdGl2ZTtcblxuICAvLyBGSVhNRTogVGhpcyBpcyB1Z2x5IGFuZCBicml0dGxlXG4gIGlmICghYWN0aXZlIHx8ICFhY3RpdmUudGltZXN0YW1wKSB7XG4gICAgY29uc29sZS5sb2coJ2hpZGUgZGVsZXRlJyk7XG4gICAgZG9jdW1lbnQucXVlcnlTZWxlY3RvcignI0RlbGV0ZUFubm90YXRpb24nKS5zdHlsZS5kaXNwbGF5ID0gJ25vbmUnO1xuICB9IGVsc2Uge1xuICAgIGRvY3VtZW50LnF1ZXJ5U2VsZWN0b3IoJyNEZWxldGVBbm5vdGF0aW9uJykuc3R5bGUuZGlzcGxheSA9ICd1bnNldCc7XG4gIH1cbiAgZG9jdW1lbnQucXVlcnlTZWxlY3RvcignI0NhbmNlbEVkaXRBbm5vdGF0aW9uJykuZGlzYWJsZWQgPSAhYWN0aXZlO1xuXG4gIGNvbnN0IGRvd25sb2FkID0gZG9jdW1lbnQucXVlcnlTZWxlY3RvcignI0Rvd25sb2FkJyk7XG4gIC8vIEZJWE1FOiBUaGUgYHRvSlNPTmAgY2FsbCBpcyB3ZWlyZC5cbiAgLy8gVGhlIGVmZmVjdCBpcyDigJx0aG9zZSB0aGF0IGhhdmUgYmVlbiBzYXZlZFwiLiBNYXliZSBqdXN0IGEgcmVuYW1lXG4gIC8vIG9mIGBjbGVhclVuc2F2ZWRgIHRvIGBvbmx5UGVyc2lzdGVkYD9cbiAgaWYgKHN0YXRlLm1vZGVsLmFubm90YXRpb25zICYmIHN0YXRlLm1vZGVsLmFubm90YXRpb25zLnRvSlNPTigpLmxlbmd0aCA+IDApIHtcbiAgICBkb3dubG9hZC5ocmVmID0gYGRhdGE6dGV4dC9tYXJrZG93bjtjaGFyc2V0PXV0Zi04O2Jhc2U2NCwke0Jhc2U2NC5lbmNvZGUoXG4gICAgICBzdGF0ZS5tb2RlbC5jb250ZW50ICtcbiAgICAgICAgJ1xcblxcbicgK1xuICAgICAgICBzZXJpYWxpemVBbm5vdGF0aW9ucyhzdGF0ZS5tb2RlbC5hbm5vdGF0aW9ucylcbiAgICApfWA7XG4gICAgZG93bmxvYWQuZG93bmxvYWQgPSBkZWNvZGVVUklDb21wb25lbnQoc3RhdGUubW9kZWwuaHJlZi5zcGxpdCgnLycpLnBvcCgpKTtcbiAgICBkb3dubG9hZC5zdHlsZS5kaXNwbGF5ID0gJ3Vuc2V0JztcbiAgfSBlbHNlIHtcbiAgICBkb3dubG9hZC5zdHlsZS5kaXNwbGF5ID0gJ25vbmUnO1xuICB9XG5cbiAgc3RhdGUudWkuaXNSZW5kZXJpbmcgPSBmYWxzZTtcbiAgY29uc29sZS50aW1lRW5kKCdyZW5kZXInKTtcbn1cblxuZnVuY3Rpb24gc2VyaWFsaXplQW5ub3RhdGlvbnMoYW5ub3RhdGlvbnMpIHtcbiAgaWYgKCFhbm5vdGF0aW9ucyB8fCAwID09PSBhbm5vdGF0aW9ucy5sZW5ndGgpIHtcbiAgICByZXR1cm4gJyc7XG4gIH1cbiAgY29uc3QgTkFNRVNQQUNFID0gJ2h0dHA6Ly9tYXJrbG9naWMuY29tL2Fubm90YXRpb25zJztcbiAgY29uc3QgYW5ub3RhdGlvbnNKU09OID0gSlNPTi5zdHJpbmdpZnkoYW5ub3RhdGlvbnMsIG51bGwsIDIpO1xuICByZXR1cm4gYDwhLS0tICR7TkFNRVNQQUNFfVxcblxcbiR7YW5ub3RhdGlvbnNKU09OfVxcblxcbi0tLT5gO1xufVxuXG5mdW5jdGlvbiByZXN0b3JlU2VsZWN0aW9uKHJhbmdlKSB7XG4gIGlmICghcmFuZ2UpIHJldHVybjtcbiAgY29uc3QgciA9IHJhbmdlRnJvbU9mZnNldHMoXG4gICAgZG9jdW1lbnQucXVlcnlTZWxlY3RvcihgI0wke3JhbmdlLnN0YXJ0LmxpbmV9PnRkLmNvbnRlbnRgKSxcbiAgICByYW5nZS5zdGFydC5jb2x1bW4sXG4gICAgZG9jdW1lbnQucXVlcnlTZWxlY3RvcihgI0wke3JhbmdlLmVuZC5saW5lfT50ZC5jb250ZW50YCksXG4gICAgcmFuZ2UuZW5kLmNvbHVtblxuICApO1xuICBjb25zdCBzZWxlY3Rpb24gPSB3aW5kb3cuZ2V0U2VsZWN0aW9uKCk7XG4gIHNlbGVjdGlvbi5yZW1vdmVBbGxSYW5nZXMoKTtcbiAgc2VsZWN0aW9uLmFkZFJhbmdlKHIpO1xufVxuXG4vKipcbiAqIEFzc3VtZXMgdGhlIE1hcmtkb3duIERPTSBoYXMgYmVlbiByZW5kZXJlZC4gV29ya3Mgb24gdGhlIGxpdmUgRE9NLlxuICogUHJvYmFibHkgc2hvdWxkIG1ha2UgdGhpcyBhc3luYyBmb3IgbG90cyBvZiBhbm5vdGF0aW9ucy5cbiAqIFxuICogQHBhcmFtIHtBcnJheTxBbm5vdGF0aW9uPn0gYW5ub3RhdGlvbnMgXG4gKiBAcmV0dXJuIHVuZGVmaW5lZFxuICovXG5mdW5jdGlvbiByZW5kZXJBbm5vdGF0aW9ucyhhbm5vdGF0aW9ucykge1xuICBjb25zdCBzdGF0ZSA9IHN0b3JlLmdldFN0YXRlKCk7XG4gIC8vIEhpZ2hsaWdodCBhbm5vdGF0aW9ucy4gUmVxdWlyZXMgdGhhdCBET00gaXMgYWxyZWFkeSBjb21taXR0ZWQgYWJvdmVcbiAgZm9yIChjb25zdCBhbm5vdGF0aW9uIG9mIGFubm90YXRpb25zKSB7XG4gICAgcmVuZGVyQW5ub3RhdGlvbihcbiAgICAgIGFubm90YXRpb24sXG4gICAgICBzdGF0ZS5tb2RlbC5hbm5vdGF0aW9ucy5taW5lKCkuc29tZShhID0+IGFubm90YXRpb24uaWQgPT09IGEuaWQpLFxuICAgICAgc3RhdGUudWkuYWN0aXZlQW5ub3RhdGlvbklEID09PSBhbm5vdGF0aW9uLmlkXG4gICAgKTtcbiAgfVxufVxuXG5mdW5jdGlvbiByZW5kZXJBbm5vdGF0aW9uKGFubm90YXRpb24sIGlzTWluZSA9IGZhbHNlLCBpc0FjdGl2ZSA9IGZhbHNlKSB7XG4gIGlmICghYW5ub3RhdGlvbikgcmV0dXJuO1xuICBjb25zdCByID0gcmFuZ2VGcm9tT2Zmc2V0cyhcbiAgICBkb2N1bWVudC5xdWVyeVNlbGVjdG9yKGAjTCR7YW5ub3RhdGlvbi5yYW5nZS5zdGFydC5saW5lfT50ZC5jb250ZW50YCksXG4gICAgYW5ub3RhdGlvbi5yYW5nZS5zdGFydC5jb2x1bW4sXG4gICAgZG9jdW1lbnQucXVlcnlTZWxlY3RvcihgI0wke2Fubm90YXRpb24ucmFuZ2UuZW5kLmxpbmV9PnRkLmNvbnRlbnRgKSxcbiAgICBhbm5vdGF0aW9uLnJhbmdlLmVuZC5jb2x1bW5cbiAgKTtcbiAgaGlnaGxpZ2h0UmFuZ2UociwgKCkgPT4ge1xuICAgIGNvbnN0IHNwYW4gPSBkb2N1bWVudC5jcmVhdGVFbGVtZW50KCdzcGFuJyk7XG4gICAgc3Bhbi5jbGFzc0xpc3QuYWRkKCdhbm5vdGF0aW9uJyk7XG4gICAgc3Bhbi5kYXRhc2V0LmFubm90YXRpb25JZCA9IGFubm90YXRpb24uaWQ7XG4gICAgaWYgKGlzTWluZSkge1xuICAgICAgc3Bhbi5jbGFzc0xpc3QuYWRkKCdtaW5lJyk7XG4gICAgfVxuICAgIGlmIChpc0FjdGl2ZSkge1xuICAgICAgc3Bhbi5jbGFzc0xpc3QuYWRkKCdhY3RpdmUnKTtcbiAgICB9XG4gICAgc3Bhbi5zdHlsZS5iYWNrZ3JvdW5kQ29sb3IgPSBgcmdiYSgke25ldyBDb2xvckhhc2goKVxuICAgICAgLnJnYihhbm5vdGF0aW9uLnVzZXIpXG4gICAgICAuam9pbignLCAnKX0sIDAuNSlgO1xuICAgIHJldHVybiBzcGFuO1xuICB9KTtcbn1cblxuLyoqXG4gKiBSZXBsYWNlcyB0aGUgZW50aXJlIGNvbnRlbnRzIG9mIGBvbGROb2RlYCB3aXRoIGBuZXdDaGlsZGAuXG4gKiBJdOKAmXMgZ2VuZXJhbGx5IGFkdmlzYWJsZSB0byB1c2UgYSBgRG9jdW1lbnRGcmFnbWVudGAgZm9yIHRoZVxuICogdGhlIHJlcGxhY2VtZW50LlxuICogXG4gKiBAcGFyYW0ge05vZGV8RG9jdW1lbnRGcmFnbWVudH0gbmV3Q2hpbGQgXG4gKiBAcGFyYW0ge05vZGV9IG9sZE5vZGUgXG4gKiBAcmV0dXJucyB7Tm9kZX0gIC0gVGhlIG5ldyBwYXJlbnQgd3JhcHBlclxuICovXG5mdW5jdGlvbiByZXBsYWNlQ2hpbGRyZW4obmV3Q2hpbGQsIG9sZE5vZGUpIHtcbiAgaWYgKCFvbGROb2RlKSByZXR1cm47XG4gIGNvbnN0IHRtcFBhcmVudCA9IGRvY3VtZW50LmNyZWF0ZUVsZW1lbnQob2xkTm9kZS50YWdOYW1lKTtcbiAgaWYgKG5ld0NoaWxkKSB7XG4gICAgdG1wUGFyZW50LmFwcGVuZENoaWxkKG5ld0NoaWxkKTtcbiAgfVxuICBvbGROb2RlLnBhcmVudE5vZGUucmVwbGFjZUNoaWxkKHRtcFBhcmVudCwgb2xkTm9kZSk7XG4gIHJldHVybiB0bXBQYXJlbnQ7XG59XG5cbmRvY3VtZW50LmFkZEV2ZW50TGlzdGVuZXIoJ0RPTUNvbnRlbnRMb2FkZWQnLCBldnQgPT4ge1xuICByZW5kZXIoKTtcbiAgZG9jdW1lbnQuYWRkRXZlbnRMaXN0ZW5lcignY2xpY2snLCBldnQgPT4ge1xuICAgIGNvbnNvbGUubG9nKCdldnQudGFyZ2V0LmNsYXNzTGlzdCcsIGV2dC50YXJnZXQuY2xhc3NMaXN0KTtcbiAgICBpZiAoZXZ0LnRhcmdldCAmJiBldnQudGFyZ2V0Lm1hdGNoZXMoJyNTYXZlQW5ub3RhdGlvbicpKSB7XG4gICAgICBzdG9yZS5kaXNwYXRjaCh7XG4gICAgICAgIHR5cGU6IFNBVkVfQU5OT1RBVElPTl9JTlRFTlQsXG4gICAgICAgIGNvbW1lbnQ6IGRvY3VtZW50LnF1ZXJ5U2VsZWN0b3IoJyNDb21tZW50JykudmFsdWUsXG4gICAgICB9KTtcbiAgICAgIHN0b3JlLmRpc3BhdGNoKHtcbiAgICAgICAgdHlwZTogU0FWRV9BTk5PVEFUSU9OX1JFQ0VJUFQsXG4gICAgICB9KTtcbiAgICB9XG4gICAgaWYgKGV2dC50YXJnZXQgJiYgZXZ0LnRhcmdldC5tYXRjaGVzKCcjRGVsZXRlQW5ub3RhdGlvbicpKSB7XG4gICAgICBzdG9yZS5kaXNwYXRjaCh7XG4gICAgICAgIHR5cGU6IERFTEVURV9BTk5PVEFUSU9OX1JFQ0VJUFQsXG4gICAgICB9KTtcbiAgICB9XG4gICAgaWYgKGV2dC50YXJnZXQgJiYgZXZ0LnRhcmdldC5tYXRjaGVzKCcjQ2FuY2VsRWRpdEFubm90YXRpb24nKSkge1xuICAgICAgc3RvcmUuZGlzcGF0Y2goeyB0eXBlOiBDQU5DRUxfRURJVF9BTk5PVEFUSU9OX1JFQ0VJUFQgfSk7XG4gICAgfVxuICAgIGlmIChldnQudGFyZ2V0ICYmIGV2dC50YXJnZXQubWF0Y2hlcygnI1NlbGVjdEFubm90YXRpb24+YnV0dG9uJykpIHtcbiAgICAgIHN0b3JlLmRpc3BhdGNoKHtcbiAgICAgICAgdHlwZTogTkVXX0FOTk9UQVRJT04sXG4gICAgICB9KTtcbiAgICAgIGNvbnN0IGNvbW1lbnRFbCA9IGRvY3VtZW50LnF1ZXJ5U2VsZWN0b3IoJyNDb21tZW50Jyk7XG4gICAgICBjb21tZW50RWwuZm9jdXMoKTtcbiAgICAgIGNvbW1lbnRFbC5zZXRTZWxlY3Rpb25SYW5nZShcbiAgICAgICAgY29tbWVudEVsLnZhbHVlLmxlbmd0aCxcbiAgICAgICAgY29tbWVudEVsLnZhbHVlLmxlbmd0aFxuICAgICAgKTtcbiAgICB9XG4gICAgaWYgKGV2dC50YXJnZXQubWF0Y2hlcygnLmFubm90YXRpb24ubWluZScpKSB7XG4gICAgICBjb25zdCBhbm5vdGF0aW9uRWwgPSBldnQudGFyZ2V0O1xuICAgICAgc3RvcmUuZGlzcGF0Y2goe1xuICAgICAgICB0eXBlOiBFRElUX0FOTk9UQVRJT04sXG4gICAgICAgIGlkOiBhbm5vdGF0aW9uRWwuZGF0YXNldC5hbm5vdGF0aW9uSWQsXG4gICAgICB9KTtcbiAgICAgIGNvbnN0IGNvbW1lbnRFbCA9IGRvY3VtZW50LnF1ZXJ5U2VsZWN0b3IoJyNDb21tZW50Jyk7XG4gICAgICBjb21tZW50RWwuZm9jdXMoKTtcbiAgICAgIGNvbW1lbnRFbC5zZXRTZWxlY3Rpb25SYW5nZShcbiAgICAgICAgY29tbWVudEVsLnZhbHVlLmxlbmd0aCxcbiAgICAgICAgY29tbWVudEVsLnZhbHVlLmxlbmd0aFxuICAgICAgKTtcbiAgICB9XG4gIH0pO1xuXG4gIGRvY3VtZW50LmFkZEV2ZW50TGlzdGVuZXIoJ2lucHV0JywgZXZ0ID0+IHtcbiAgICBpZiAoc3RvcmUuZ2V0U3RhdGUoKS51aS5pc1JlbmRlcmluZykge1xuICAgICAgZXZ0LnN0b3BQcm9wYWdhdGlvbigpO1xuICAgICAgcmV0dXJuO1xuICAgIH1cbiAgICBjb25zdCBzdGF0ZSA9IHN0b3JlLmdldFN0YXRlKCk7XG4gICAgaWYgKGV2dC50YXJnZXQgJiYgZXZ0LnRhcmdldC5tYXRjaGVzKCcjQ29tbWVudCcpKSB7XG4gICAgICBjb25zdCBhY3RpdmUgPSBzdGF0ZS5tb2RlbC5hbm5vdGF0aW9ucy5maW5kQnlJRChcbiAgICAgICAgc3RhdGUudWkuYWN0aXZlQW5ub3RhdGlvbklEXG4gICAgICApO1xuICAgICAgZG9jdW1lbnQucXVlcnlTZWxlY3RvcignI1NhdmVBbm5vdGF0aW9uJykuZGlzYWJsZWQgPVxuICAgICAgICAhYWN0aXZlIHx8IGRvY3VtZW50LnF1ZXJ5U2VsZWN0b3IoJyNDb21tZW50JykudmFsdWUubGVuZ3RoID09PSAwO1xuICAgIH1cbiAgfSk7XG5cbiAgbGV0IGlzU2VsZWN0aW5nID0gZmFsc2U7XG4gIGRvY3VtZW50LmFkZEV2ZW50TGlzdGVuZXIoJ3NlbGVjdGlvbmNoYW5nZScsIGV2dCA9PiB7XG4gICAgaXNTZWxlY3RpbmcgPSAhd2luZG93LmdldFNlbGVjdGlvbigpLmlzQ29sbGFwc2VkO1xuICB9KTtcbiAgZG9jdW1lbnQuYWRkRXZlbnRMaXN0ZW5lcignbW91c2V1cCcsIGV2dCA9PiB7XG4gICAgaWYgKGlzU2VsZWN0aW5nKSB7XG4gICAgICBzdG9yZS5kaXNwYXRjaCh7XG4gICAgICAgIHR5cGU6IENIQU5HRV9TRUxFQ1RJT04sXG4gICAgICAgIHNlbGVjdGlvbjogZ2V0UmFuZ2Uod2luZG93LmdldFNlbGVjdGlvbigpKSxcbiAgICAgICAgcG9zaXRpb246IHsgeDogZXZ0LnBhZ2VYLCB5OiBldnQucGFnZVkgfSxcbiAgICAgIH0pO1xuICAgICAgaXNTZWxlY3RpbmcgPSBmYWxzZTtcbiAgICB9IGVsc2Uge1xuICAgICAgaWYgKHN0b3JlLmdldFN0YXRlKCkudWkuc2VsZWN0aW9uKSB7XG4gICAgICAgIHN0b3JlLmRpc3BhdGNoKHsgdHlwZTogQ0FOQ0VMX1NFTEVDVElPTiB9KTtcbiAgICAgIH1cbiAgICB9XG4gIH0pO1xufSk7XG5cbi8qKlxuICogUmV0dXJucyBhIGZ1bmN0aW9uLCB0aGF0LCBhcyBsb25nIGFzIGl0IGNvbnRpbnVlcyB0byBiZSBpbnZva2VkLCB3aWxsIG5vdFxuICogYmUgdHJpZ2dlcmVkLiBUaGUgZnVuY3Rpb24gd2lsbCBiZSBjYWxsZWQgYWZ0ZXIgaXQgc3RvcHMgYmVpbmcgY2FsbGVkIGZvclxuICogTiBtaWxsaXNlY29uZHMuIElmIGBpbW1lZGlhdGVgIGlzIHBhc3NlZCwgdHJpZ2dlciB0aGUgZnVuY3Rpb24gb24gdGhlXG4gKiBsZWFkaW5nIGVkZ2UsIGluc3RlYWQgb2YgdGhlIHRyYWlsaW5nLlxuICogXG4gKiBAc2VlIGh0dHBzOi8vZGF2aWR3YWxzaC5uYW1lL2phdmFzY3JpcHQtZGVib3VuY2UtZnVuY3Rpb25cbiAqIFxuICogQHBhcmFtIHtmdW5jdGlvbn0gZnVuYyBcbiAqIEBwYXJhbSB7bnVtYmVyfSBbd2FpdD01MDBdIFxuICogQHBhcmFtIHtib29sZWFufSBbaW1tZWRpYXRlPWZhbHNlXSBcbiAqIEByZXR1cm5zIHtmdW5jdGlvbn1cbiAqL1xuZnVuY3Rpb24gZGVib3VuY2UoZnVuYywgd2FpdCA9IDUwMCwgaW1tZWRpYXRlID0gZmFsc2UpIHtcbiAgdmFyIHRpbWVvdXQ7XG4gIHJldHVybiBmdW5jdGlvbigpIHtcbiAgICB2YXIgY29udGV4dCA9IHRoaXMsXG4gICAgICBhcmdzID0gYXJndW1lbnRzO1xuICAgIHZhciBsYXRlciA9IGZ1bmN0aW9uKCkge1xuICAgICAgdGltZW91dCA9IG51bGw7XG4gICAgICBpZiAoIWltbWVkaWF0ZSkgZnVuYy5hcHBseShjb250ZXh0LCBhcmdzKTtcbiAgICB9O1xuICAgIHZhciBjYWxsTm93ID0gaW1tZWRpYXRlICYmICF0aW1lb3V0O1xuICAgIGNsZWFyVGltZW91dCh0aW1lb3V0KTtcbiAgICB0aW1lb3V0ID0gc2V0VGltZW91dChsYXRlciwgd2FpdCk7XG4gICAgaWYgKGNhbGxOb3cpIGZ1bmMuYXBwbHkoY29udGV4dCwgYXJncyk7XG4gIH07XG59XG5cbi8qKlxuICogVGhlIG51bWJlciBvZiBjaGFyYWN0ZXJzIGZyb20gdGhlIHN0YXJ0IG9mIHRoZSBwYXJlbnQgbm9kZVxuICogdG8gdGhlIGNoaWxkIG5vZGUsIGZsYXR0ZW5pbmcgYWxsIGludGVydmVuaW5nIGNoaWxkcmVuLCBcbiAqIHBsdXMgdGhlIG9mZnNldCBpbiB0aGUgY2hpbGQgbm9kZS5cbiAqIFxuICogQGV4YW1wbGUgPGRpdj5hYjxhPmNkPGE+ZWY8L2E+ZjwvYT5naDwvZGl2PlxuICogICAgICAgICAgdGV4dE9mZnNldEZyb21Ob2RlKGRpdiwgYVsxXSwgMSkgLy8gNSA9ICdhYicgKyAnY2QnICsgMVxuICogXG4gKiBAcGFyYW0ge05vZGV9IHBhcmVudCBcbiAqIEBwYXJhbSB7Tm9kZX0gY2hpbGQgXG4gKiBAcGFyYW0ge251bWJlcn0gW2NoaWxkT2Zmc2V0ID0gMF1cbiAqL1xuZnVuY3Rpb24gdGV4dE9mZnNldEZyb21Ob2RlKHBhcmVudCwgY2hpbGQsIGNoaWxkT2Zmc2V0ID0gMCkge1xuICBpZiAoIXBhcmVudCkgcmV0dXJuO1xuICBpZiAoIWNoaWxkKSByZXR1cm4gb2Zmc2V0O1xuICAvLyBjb25zb2xlLmxvZygndGV4dE9mZnNldEZyb21Ob2RlJywgcGFyZW50LCBjaGlsZCwgY2hpbGRPZmZzZXQpO1xuICBjb25zdCBpdGVyID0gZG9jdW1lbnQuY3JlYXRlTm9kZUl0ZXJhdG9yKHBhcmVudCwgTm9kZUZpbHRlci5TSE9XX1RFWFQpO1xuXG4gIGxldCBub2RlO1xuICBsZXQgb2Zmc2V0ID0gMDtcbiAgd2hpbGUgKGl0ZXIubmV4dE5vZGUoKSkge1xuICAgIG5vZGUgPSBpdGVyLnJlZmVyZW5jZU5vZGU7XG4gICAgaWYgKG5vZGUgPT09IGNoaWxkKSB7XG4gICAgICByZXR1cm4gb2Zmc2V0ICsgY2hpbGRPZmZzZXQ7XG4gICAgfVxuICAgIGlmIChOb2RlLlRFWFRfTk9ERSA9PT0gbm9kZS5ub2RlVHlwZSkge1xuICAgICAgb2Zmc2V0ICs9IG5vZGUudGV4dENvbnRlbnQubGVuZ3RoO1xuICAgIH1cbiAgfVxuICB0aHJvdyBuZXcgRXJyb3IoXG4gICAgYENvdWxkbuKAmXQgZmluZCAke1N0cmluZyhjaGlsZCl9IGFzIGEgY2hpbGQgb2YgJHtTdHJpbmcocGFyZW50KX1gXG4gICk7XG59XG5cbi8qKlxuICogR2l2ZW4gYSBub2RlLCBmaW5kIGl0cyBwYXJlbnQgbGluZSBudW1iZXIsIFxuICogZGVsZWdhdGluZyB0byBgZ2V0TGluZSgpYC5cbiAqIFxuICogQHBhcmFtIHtOb2RlfSBub2RlIFxuICogQHBhcmFtIHtzdHJpbmd9IFttYXRjaGVyID0gJ3RyLmxpbmUnXVxuICogQHJldHVybiB7bnVtYmVyfVxuICovXG5mdW5jdGlvbiBnZXRMaW5lTnVtYmVyKG5vZGUsIG1hdGNoZXIgPSAndHIubGluZScpIHtcbiAgcmV0dXJuIHBhcnNlSW50KGdldExpbmUobm9kZSwgbWF0Y2hlcikuZGF0YXNldC5saW5lLCAxMCk7XG59XG5cbi8qKlxuICogR2l2ZW4gYSBub2RlLCBmaW5kIGl0cyBwYXJlbnQgbGluZS5cbiAqIFxuICogQHBhcmFtIHtOb2RlfSBub2RlIFxuICogQHBhcmFtIHtzdHJpbmd9IFttYXRjaGVyID0gJ3RyLmxpbmUnXVxuICovXG5mdW5jdGlvbiBnZXRMaW5lKG5vZGUsIG1hdGNoZXIgPSAndHIubGluZScpIHtcbiAgZG8ge1xuICAgIGlmIChub2RlLm1hdGNoZXMgJiYgbm9kZS5tYXRjaGVzKG1hdGNoZXIpKSB7XG4gICAgICByZXR1cm4gbm9kZTtcbiAgICB9XG4gIH0gd2hpbGUgKChub2RlID0gbm9kZS5wYXJlbnROb2RlKSk7XG4gIHJldHVybiB1bmRlZmluZWQ7XG59XG5cbi8qKlxuICogR2l2ZW4gYSBgU2VsZWN0aW9uYCwgZGV0ZXJtaW5lIHRoZSBgUmFuZ2VgLCB3aGVyZVxuICogYHN0YXJ0YCBpcyBhbHdheXMgYmVmb3JlIGBlbmRgLCByZWdhcmRsZXNzIFxuICogZnJvbSB3aGljaCBkaXJlY3Rpb24gdGhlIHNlbGVjdGlvbiB3YXMgbWFkZS5cbiAqIFxuICogQHBhcmFtIHtTZWxlY3Rpb259IHNlbGVjdGlvbiBcbiAqIEByZXR1cm5zIHtPYmplY3R9IC0gYHsgc3RhcnQ6IG51bWJlciwgZW5kOiBudW1iZXIgfTtcbiAqL1xuZnVuY3Rpb24gZ2V0UmFuZ2Uoc2VsZWN0aW9uKSB7XG4gIGlmICghc2VsZWN0aW9uKSByZXR1cm47XG4gIGlmICghKHNlbGVjdGlvbiBpbnN0YW5jZW9mIFNlbGVjdGlvbikpXG4gICAgdGhyb3cgbmV3IFR5cGVFcnJvcihTdHJpbmcoc2VsZWN0aW9uLmNvbnN0cnVjdG9yLm5hbWUpKTtcbiAgY29uc3QgYW5jaG9yID0ge1xuICAgIGxpbmU6IGdldExpbmVOdW1iZXIoc2VsZWN0aW9uLmFuY2hvck5vZGUpLFxuICAgIGNvbHVtbjogdGV4dE9mZnNldEZyb21Ob2RlKFxuICAgICAgZ2V0TGluZShzZWxlY3Rpb24uYW5jaG9yTm9kZSksXG4gICAgICBzZWxlY3Rpb24uYW5jaG9yTm9kZSxcbiAgICAgIHNlbGVjdGlvbi5hbmNob3JPZmZzZXRcbiAgICApLFxuICB9O1xuICBjb25zdCBmb2N1cyA9IHtcbiAgICBsaW5lOiBnZXRMaW5lTnVtYmVyKHNlbGVjdGlvbi5mb2N1c05vZGUpLFxuICAgIGNvbHVtbjogdGV4dE9mZnNldEZyb21Ob2RlKFxuICAgICAgZ2V0TGluZShzZWxlY3Rpb24uZm9jdXNOb2RlKSxcbiAgICAgIHNlbGVjdGlvbi5mb2N1c05vZGUsXG4gICAgICBzZWxlY3Rpb24uZm9jdXNPZmZzZXRcbiAgICApLFxuICB9O1xuICAvLyBjb25zb2xlLmxvZygnZ2V0UmFuZ2UnLCBhbmNob3IsIGZvY3VzKTtcbiAgaWYgKFxuICAgIGFuY2hvci5saW5lIDwgZm9jdXMubGluZSB8fFxuICAgIChhbmNob3IubGluZSA9PT0gZm9jdXMubGluZSAmJiBhbmNob3IuY29sdW1uIDw9IGZvY3VzLmNvbHVtbilcbiAgKSB7XG4gICAgcmV0dXJuIHtcbiAgICAgIHN0YXJ0OiBhbmNob3IsXG4gICAgICBlbmQ6IGZvY3VzLFxuICAgIH07XG4gIH0gZWxzZSB7XG4gICAgcmV0dXJuIHtcbiAgICAgIHN0YXJ0OiBmb2N1cyxcbiAgICAgIGVuZDogYW5jaG9yLFxuICAgIH07XG4gIH1cbn1cblxuLyoqXG4gKiBcbiAqIEBwYXJhbSB7Tm9kZX0gcGFyZW50U3RhcnQgXG4gKiBAcGFyYW0ge251bWJlcn0gc3RhcnQgXG4gKiBAcGFyYW0ge05vZGV9IHBhcmVudEVuZCBcbiAqIEBwYXJhbSB7bnVtYmVyfSBlbmQgXG4gKiBAcmV0dXJuIHtSYW5nZX0gXG4gKi9cbmZ1bmN0aW9uIHJhbmdlRnJvbU9mZnNldHMoXG4gIHBhcmVudFN0YXJ0LFxuICBzdGFydCA9IDAsXG4gIHBhcmVudEVuZCA9IHBhcmVudFN0YXJ0LFxuICBlbmQgPSAwXG4pIHtcbiAgLy8gY29uc29sZS5sb2coJ3JhbmdlRnJvbU9mZnNldHMnLCBwYXJlbnRTdGFydCwgc3RhcnQsIHBhcmVudEVuZCwgZW5kKTtcbiAgY29uc3QgcmFuZ2UgPSBkb2N1bWVudC5jcmVhdGVSYW5nZSgpO1xuICBjb25zdCBzID0gbm9kZUZyb21UZXh0T2Zmc2V0KHBhcmVudFN0YXJ0LCBzdGFydCk7XG4gIGNvbnN0IGUgPSBub2RlRnJvbVRleHRPZmZzZXQocGFyZW50RW5kLCBlbmQpO1xuICAvLyBjb25zb2xlLmxvZygncmFuZ2VGcm9tT2Zmc2V0cyNub2RlRnJvbVRleHRPZmZzZXQnLCBzLCBlKTtcbiAgcmFuZ2Uuc2V0U3RhcnQoY2hpbGRUZXh0Tm9kZU9yU2VsZihzLm5vZGUpLCBzLm9mZnNldCk7XG4gIHJhbmdlLnNldEVuZChjaGlsZFRleHROb2RlT3JTZWxmKGUubm9kZSksIGUub2Zmc2V0KTtcblxuICByZXR1cm4gcmFuZ2U7XG59XG5cbi8qKlxuICogXG4gKiBAcGFyYW0ge05vZGV9IHBhcmVudCBcbiAqIEBwYXJhbSB7bnVtYmVyfSBvZmZzZXQgXG4gKiBAcmV0dXJuIHtPYmplY3R9IC0gYHsgbm9kZTogTm9kZSwgb2Zmc2V0OiBudW1iZXIgfWBcbiAqL1xuZnVuY3Rpb24gbm9kZUZyb21UZXh0T2Zmc2V0KHBhcmVudCwgb2Zmc2V0ID0gMCkge1xuICBpZiAoIXBhcmVudCkgcmV0dXJuO1xuICAvLyBjb25zb2xlLmxvZygnbm9kZUZyb21UZXh0T2Zmc2V0JywgcGFyZW50LCBvZmZzZXQpO1xuXG4gIGNvbnN0IGl0ZXIgPSBkb2N1bWVudC5jcmVhdGVOb2RlSXRlcmF0b3IocGFyZW50LCBOb2RlRmlsdGVyLlNIT1dfVEVYVCk7XG5cbiAgbGV0IGNvdW50ZXIgPSAtMTtcbiAgbGV0IG5vZGU7XG4gIGxldCBsYXN0O1xuICAvLyBGaW5kIHRoZSBzdGFydCBub2RlIChjb3VsZCB3ZSBzb21laG93IHNraXAgdGhpcyBzZWVtaW5nbHkgbmVlZGxlc3Mgc2VhcmNoPylcbiAgd2hpbGUgKGNvdW50ZXIgPCBvZmZzZXQgJiYgaXRlci5uZXh0Tm9kZSgpKSB7XG4gICAgbm9kZSA9IGl0ZXIucmVmZXJlbmNlTm9kZTtcbiAgICBpZiAobm9kZS5ub2RlVHlwZSA9PT0gTm9kZS5URVhUX05PREUpIHtcbiAgICAgIGxhc3QgPSBvZmZzZXQgLSBjb3VudGVyIC0gMTtcbiAgICAgIGNvdW50ZXIgKz0gbm9kZS50ZXh0Q29udGVudC5sZW5ndGg7XG4gICAgfVxuICB9XG4gIHJldHVybiB7IG5vZGU6IG5vZGUsIG9mZnNldDogbGFzdCB9O1xufVxuXG4vKipcbiAqIERlc2NlbmRlbnQtb3Itc2VsZiB1bnRpbCB5b3UgZ2V0IGEgYFRleHROb2RlYFxuICogXG4gKiBAcGFyYW0ge05vZGV9IG5vZGUgXG4gKiBAcmV0dXJuIHtUZXh0Tm9kZX0gLSBPciBgdW5kZWZpbmVkYCBpZiB0aGVyZSBhcmUgbm90IHRleHQgXG4gKiAgICAgICAgICAgICAgICAgICAgICBjaGlsZHJlbiwgZS5nLiBgPGJyLz5gXG4gKi9cbmZ1bmN0aW9uIGNoaWxkVGV4dE5vZGVPclNlbGYobm9kZSkge1xuICBpZiAoIW5vZGUpIHJldHVybjtcbiAgaWYgKCEobm9kZSBpbnN0YW5jZW9mIE5vZGUpKSB0aHJvdyBuZXcgVHlwZUVycm9yKG5vZGUuY29uc3RydWN0b3IubmFtZSk7XG5cbiAgaWYgKE5vZGUuVEVYVF9OT0RFID09PSBub2RlLm5vZGVUeXBlKSB7XG4gICAgcmV0dXJuIG5vZGU7XG4gIH1cbiAgaWYgKG5vZGUuZmlyc3RDaGlsZCkge1xuICAgIHJldHVybiBjaGlsZFRleHROb2RlT3JTZWxmKG5vZGUuZmlyc3RDaGlsZCk7XG4gIH1cbiAgcmV0dXJuIHVuZGVmaW5lZDtcbn1cblxuXG5cbi8vIFdFQlBBQ0sgRk9PVEVSIC8vXG4vLyBzcmMvYW5ub3RhdGUuanMiXSwibWFwcGluZ3MiOiI7O0FBQUE7QUFDQTtBQUFBO0FBQ0E7QUFBQTtBQUNBO0FBQUE7QUFDQTs7O0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFGQTtBQUlBO0FBQ0E7QUFDQTtBQUNBO0FBRUE7QUFDQTtBQU5BO0FBTEE7QUFxSUE7QUFDQTtBQUlBOzs7Ozs7QUFNQTtBQUFBO0FBQUE7QUFDQTtBQUFBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUFBO0FBQUE7QUFDQTtBQUFBO0FBQ0E7QUFDQTtBQUNBO0FBQUE7QUFBQTtBQUNBO0FBQ0E7QUFDQTtBQUFBO0FBQUE7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUFBO0FBQUE7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQUE7QUFBQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQUE7QUFBQTtBQUNBO0FBQ0E7QUFDQTtBQUFBO0FBQUE7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBOzs7Ozs7OztBQVFBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBSUE7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFGQTtBQUlBO0FBQ0E7QUFDQTtBQUZBO0FBTEE7QUFOQTtBQWlCQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBS0E7QUFDQTtBQUZBO0FBTUE7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQU1BO0FBQ0E7QUFHQTtBQUVBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUdBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBSUE7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQW5HQTtBQXFHQTtBQUNBO0FBQ0E7QUFDQTtBQUFBO0FBQUE7QUFLQTtBQUNBO0FBQ0E7QUFFQTtBQUFBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUxBO0FBQUE7QUFDQTtBQU9BO0FBQ0E7QUFDQTtBQUNBOzs7OztBQUtBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBSUE7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUlBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFFQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBS0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFNQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7Ozs7Ozs7QUFPQTtBQUNBO0FBQ0E7QUFDQTtBQUhBO0FBSUE7QUFFQTtBQUFBO0FBTkE7QUFDQTtBQURBO0FBQUE7QUFBQTtBQUNBO0FBREE7QUFHQTtBQUFBO0FBQ0E7QUFEQTtBQU1BO0FBVEE7QUFBQTtBQUFBO0FBQUE7QUFBQTtBQUFBO0FBQUE7QUFBQTtBQUFBO0FBQUE7QUFBQTtBQUFBO0FBQUE7QUFBQTtBQVVBO0FBQ0E7QUFDQTtBQUFBO0FBQUE7QUFDQTtBQUFBO0FBQ0E7QUFNQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBR0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTs7Ozs7Ozs7O0FBU0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBRkE7QUFJQTtBQUNBO0FBREE7QUFHQTtBQUNBO0FBQ0E7QUFDQTtBQURBO0FBR0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFEQTtBQUdBO0FBQ0E7QUFDQTtBQUlBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUZBO0FBSUE7QUFDQTtBQUNBO0FBSUE7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUdBO0FBRUE7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFIQTtBQUtBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBOzs7Ozs7Ozs7Ozs7O0FBYUE7QUFBQTtBQUFBO0FBQ0E7QUFBQTtBQUNBO0FBQ0E7QUFBQTtBQUVBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTs7Ozs7Ozs7Ozs7O0FBWUE7QUFBQTtBQUNBO0FBQUE7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUdBO0FBQ0E7QUFDQTs7Ozs7Ozs7QUFRQTtBQUFBO0FBQ0E7QUFBQTtBQUNBO0FBQ0E7QUFDQTs7Ozs7O0FBTUE7QUFBQTtBQUNBO0FBQUE7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBOzs7Ozs7OztBQVFBO0FBQ0E7QUFDQTtBQUVBO0FBQ0E7QUFDQTtBQUZBO0FBUUE7QUFDQTtBQUNBO0FBRkE7QUFRQTtBQUNBO0FBSUE7QUFDQTtBQUNBO0FBRkE7QUFJQTtBQUNBO0FBQ0E7QUFDQTtBQUZBO0FBSUE7QUFDQTtBQUNBO0FBQ0E7Ozs7Ozs7O0FBUUE7QUFLQTtBQUFBO0FBQUE7QUFDQTtBQUFBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTs7Ozs7O0FBTUE7QUFBQTtBQUNBO0FBQUE7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTs7Ozs7OztBQU9BO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQSIsInNvdXJjZVJvb3QiOiIifQ==\n//# sourceURL=webpack-internal:///7\n");
+
+/***/ }),
+/* 8 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+eval("\n\nObject.defineProperty(exports, \"__esModule\", {\n  value: true\n});\n/*\n * <https://github.com/Treora/dom-highlight-range>\n * \n * \n * Except for parts incorporated from copyrighted works, all code is released in the public domain, free from copyright restrictions.\n * \n * Contains code copied from TextPositionAnchor[1] by Randall Leeds, published under the following licence:\n * \"\"\"\n * Copyright (c) 2015 Randall Leeds\n * \n * Permission is hereby granted, free of charge, to any person obtaining a copy\n * of this software and associated documentation files (the \"Software\"), to deal\n * in the Software without restriction, including without limitation the rights\n * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell\n * copies of the Software, and to permit persons to whom the Software is\n * furnished to do so, subject to the following conditions:\n * \n * The above copyright notice and this permission notice shall be included in\n * all copies or substantial portions of the Software.\n * \n * THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\n * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\n * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\n * THE SOFTWARE.\n * \"\"\"\n * \n * [1]: https://github.com/tilgovi/dom-anchor-text-position/blob/d110756ff00702f642daae570752be9595fc2a52/TextPositionAnchor.js\n */\n\n// Wrap each text node in a given DOM Range with a <span class=[highLightClass]>.\n// Breaks start and/or end node if needed.\n// Returns a function that cleans up the created highlight (not a perfect undo: split text nodes are not merged again).\n//\n// Parameters:\n// - rangeObject: a Range whose start and end containers are text nodes.\n// - highlightClass: the CSS class the text pieces in the range should get, defaults to 'highlighted-range'.\nfunction highlightRange(rangeObject) {\n  var highlightCallback = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : function () {\n    return document.createElement('span');\n  };\n\n  // Ignore range if empty.\n  if (rangeObject.collapsed) {\n    return;\n  }\n\n  // if (typeof highlightClass == 'undefined') {\n  //   highlightClass = 'highlighted-range';\n  // }\n\n  // First put all nodes in an array (splits start and end nodes)\n  var nodes = textNodesInRange(rangeObject);\n\n  // Remember range details to restore it later.\n  var startContainer = rangeObject.startContainer;\n  var startOffset = rangeObject.startOffset;\n  var endContainer = rangeObject.endContainer;\n  var endOffset = rangeObject.endOffset;\n\n  // Highlight each node\n  var highlights = [];\n  for (var nodeIdx in nodes) {\n    highlights.push(highlightNode(nodes[nodeIdx], highlightCallback));\n  }\n\n  // The rangeObject gets messed up by our DOM changes. Be kind and restore.\n  rangeObject.setStart(startContainer, startOffset);\n  rangeObject.setEnd(endContainer, endOffset);\n\n  // Return a function that cleans up the highlights.\n  function cleanupHighlights() {\n    // Remember range details to restore it later.\n    var startContainer = rangeObject.startContainer;\n    var startOffset = rangeObject.startOffset;\n    var endContainer = rangeObject.endContainer;\n    var endOffset = rangeObject.endOffset;\n\n    // Remove each of the created highlights.\n    for (var highlightIdx in highlights) {\n      removeHighlight(highlights[highlightIdx]);\n    }\n\n    // Be kind and restore the rangeObject again.\n    rangeObject.setStart(startContainer, startOffset);\n    rangeObject.setEnd(endContainer, endOffset);\n  }\n  return cleanupHighlights;\n}\n\n// Return an array of the text nodes in the range. Split the start and end nodes if required.\nfunction textNodesInRange(rangeObject) {\n  // Modify Range to make sure that the start and end nodes are text nodes.\n  setRangeToTextNodes(rangeObject);\n\n  var nodes = [];\n\n  // Ignore range if empty.\n  if (rangeObject.collapsed) {\n    return nodes;\n  }\n\n  // Include (part of) the start node if needed.\n  if (rangeObject.startOffset != rangeObject.startContainer.length) {\n    // If only part of the start node is in the range, split it.\n    if (rangeObject.startOffset != 0) {\n      // Split startContainer to turn the part after the startOffset into a new node.\n      var createdNode = rangeObject.startContainer.splitText(rangeObject.startOffset);\n\n      // If the end was in the same container, it will now be in the newly created node.\n      if (rangeObject.endContainer === rangeObject.startContainer) {\n        rangeObject.setEnd(createdNode, rangeObject.endOffset - rangeObject.startOffset);\n      }\n\n      // Update the start node, which no longer has an offset.\n      rangeObject.setStart(createdNode, 0);\n    }\n  }\n\n  // Create an iterator to iterate through the nodes.\n  var root = typeof rangeObject.commonAncestorContainer != 'undefined' ? rangeObject.commonAncestorContainer : document.body; // fall back to whole document for browser compatibility\n  var iter = document.createNodeIterator(root, NodeFilter.SHOW_TEXT);\n\n  // Find the start node (could we somehow skip this seemingly needless search?)\n  while (iter.referenceNode !== rangeObject.startContainer && iter.referenceNode !== null) {\n    iter.nextNode();\n  }\n\n  // Add each node up to (but excluding) the end node.\n  while (iter.referenceNode !== rangeObject.endContainer && iter.referenceNode !== null) {\n    nodes.push(iter.referenceNode);\n    iter.nextNode();\n  }\n\n  // Include (part of) the end node if needed.\n  if (rangeObject.endOffset != 0) {\n    // If it is only partly included, we need to split it up.\n    if (rangeObject.endOffset != rangeObject.endContainer.length) {\n      // Split the node, breaking off the part outside the range.\n      rangeObject.endContainer.splitText(rangeObject.endOffset);\n      // Note that the range object need not be updated.\n\n      //assert(rangeObject.endOffset == rangeObject.endContainer.length);\n    }\n\n    // Add the end node.\n    nodes.push(rangeObject.endContainer);\n  }\n\n  return nodes;\n}\n\n// Normalise the range to start and end in a text node.\n// Copyright (c) 2015 Randall Leeds\nfunction setRangeToTextNodes(rangeObject) {\n  function getFirstTextNode(node) {\n    if (node.nodeType === Node.TEXT_NODE) return node;\n    var document = node.ownerDocument;\n    var walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT, null, false);\n    return walker.firstChild();\n  }\n\n  var startNode = rangeObject.startContainer;\n  var startOffset = rangeObject.startOffset;\n\n  // Drill down to a text node if the range starts at the container boundary.\n  if (startNode.nodeType !== Node.TEXT_NODE) {\n    if (startOffset === startNode.childNodes.length) {\n      startNode = startNode.childNodes[startOffset - 1];\n      startNode = getFirstTextNode(startNode);\n      startOffset = startNode.textContent.length;\n    } else {\n      startNode = startNode.childNodes[startOffset];\n      startNode = getFirstTextNode(startNode);\n      startOffset = 0;\n    }\n    rangeObject.setStart(startNode, startOffset);\n  }\n\n  var endNode = rangeObject.endContainer;\n  var endOffset = rangeObject.endOffset;\n\n  // Drill down to a text node if the range ends at the container boundary.\n  if (endNode.nodeType !== Node.TEXT_NODE) {\n    if (endOffset === endNode.childNodes.length) {\n      endNode = endNode.childNodes[endOffset - 1];\n      endNode = getFirstTextNode(endNode);\n      endOffset = endNode.textContent.length;\n    } else {\n      endNode = endNode.childNodes[endOffset];\n      endNode = getFirstTextNode(endNode);\n      endOffset = 0;\n    }\n    rangeObject.setEnd(endNode, endOffset);\n  }\n}\n\n// Replace [node] with <span class=[highlightClass]>[node]</span>\nfunction highlightNode(node, highlightCallback) {\n  // Create a highlight\n  var highlight = highlightCallback();\n\n  // Wrap it around the text node\n  node.parentNode.replaceChild(highlight, node);\n  highlight.appendChild(node);\n\n  return highlight;\n}\n\n// Remove a highlight <span> created with highlightNode.\nfunction removeHighlight(highlight) {\n  // Move its children (normally just one text node) into its parent.\n  while (highlight.firstChild) {\n    highlight.parentNode.insertBefore(highlight.firstChild, highlight);\n  }\n  // Remove the now empty node\n  highlight.remove();\n}\n\nexports.highlightRange = highlightRange;\n//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoiOC5qcyIsInNvdXJjZXMiOlsid2VicGFjazovLy9zcmMvaGlnaGxpZ2h0LXJhbmdlLmpzPzA5ZDUiXSwic291cmNlc0NvbnRlbnQiOlsiLypcbiAqIDxodHRwczovL2dpdGh1Yi5jb20vVHJlb3JhL2RvbS1oaWdobGlnaHQtcmFuZ2U+XG4gKiBcbiAqIFxuICogRXhjZXB0IGZvciBwYXJ0cyBpbmNvcnBvcmF0ZWQgZnJvbSBjb3B5cmlnaHRlZCB3b3JrcywgYWxsIGNvZGUgaXMgcmVsZWFzZWQgaW4gdGhlIHB1YmxpYyBkb21haW4sIGZyZWUgZnJvbSBjb3B5cmlnaHQgcmVzdHJpY3Rpb25zLlxuICogXG4gKiBDb250YWlucyBjb2RlIGNvcGllZCBmcm9tIFRleHRQb3NpdGlvbkFuY2hvclsxXSBieSBSYW5kYWxsIExlZWRzLCBwdWJsaXNoZWQgdW5kZXIgdGhlIGZvbGxvd2luZyBsaWNlbmNlOlxuICogXCJcIlwiXG4gKiBDb3B5cmlnaHQgKGMpIDIwMTUgUmFuZGFsbCBMZWVkc1xuICogXG4gKiBQZXJtaXNzaW9uIGlzIGhlcmVieSBncmFudGVkLCBmcmVlIG9mIGNoYXJnZSwgdG8gYW55IHBlcnNvbiBvYnRhaW5pbmcgYSBjb3B5XG4gKiBvZiB0aGlzIHNvZnR3YXJlIGFuZCBhc3NvY2lhdGVkIGRvY3VtZW50YXRpb24gZmlsZXMgKHRoZSBcIlNvZnR3YXJlXCIpLCB0byBkZWFsXG4gKiBpbiB0aGUgU29mdHdhcmUgd2l0aG91dCByZXN0cmljdGlvbiwgaW5jbHVkaW5nIHdpdGhvdXQgbGltaXRhdGlvbiB0aGUgcmlnaHRzXG4gKiB0byB1c2UsIGNvcHksIG1vZGlmeSwgbWVyZ2UsIHB1Ymxpc2gsIGRpc3RyaWJ1dGUsIHN1YmxpY2Vuc2UsIGFuZC9vciBzZWxsXG4gKiBjb3BpZXMgb2YgdGhlIFNvZnR3YXJlLCBhbmQgdG8gcGVybWl0IHBlcnNvbnMgdG8gd2hvbSB0aGUgU29mdHdhcmUgaXNcbiAqIGZ1cm5pc2hlZCB0byBkbyBzbywgc3ViamVjdCB0byB0aGUgZm9sbG93aW5nIGNvbmRpdGlvbnM6XG4gKiBcbiAqIFRoZSBhYm92ZSBjb3B5cmlnaHQgbm90aWNlIGFuZCB0aGlzIHBlcm1pc3Npb24gbm90aWNlIHNoYWxsIGJlIGluY2x1ZGVkIGluXG4gKiBhbGwgY29waWVzIG9yIHN1YnN0YW50aWFsIHBvcnRpb25zIG9mIHRoZSBTb2Z0d2FyZS5cbiAqIFxuICogVEhFIFNPRlRXQVJFIElTIFBST1ZJREVEIFwiQVMgSVNcIiwgV0lUSE9VVCBXQVJSQU5UWSBPRiBBTlkgS0lORCwgRVhQUkVTUyBPUlxuICogSU1QTElFRCwgSU5DTFVESU5HIEJVVCBOT1QgTElNSVRFRCBUTyBUSEUgV0FSUkFOVElFUyBPRiBNRVJDSEFOVEFCSUxJVFksXG4gKiBGSVRORVNTIEZPUiBBIFBBUlRJQ1VMQVIgUFVSUE9TRSBBTkQgTk9OSU5GUklOR0VNRU5ULiBJTiBOTyBFVkVOVCBTSEFMTCBUSEVcbiAqIEFVVEhPUlMgT1IgQ09QWVJJR0hUIEhPTERFUlMgQkUgTElBQkxFIEZPUiBBTlkgQ0xBSU0sIERBTUFHRVMgT1IgT1RIRVJcbiAqIExJQUJJTElUWSwgV0hFVEhFUiBJTiBBTiBBQ1RJT04gT0YgQ09OVFJBQ1QsIFRPUlQgT1IgT1RIRVJXSVNFLCBBUklTSU5HIEZST00sXG4gKiBPVVQgT0YgT1IgSU4gQ09OTkVDVElPTiBXSVRIIFRIRSBTT0ZUV0FSRSBPUiBUSEUgVVNFIE9SIE9USEVSIERFQUxJTkdTIElOXG4gKiBUSEUgU09GVFdBUkUuXG4gKiBcIlwiXCJcbiAqIFxuICogWzFdOiBodHRwczovL2dpdGh1Yi5jb20vdGlsZ292aS9kb20tYW5jaG9yLXRleHQtcG9zaXRpb24vYmxvYi9kMTEwNzU2ZmYwMDcwMmY2NDJkYWFlNTcwNzUyYmU5NTk1ZmMyYTUyL1RleHRQb3NpdGlvbkFuY2hvci5qc1xuICovXG5cbi8vIFdyYXAgZWFjaCB0ZXh0IG5vZGUgaW4gYSBnaXZlbiBET00gUmFuZ2Ugd2l0aCBhIDxzcGFuIGNsYXNzPVtoaWdoTGlnaHRDbGFzc10+LlxuLy8gQnJlYWtzIHN0YXJ0IGFuZC9vciBlbmQgbm9kZSBpZiBuZWVkZWQuXG4vLyBSZXR1cm5zIGEgZnVuY3Rpb24gdGhhdCBjbGVhbnMgdXAgdGhlIGNyZWF0ZWQgaGlnaGxpZ2h0IChub3QgYSBwZXJmZWN0IHVuZG86IHNwbGl0IHRleHQgbm9kZXMgYXJlIG5vdCBtZXJnZWQgYWdhaW4pLlxuLy9cbi8vIFBhcmFtZXRlcnM6XG4vLyAtIHJhbmdlT2JqZWN0OiBhIFJhbmdlIHdob3NlIHN0YXJ0IGFuZCBlbmQgY29udGFpbmVycyBhcmUgdGV4dCBub2Rlcy5cbi8vIC0gaGlnaGxpZ2h0Q2xhc3M6IHRoZSBDU1MgY2xhc3MgdGhlIHRleHQgcGllY2VzIGluIHRoZSByYW5nZSBzaG91bGQgZ2V0LCBkZWZhdWx0cyB0byAnaGlnaGxpZ2h0ZWQtcmFuZ2UnLlxuZnVuY3Rpb24gaGlnaGxpZ2h0UmFuZ2UoXG4gIHJhbmdlT2JqZWN0LFxuICBoaWdobGlnaHRDYWxsYmFjayA9ICgpID0+IGRvY3VtZW50LmNyZWF0ZUVsZW1lbnQoJ3NwYW4nKVxuKSB7XG4gIC8vIElnbm9yZSByYW5nZSBpZiBlbXB0eS5cbiAgaWYgKHJhbmdlT2JqZWN0LmNvbGxhcHNlZCkge1xuICAgIHJldHVybjtcbiAgfVxuXG4gIC8vIGlmICh0eXBlb2YgaGlnaGxpZ2h0Q2xhc3MgPT0gJ3VuZGVmaW5lZCcpIHtcbiAgLy8gICBoaWdobGlnaHRDbGFzcyA9ICdoaWdobGlnaHRlZC1yYW5nZSc7XG4gIC8vIH1cblxuICAvLyBGaXJzdCBwdXQgYWxsIG5vZGVzIGluIGFuIGFycmF5IChzcGxpdHMgc3RhcnQgYW5kIGVuZCBub2RlcylcbiAgdmFyIG5vZGVzID0gdGV4dE5vZGVzSW5SYW5nZShyYW5nZU9iamVjdCk7XG5cbiAgLy8gUmVtZW1iZXIgcmFuZ2UgZGV0YWlscyB0byByZXN0b3JlIGl0IGxhdGVyLlxuICB2YXIgc3RhcnRDb250YWluZXIgPSByYW5nZU9iamVjdC5zdGFydENvbnRhaW5lcjtcbiAgdmFyIHN0YXJ0T2Zmc2V0ID0gcmFuZ2VPYmplY3Quc3RhcnRPZmZzZXQ7XG4gIHZhciBlbmRDb250YWluZXIgPSByYW5nZU9iamVjdC5lbmRDb250YWluZXI7XG4gIHZhciBlbmRPZmZzZXQgPSByYW5nZU9iamVjdC5lbmRPZmZzZXQ7XG5cbiAgLy8gSGlnaGxpZ2h0IGVhY2ggbm9kZVxuICB2YXIgaGlnaGxpZ2h0cyA9IFtdO1xuICBmb3IgKHZhciBub2RlSWR4IGluIG5vZGVzKSB7XG4gICAgaGlnaGxpZ2h0cy5wdXNoKGhpZ2hsaWdodE5vZGUobm9kZXNbbm9kZUlkeF0sIGhpZ2hsaWdodENhbGxiYWNrKSk7XG4gIH1cblxuICAvLyBUaGUgcmFuZ2VPYmplY3QgZ2V0cyBtZXNzZWQgdXAgYnkgb3VyIERPTSBjaGFuZ2VzLiBCZSBraW5kIGFuZCByZXN0b3JlLlxuICByYW5nZU9iamVjdC5zZXRTdGFydChzdGFydENvbnRhaW5lciwgc3RhcnRPZmZzZXQpO1xuICByYW5nZU9iamVjdC5zZXRFbmQoZW5kQ29udGFpbmVyLCBlbmRPZmZzZXQpO1xuXG4gIC8vIFJldHVybiBhIGZ1bmN0aW9uIHRoYXQgY2xlYW5zIHVwIHRoZSBoaWdobGlnaHRzLlxuICBmdW5jdGlvbiBjbGVhbnVwSGlnaGxpZ2h0cygpIHtcbiAgICAvLyBSZW1lbWJlciByYW5nZSBkZXRhaWxzIHRvIHJlc3RvcmUgaXQgbGF0ZXIuXG4gICAgdmFyIHN0YXJ0Q29udGFpbmVyID0gcmFuZ2VPYmplY3Quc3RhcnRDb250YWluZXI7XG4gICAgdmFyIHN0YXJ0T2Zmc2V0ID0gcmFuZ2VPYmplY3Quc3RhcnRPZmZzZXQ7XG4gICAgdmFyIGVuZENvbnRhaW5lciA9IHJhbmdlT2JqZWN0LmVuZENvbnRhaW5lcjtcbiAgICB2YXIgZW5kT2Zmc2V0ID0gcmFuZ2VPYmplY3QuZW5kT2Zmc2V0O1xuXG4gICAgLy8gUmVtb3ZlIGVhY2ggb2YgdGhlIGNyZWF0ZWQgaGlnaGxpZ2h0cy5cbiAgICBmb3IgKHZhciBoaWdobGlnaHRJZHggaW4gaGlnaGxpZ2h0cykge1xuICAgICAgcmVtb3ZlSGlnaGxpZ2h0KGhpZ2hsaWdodHNbaGlnaGxpZ2h0SWR4XSk7XG4gICAgfVxuXG4gICAgLy8gQmUga2luZCBhbmQgcmVzdG9yZSB0aGUgcmFuZ2VPYmplY3QgYWdhaW4uXG4gICAgcmFuZ2VPYmplY3Quc2V0U3RhcnQoc3RhcnRDb250YWluZXIsIHN0YXJ0T2Zmc2V0KTtcbiAgICByYW5nZU9iamVjdC5zZXRFbmQoZW5kQ29udGFpbmVyLCBlbmRPZmZzZXQpO1xuICB9XG4gIHJldHVybiBjbGVhbnVwSGlnaGxpZ2h0cztcbn1cblxuLy8gUmV0dXJuIGFuIGFycmF5IG9mIHRoZSB0ZXh0IG5vZGVzIGluIHRoZSByYW5nZS4gU3BsaXQgdGhlIHN0YXJ0IGFuZCBlbmQgbm9kZXMgaWYgcmVxdWlyZWQuXG5mdW5jdGlvbiB0ZXh0Tm9kZXNJblJhbmdlKHJhbmdlT2JqZWN0KSB7XG4gIC8vIE1vZGlmeSBSYW5nZSB0byBtYWtlIHN1cmUgdGhhdCB0aGUgc3RhcnQgYW5kIGVuZCBub2RlcyBhcmUgdGV4dCBub2Rlcy5cbiAgc2V0UmFuZ2VUb1RleHROb2RlcyhyYW5nZU9iamVjdCk7XG5cbiAgdmFyIG5vZGVzID0gW107XG5cbiAgLy8gSWdub3JlIHJhbmdlIGlmIGVtcHR5LlxuICBpZiAocmFuZ2VPYmplY3QuY29sbGFwc2VkKSB7XG4gICAgcmV0dXJuIG5vZGVzO1xuICB9XG5cbiAgLy8gSW5jbHVkZSAocGFydCBvZikgdGhlIHN0YXJ0IG5vZGUgaWYgbmVlZGVkLlxuICBpZiAocmFuZ2VPYmplY3Quc3RhcnRPZmZzZXQgIT0gcmFuZ2VPYmplY3Quc3RhcnRDb250YWluZXIubGVuZ3RoKSB7XG4gICAgLy8gSWYgb25seSBwYXJ0IG9mIHRoZSBzdGFydCBub2RlIGlzIGluIHRoZSByYW5nZSwgc3BsaXQgaXQuXG4gICAgaWYgKHJhbmdlT2JqZWN0LnN0YXJ0T2Zmc2V0ICE9IDApIHtcbiAgICAgIC8vIFNwbGl0IHN0YXJ0Q29udGFpbmVyIHRvIHR1cm4gdGhlIHBhcnQgYWZ0ZXIgdGhlIHN0YXJ0T2Zmc2V0IGludG8gYSBuZXcgbm9kZS5cbiAgICAgIHZhciBjcmVhdGVkTm9kZSA9IHJhbmdlT2JqZWN0LnN0YXJ0Q29udGFpbmVyLnNwbGl0VGV4dChcbiAgICAgICAgcmFuZ2VPYmplY3Quc3RhcnRPZmZzZXRcbiAgICAgICk7XG5cbiAgICAgIC8vIElmIHRoZSBlbmQgd2FzIGluIHRoZSBzYW1lIGNvbnRhaW5lciwgaXQgd2lsbCBub3cgYmUgaW4gdGhlIG5ld2x5IGNyZWF0ZWQgbm9kZS5cbiAgICAgIGlmIChyYW5nZU9iamVjdC5lbmRDb250YWluZXIgPT09IHJhbmdlT2JqZWN0LnN0YXJ0Q29udGFpbmVyKSB7XG4gICAgICAgIHJhbmdlT2JqZWN0LnNldEVuZChcbiAgICAgICAgICBjcmVhdGVkTm9kZSxcbiAgICAgICAgICByYW5nZU9iamVjdC5lbmRPZmZzZXQgLSByYW5nZU9iamVjdC5zdGFydE9mZnNldFxuICAgICAgICApO1xuICAgICAgfVxuXG4gICAgICAvLyBVcGRhdGUgdGhlIHN0YXJ0IG5vZGUsIHdoaWNoIG5vIGxvbmdlciBoYXMgYW4gb2Zmc2V0LlxuICAgICAgcmFuZ2VPYmplY3Quc2V0U3RhcnQoY3JlYXRlZE5vZGUsIDApO1xuICAgIH1cbiAgfVxuXG4gIC8vIENyZWF0ZSBhbiBpdGVyYXRvciB0byBpdGVyYXRlIHRocm91Z2ggdGhlIG5vZGVzLlxuICB2YXIgcm9vdCA9XG4gICAgdHlwZW9mIHJhbmdlT2JqZWN0LmNvbW1vbkFuY2VzdG9yQ29udGFpbmVyICE9ICd1bmRlZmluZWQnXG4gICAgICA/IHJhbmdlT2JqZWN0LmNvbW1vbkFuY2VzdG9yQ29udGFpbmVyXG4gICAgICA6IGRvY3VtZW50LmJvZHk7IC8vIGZhbGwgYmFjayB0byB3aG9sZSBkb2N1bWVudCBmb3IgYnJvd3NlciBjb21wYXRpYmlsaXR5XG4gIHZhciBpdGVyID0gZG9jdW1lbnQuY3JlYXRlTm9kZUl0ZXJhdG9yKHJvb3QsIE5vZGVGaWx0ZXIuU0hPV19URVhUKTtcblxuICAvLyBGaW5kIHRoZSBzdGFydCBub2RlIChjb3VsZCB3ZSBzb21laG93IHNraXAgdGhpcyBzZWVtaW5nbHkgbmVlZGxlc3Mgc2VhcmNoPylcbiAgd2hpbGUgKFxuICAgIGl0ZXIucmVmZXJlbmNlTm9kZSAhPT0gcmFuZ2VPYmplY3Quc3RhcnRDb250YWluZXIgJiZcbiAgICBpdGVyLnJlZmVyZW5jZU5vZGUgIT09IG51bGxcbiAgKSB7XG4gICAgaXRlci5uZXh0Tm9kZSgpO1xuICB9XG5cbiAgLy8gQWRkIGVhY2ggbm9kZSB1cCB0byAoYnV0IGV4Y2x1ZGluZykgdGhlIGVuZCBub2RlLlxuICB3aGlsZSAoXG4gICAgaXRlci5yZWZlcmVuY2VOb2RlICE9PSByYW5nZU9iamVjdC5lbmRDb250YWluZXIgJiZcbiAgICBpdGVyLnJlZmVyZW5jZU5vZGUgIT09IG51bGxcbiAgKSB7XG4gICAgbm9kZXMucHVzaChpdGVyLnJlZmVyZW5jZU5vZGUpO1xuICAgIGl0ZXIubmV4dE5vZGUoKTtcbiAgfVxuXG4gIC8vIEluY2x1ZGUgKHBhcnQgb2YpIHRoZSBlbmQgbm9kZSBpZiBuZWVkZWQuXG4gIGlmIChyYW5nZU9iamVjdC5lbmRPZmZzZXQgIT0gMCkge1xuICAgIC8vIElmIGl0IGlzIG9ubHkgcGFydGx5IGluY2x1ZGVkLCB3ZSBuZWVkIHRvIHNwbGl0IGl0IHVwLlxuICAgIGlmIChyYW5nZU9iamVjdC5lbmRPZmZzZXQgIT0gcmFuZ2VPYmplY3QuZW5kQ29udGFpbmVyLmxlbmd0aCkge1xuICAgICAgLy8gU3BsaXQgdGhlIG5vZGUsIGJyZWFraW5nIG9mZiB0aGUgcGFydCBvdXRzaWRlIHRoZSByYW5nZS5cbiAgICAgIHJhbmdlT2JqZWN0LmVuZENvbnRhaW5lci5zcGxpdFRleHQocmFuZ2VPYmplY3QuZW5kT2Zmc2V0KTtcbiAgICAgIC8vIE5vdGUgdGhhdCB0aGUgcmFuZ2Ugb2JqZWN0IG5lZWQgbm90IGJlIHVwZGF0ZWQuXG5cbiAgICAgIC8vYXNzZXJ0KHJhbmdlT2JqZWN0LmVuZE9mZnNldCA9PSByYW5nZU9iamVjdC5lbmRDb250YWluZXIubGVuZ3RoKTtcbiAgICB9XG5cbiAgICAvLyBBZGQgdGhlIGVuZCBub2RlLlxuICAgIG5vZGVzLnB1c2gocmFuZ2VPYmplY3QuZW5kQ29udGFpbmVyKTtcbiAgfVxuXG4gIHJldHVybiBub2Rlcztcbn1cblxuLy8gTm9ybWFsaXNlIHRoZSByYW5nZSB0byBzdGFydCBhbmQgZW5kIGluIGEgdGV4dCBub2RlLlxuLy8gQ29weXJpZ2h0IChjKSAyMDE1IFJhbmRhbGwgTGVlZHNcbmZ1bmN0aW9uIHNldFJhbmdlVG9UZXh0Tm9kZXMocmFuZ2VPYmplY3QpIHtcbiAgZnVuY3Rpb24gZ2V0Rmlyc3RUZXh0Tm9kZShub2RlKSB7XG4gICAgaWYgKG5vZGUubm9kZVR5cGUgPT09IE5vZGUuVEVYVF9OT0RFKSByZXR1cm4gbm9kZTtcbiAgICB2YXIgZG9jdW1lbnQgPSBub2RlLm93bmVyRG9jdW1lbnQ7XG4gICAgdmFyIHdhbGtlciA9IGRvY3VtZW50LmNyZWF0ZVRyZWVXYWxrZXIoXG4gICAgICBub2RlLFxuICAgICAgTm9kZUZpbHRlci5TSE9XX1RFWFQsXG4gICAgICBudWxsLFxuICAgICAgZmFsc2VcbiAgICApO1xuICAgIHJldHVybiB3YWxrZXIuZmlyc3RDaGlsZCgpO1xuICB9XG5cbiAgdmFyIHN0YXJ0Tm9kZSA9IHJhbmdlT2JqZWN0LnN0YXJ0Q29udGFpbmVyO1xuICB2YXIgc3RhcnRPZmZzZXQgPSByYW5nZU9iamVjdC5zdGFydE9mZnNldDtcblxuICAvLyBEcmlsbCBkb3duIHRvIGEgdGV4dCBub2RlIGlmIHRoZSByYW5nZSBzdGFydHMgYXQgdGhlIGNvbnRhaW5lciBib3VuZGFyeS5cbiAgaWYgKHN0YXJ0Tm9kZS5ub2RlVHlwZSAhPT0gTm9kZS5URVhUX05PREUpIHtcbiAgICBpZiAoc3RhcnRPZmZzZXQgPT09IHN0YXJ0Tm9kZS5jaGlsZE5vZGVzLmxlbmd0aCkge1xuICAgICAgc3RhcnROb2RlID0gc3RhcnROb2RlLmNoaWxkTm9kZXNbc3RhcnRPZmZzZXQgLSAxXTtcbiAgICAgIHN0YXJ0Tm9kZSA9IGdldEZpcnN0VGV4dE5vZGUoc3RhcnROb2RlKTtcbiAgICAgIHN0YXJ0T2Zmc2V0ID0gc3RhcnROb2RlLnRleHRDb250ZW50Lmxlbmd0aDtcbiAgICB9IGVsc2Uge1xuICAgICAgc3RhcnROb2RlID0gc3RhcnROb2RlLmNoaWxkTm9kZXNbc3RhcnRPZmZzZXRdO1xuICAgICAgc3RhcnROb2RlID0gZ2V0Rmlyc3RUZXh0Tm9kZShzdGFydE5vZGUpO1xuICAgICAgc3RhcnRPZmZzZXQgPSAwO1xuICAgIH1cbiAgICByYW5nZU9iamVjdC5zZXRTdGFydChzdGFydE5vZGUsIHN0YXJ0T2Zmc2V0KTtcbiAgfVxuXG4gIHZhciBlbmROb2RlID0gcmFuZ2VPYmplY3QuZW5kQ29udGFpbmVyO1xuICB2YXIgZW5kT2Zmc2V0ID0gcmFuZ2VPYmplY3QuZW5kT2Zmc2V0O1xuXG4gIC8vIERyaWxsIGRvd24gdG8gYSB0ZXh0IG5vZGUgaWYgdGhlIHJhbmdlIGVuZHMgYXQgdGhlIGNvbnRhaW5lciBib3VuZGFyeS5cbiAgaWYgKGVuZE5vZGUubm9kZVR5cGUgIT09IE5vZGUuVEVYVF9OT0RFKSB7XG4gICAgaWYgKGVuZE9mZnNldCA9PT0gZW5kTm9kZS5jaGlsZE5vZGVzLmxlbmd0aCkge1xuICAgICAgZW5kTm9kZSA9IGVuZE5vZGUuY2hpbGROb2Rlc1tlbmRPZmZzZXQgLSAxXTtcbiAgICAgIGVuZE5vZGUgPSBnZXRGaXJzdFRleHROb2RlKGVuZE5vZGUpO1xuICAgICAgZW5kT2Zmc2V0ID0gZW5kTm9kZS50ZXh0Q29udGVudC5sZW5ndGg7XG4gICAgfSBlbHNlIHtcbiAgICAgIGVuZE5vZGUgPSBlbmROb2RlLmNoaWxkTm9kZXNbZW5kT2Zmc2V0XTtcbiAgICAgIGVuZE5vZGUgPSBnZXRGaXJzdFRleHROb2RlKGVuZE5vZGUpO1xuICAgICAgZW5kT2Zmc2V0ID0gMDtcbiAgICB9XG4gICAgcmFuZ2VPYmplY3Quc2V0RW5kKGVuZE5vZGUsIGVuZE9mZnNldCk7XG4gIH1cbn1cblxuLy8gUmVwbGFjZSBbbm9kZV0gd2l0aCA8c3BhbiBjbGFzcz1baGlnaGxpZ2h0Q2xhc3NdPltub2RlXTwvc3Bhbj5cbmZ1bmN0aW9uIGhpZ2hsaWdodE5vZGUobm9kZSwgaGlnaGxpZ2h0Q2FsbGJhY2spIHtcbiAgLy8gQ3JlYXRlIGEgaGlnaGxpZ2h0XG4gIHZhciBoaWdobGlnaHQgPSBoaWdobGlnaHRDYWxsYmFjaygpO1xuXG4gIC8vIFdyYXAgaXQgYXJvdW5kIHRoZSB0ZXh0IG5vZGVcbiAgbm9kZS5wYXJlbnROb2RlLnJlcGxhY2VDaGlsZChoaWdobGlnaHQsIG5vZGUpO1xuICBoaWdobGlnaHQuYXBwZW5kQ2hpbGQobm9kZSk7XG5cbiAgcmV0dXJuIGhpZ2hsaWdodDtcbn1cblxuLy8gUmVtb3ZlIGEgaGlnaGxpZ2h0IDxzcGFuPiBjcmVhdGVkIHdpdGggaGlnaGxpZ2h0Tm9kZS5cbmZ1bmN0aW9uIHJlbW92ZUhpZ2hsaWdodChoaWdobGlnaHQpIHtcbiAgLy8gTW92ZSBpdHMgY2hpbGRyZW4gKG5vcm1hbGx5IGp1c3Qgb25lIHRleHQgbm9kZSkgaW50byBpdHMgcGFyZW50LlxuICB3aGlsZSAoaGlnaGxpZ2h0LmZpcnN0Q2hpbGQpIHtcbiAgICBoaWdobGlnaHQucGFyZW50Tm9kZS5pbnNlcnRCZWZvcmUoaGlnaGxpZ2h0LmZpcnN0Q2hpbGQsIGhpZ2hsaWdodCk7XG4gIH1cbiAgLy8gUmVtb3ZlIHRoZSBub3cgZW1wdHkgbm9kZVxuICBoaWdobGlnaHQucmVtb3ZlKCk7XG59XG5cbmV4cG9ydCB7IGhpZ2hsaWdodFJhbmdlIH07XG5cblxuXG4vLyBXRUJQQUNLIEZPT1RFUiAvL1xuLy8gc3JjL2hpZ2hsaWdodC1yYW5nZS5qcyJdLCJtYXBwaW5ncyI6Ijs7Ozs7QUFBQTs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7QUFnQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUdBO0FBREE7QUFBQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFHQTtBQUNBO0FBQ0E7QUFJQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFJQTtBQUNBO0FBQ0E7QUFDQTtBQUlBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFJQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBTUE7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0EiLCJzb3VyY2VSb290IjoiIn0=\n//# sourceURL=webpack-internal:///8\n");
+
+/***/ }),
+/* 9 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+eval("\n\nObject.defineProperty(exports, \"__esModule\", {\n  value: true\n});\n// <https://github.com/zenozeng/color-hash>\n// MIT license\n\n/**\n * BKDR Hash (modified version)\n *\n * @param {String} str string to hash\n * @returns {Number}\n */\nvar BKDRHash = function BKDRHash(str) {\n  var seed = 131;\n  var seed2 = 137;\n  var hash = 0;\n  // make hash more sensitive for short string like 'a', 'b', 'c'\n  str += 'x';\n  // Note: Number.MAX_SAFE_INTEGER equals 9007199254740991\n  var MAX_SAFE_INTEGER = parseInt(9007199254740991 / seed2);\n  for (var i = 0; i < str.length; i++) {\n    if (hash > MAX_SAFE_INTEGER) {\n      hash = parseInt(hash / seed2);\n    }\n    hash = hash * seed + str.charCodeAt(i);\n  }\n  return hash;\n};\n\n/**\n * Convert RGB Array to HEX\n *\n * @param {Array} RGBArray - [R, G, B]\n * @returns {String} 6 digits hex starting with #\n */\nvar RGB2HEX = function RGB2HEX(RGBArray) {\n  var hex = '#';\n  RGBArray.forEach(function (value) {\n    if (value < 16) {\n      hex += 0;\n    }\n    hex += value.toString(16);\n  });\n  return hex;\n};\n\n/**\n * Convert HSL to RGB\n *\n * @see {@link http://zh.wikipedia.org/wiki/HSL和HSV色彩空间} for further information.\n * @param {Number} H Hue ∈ [0, 360)\n * @param {Number} S Saturation ∈ [0, 1]\n * @param {Number} L Lightness ∈ [0, 1]\n * @returns {Array} R, G, B ∈ [0, 255]\n */\nvar HSL2RGB = function HSL2RGB(H, S, L) {\n  H /= 360;\n\n  var q = L < 0.5 ? L * (1 + S) : L + S - L * S;\n  var p = 2 * L - q;\n\n  return [H + 1 / 3, H, H - 1 / 3].map(function (color) {\n    if (color < 0) {\n      color++;\n    }\n    if (color > 1) {\n      color--;\n    }\n    if (color < 1 / 6) {\n      color = p + (q - p) * 6 * color;\n    } else if (color < 0.5) {\n      color = q;\n    } else if (color < 2 / 3) {\n      color = p + (q - p) * 6 * (2 / 3 - color);\n    } else {\n      color = p;\n    }\n    return Math.round(color * 255);\n  });\n};\n\n/**\n * Color Hash Class\n *\n * @class\n */\nvar ColorHash = function ColorHash(options) {\n  options = options || {};\n\n  var LS = [options.lightness, options.saturation].map(function (param) {\n    param = param || [0.35, 0.5, 0.65]; // note that 3 is a prime\n    return Object.prototype.toString.call(param) === '[object Array]' ? param.concat() : [param];\n  });\n\n  this.L = LS[0];\n  this.S = LS[1];\n\n  this.minH = options.minH;\n  this.maxH = options.maxH;\n  if (typeof this.minH === 'undefined' && typeof this.maxH !== 'undefined') this.minH = 0;\n  if (typeof this.minH !== 'undefined' && typeof this.maxH === 'undefined') this.maxH = 360;\n\n  this.hash = options.hash || BKDRHash;\n};\n\n/**\n * Returns the hash in [h, s, l].\n * Note that H ∈ [0, 360); S ∈ [0, 1]; L ∈ [0, 1];\n *\n * @param {String} str string to hash\n * @returns {Array} [h, s, l]\n */\nColorHash.prototype.hsl = function (str) {\n  var H, S, L;\n  var hash = this.hash(str);\n\n  H = hash % 359; // note that 359 is a prime\n  if (typeof this.minH !== 'undefined' && typeof this.maxH !== 'undefined') {\n    H /= 1000;\n    H = H * (this.maxH - this.minH) + this.minH;\n  }\n  hash = parseInt(hash / 360);\n  S = this.S[hash % this.S.length];\n  hash = parseInt(hash / this.S.length);\n  L = this.L[hash % this.L.length];\n\n  return [H, S, L];\n};\n\n/**\n * Returns the hash in [r, g, b].\n * Note that R, G, B ∈ [0, 255]\n *\n * @param {String} str string to hash\n * @returns {Array} [r, g, b]\n */\nColorHash.prototype.rgb = function (str) {\n  var hsl = this.hsl(str);\n  return HSL2RGB.apply(this, hsl);\n};\n\n/**\n * Returns the hash in hex\n *\n * @param {String} str string to hash\n * @returns {String} hex with #\n */\nColorHash.prototype.hex = function (str) {\n  var rgb = this.rgb(str);\n  return RGB2HEX(rgb);\n};\n\nexports.ColorHash = ColorHash;\n//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoiOS5qcyIsInNvdXJjZXMiOlsid2VicGFjazovLy9zcmMvY29sb3ItaGFzaC5qcz9jM2IyIl0sInNvdXJjZXNDb250ZW50IjpbIi8vIDxodHRwczovL2dpdGh1Yi5jb20vemVub3plbmcvY29sb3ItaGFzaD5cbi8vIE1JVCBsaWNlbnNlXG5cbi8qKlxuICogQktEUiBIYXNoIChtb2RpZmllZCB2ZXJzaW9uKVxuICpcbiAqIEBwYXJhbSB7U3RyaW5nfSBzdHIgc3RyaW5nIHRvIGhhc2hcbiAqIEByZXR1cm5zIHtOdW1iZXJ9XG4gKi9cbnZhciBCS0RSSGFzaCA9IGZ1bmN0aW9uKHN0cikge1xuICB2YXIgc2VlZCA9IDEzMTtcbiAgdmFyIHNlZWQyID0gMTM3O1xuICB2YXIgaGFzaCA9IDA7XG4gIC8vIG1ha2UgaGFzaCBtb3JlIHNlbnNpdGl2ZSBmb3Igc2hvcnQgc3RyaW5nIGxpa2UgJ2EnLCAnYicsICdjJ1xuICBzdHIgKz0gJ3gnO1xuICAvLyBOb3RlOiBOdW1iZXIuTUFYX1NBRkVfSU5URUdFUiBlcXVhbHMgOTAwNzE5OTI1NDc0MDk5MVxuICB2YXIgTUFYX1NBRkVfSU5URUdFUiA9IHBhcnNlSW50KDkwMDcxOTkyNTQ3NDA5OTEgLyBzZWVkMik7XG4gIGZvciAodmFyIGkgPSAwOyBpIDwgc3RyLmxlbmd0aDsgaSsrKSB7XG4gICAgaWYgKGhhc2ggPiBNQVhfU0FGRV9JTlRFR0VSKSB7XG4gICAgICBoYXNoID0gcGFyc2VJbnQoaGFzaCAvIHNlZWQyKTtcbiAgICB9XG4gICAgaGFzaCA9IGhhc2ggKiBzZWVkICsgc3RyLmNoYXJDb2RlQXQoaSk7XG4gIH1cbiAgcmV0dXJuIGhhc2g7XG59O1xuXG4vKipcbiAqIENvbnZlcnQgUkdCIEFycmF5IHRvIEhFWFxuICpcbiAqIEBwYXJhbSB7QXJyYXl9IFJHQkFycmF5IC0gW1IsIEcsIEJdXG4gKiBAcmV0dXJucyB7U3RyaW5nfSA2IGRpZ2l0cyBoZXggc3RhcnRpbmcgd2l0aCAjXG4gKi9cbnZhciBSR0IySEVYID0gZnVuY3Rpb24oUkdCQXJyYXkpIHtcbiAgdmFyIGhleCA9ICcjJztcbiAgUkdCQXJyYXkuZm9yRWFjaChmdW5jdGlvbih2YWx1ZSkge1xuICAgIGlmICh2YWx1ZSA8IDE2KSB7XG4gICAgICBoZXggKz0gMDtcbiAgICB9XG4gICAgaGV4ICs9IHZhbHVlLnRvU3RyaW5nKDE2KTtcbiAgfSk7XG4gIHJldHVybiBoZXg7XG59O1xuXG4vKipcbiAqIENvbnZlcnQgSFNMIHRvIFJHQlxuICpcbiAqIEBzZWUge0BsaW5rIGh0dHA6Ly96aC53aWtpcGVkaWEub3JnL3dpa2kvSFNM5ZKMSFNW6Imy5b2p56m66Ze0fSBmb3IgZnVydGhlciBpbmZvcm1hdGlvbi5cbiAqIEBwYXJhbSB7TnVtYmVyfSBIIEh1ZSDiiIggWzAsIDM2MClcbiAqIEBwYXJhbSB7TnVtYmVyfSBTIFNhdHVyYXRpb24g4oiIIFswLCAxXVxuICogQHBhcmFtIHtOdW1iZXJ9IEwgTGlnaHRuZXNzIOKIiCBbMCwgMV1cbiAqIEByZXR1cm5zIHtBcnJheX0gUiwgRywgQiDiiIggWzAsIDI1NV1cbiAqL1xudmFyIEhTTDJSR0IgPSBmdW5jdGlvbihILCBTLCBMKSB7XG4gIEggLz0gMzYwO1xuXG4gIHZhciBxID0gTCA8IDAuNSA/IEwgKiAoMSArIFMpIDogTCArIFMgLSBMICogUztcbiAgdmFyIHAgPSAyICogTCAtIHE7XG5cbiAgcmV0dXJuIFtIICsgMSAvIDMsIEgsIEggLSAxIC8gM10ubWFwKGZ1bmN0aW9uKGNvbG9yKSB7XG4gICAgaWYgKGNvbG9yIDwgMCkge1xuICAgICAgY29sb3IrKztcbiAgICB9XG4gICAgaWYgKGNvbG9yID4gMSkge1xuICAgICAgY29sb3ItLTtcbiAgICB9XG4gICAgaWYgKGNvbG9yIDwgMSAvIDYpIHtcbiAgICAgIGNvbG9yID0gcCArIChxIC0gcCkgKiA2ICogY29sb3I7XG4gICAgfSBlbHNlIGlmIChjb2xvciA8IDAuNSkge1xuICAgICAgY29sb3IgPSBxO1xuICAgIH0gZWxzZSBpZiAoY29sb3IgPCAyIC8gMykge1xuICAgICAgY29sb3IgPSBwICsgKHEgLSBwKSAqIDYgKiAoMiAvIDMgLSBjb2xvcik7XG4gICAgfSBlbHNlIHtcbiAgICAgIGNvbG9yID0gcDtcbiAgICB9XG4gICAgcmV0dXJuIE1hdGgucm91bmQoY29sb3IgKiAyNTUpO1xuICB9KTtcbn07XG5cbi8qKlxuICogQ29sb3IgSGFzaCBDbGFzc1xuICpcbiAqIEBjbGFzc1xuICovXG52YXIgQ29sb3JIYXNoID0gZnVuY3Rpb24ob3B0aW9ucykge1xuICBvcHRpb25zID0gb3B0aW9ucyB8fCB7fTtcblxuICB2YXIgTFMgPSBbb3B0aW9ucy5saWdodG5lc3MsIG9wdGlvbnMuc2F0dXJhdGlvbl0ubWFwKGZ1bmN0aW9uKHBhcmFtKSB7XG4gICAgcGFyYW0gPSBwYXJhbSB8fCBbMC4zNSwgMC41LCAwLjY1XTsgLy8gbm90ZSB0aGF0IDMgaXMgYSBwcmltZVxuICAgIHJldHVybiBPYmplY3QucHJvdG90eXBlLnRvU3RyaW5nLmNhbGwocGFyYW0pID09PSAnW29iamVjdCBBcnJheV0nXG4gICAgICA/IHBhcmFtLmNvbmNhdCgpXG4gICAgICA6IFtwYXJhbV07XG4gIH0pO1xuXG4gIHRoaXMuTCA9IExTWzBdO1xuICB0aGlzLlMgPSBMU1sxXTtcblxuICB0aGlzLm1pbkggPSBvcHRpb25zLm1pbkg7XG4gIHRoaXMubWF4SCA9IG9wdGlvbnMubWF4SDtcbiAgaWYgKHR5cGVvZiB0aGlzLm1pbkggPT09ICd1bmRlZmluZWQnICYmIHR5cGVvZiB0aGlzLm1heEggIT09ICd1bmRlZmluZWQnKVxuICAgIHRoaXMubWluSCA9IDA7XG4gIGlmICh0eXBlb2YgdGhpcy5taW5IICE9PSAndW5kZWZpbmVkJyAmJiB0eXBlb2YgdGhpcy5tYXhIID09PSAndW5kZWZpbmVkJylcbiAgICB0aGlzLm1heEggPSAzNjA7XG5cbiAgdGhpcy5oYXNoID0gb3B0aW9ucy5oYXNoIHx8IEJLRFJIYXNoO1xufTtcblxuLyoqXG4gKiBSZXR1cm5zIHRoZSBoYXNoIGluIFtoLCBzLCBsXS5cbiAqIE5vdGUgdGhhdCBIIOKIiCBbMCwgMzYwKTsgUyDiiIggWzAsIDFdOyBMIOKIiCBbMCwgMV07XG4gKlxuICogQHBhcmFtIHtTdHJpbmd9IHN0ciBzdHJpbmcgdG8gaGFzaFxuICogQHJldHVybnMge0FycmF5fSBbaCwgcywgbF1cbiAqL1xuQ29sb3JIYXNoLnByb3RvdHlwZS5oc2wgPSBmdW5jdGlvbihzdHIpIHtcbiAgdmFyIEgsIFMsIEw7XG4gIHZhciBoYXNoID0gdGhpcy5oYXNoKHN0cik7XG5cbiAgSCA9IGhhc2ggJSAzNTk7IC8vIG5vdGUgdGhhdCAzNTkgaXMgYSBwcmltZVxuICBpZiAodHlwZW9mIHRoaXMubWluSCAhPT0gJ3VuZGVmaW5lZCcgJiYgdHlwZW9mIHRoaXMubWF4SCAhPT0gJ3VuZGVmaW5lZCcpIHtcbiAgICBIIC89IDEwMDA7XG4gICAgSCA9IEggKiAodGhpcy5tYXhIIC0gdGhpcy5taW5IKSArIHRoaXMubWluSDtcbiAgfVxuICBoYXNoID0gcGFyc2VJbnQoaGFzaCAvIDM2MCk7XG4gIFMgPSB0aGlzLlNbaGFzaCAlIHRoaXMuUy5sZW5ndGhdO1xuICBoYXNoID0gcGFyc2VJbnQoaGFzaCAvIHRoaXMuUy5sZW5ndGgpO1xuICBMID0gdGhpcy5MW2hhc2ggJSB0aGlzLkwubGVuZ3RoXTtcblxuICByZXR1cm4gW0gsIFMsIExdO1xufTtcblxuLyoqXG4gKiBSZXR1cm5zIHRoZSBoYXNoIGluIFtyLCBnLCBiXS5cbiAqIE5vdGUgdGhhdCBSLCBHLCBCIOKIiCBbMCwgMjU1XVxuICpcbiAqIEBwYXJhbSB7U3RyaW5nfSBzdHIgc3RyaW5nIHRvIGhhc2hcbiAqIEByZXR1cm5zIHtBcnJheX0gW3IsIGcsIGJdXG4gKi9cbkNvbG9ySGFzaC5wcm90b3R5cGUucmdiID0gZnVuY3Rpb24oc3RyKSB7XG4gIHZhciBoc2wgPSB0aGlzLmhzbChzdHIpO1xuICByZXR1cm4gSFNMMlJHQi5hcHBseSh0aGlzLCBoc2wpO1xufTtcblxuLyoqXG4gKiBSZXR1cm5zIHRoZSBoYXNoIGluIGhleFxuICpcbiAqIEBwYXJhbSB7U3RyaW5nfSBzdHIgc3RyaW5nIHRvIGhhc2hcbiAqIEByZXR1cm5zIHtTdHJpbmd9IGhleCB3aXRoICNcbiAqL1xuQ29sb3JIYXNoLnByb3RvdHlwZS5oZXggPSBmdW5jdGlvbihzdHIpIHtcbiAgdmFyIHJnYiA9IHRoaXMucmdiKHN0cik7XG4gIHJldHVybiBSR0IySEVYKHJnYik7XG59O1xuXG5leHBvcnQgeyBDb2xvckhhc2ggfTtcblxuXG5cbi8vIFdFQlBBQ0sgRk9PVEVSIC8vXG4vLyBzcmMvY29sb3ItaGFzaC5qcyJdLCJtYXBwaW5ncyI6Ijs7Ozs7QUFBQTtBQUNBO0FBQ0E7QUFDQTs7Ozs7O0FBTUE7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBOzs7Ozs7QUFNQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7Ozs7Ozs7OztBQVNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTs7Ozs7QUFLQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFHQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBRUE7QUFDQTtBQUVBO0FBQ0E7QUFDQTtBQUNBOzs7Ozs7O0FBT0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBOzs7Ozs7O0FBT0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBOzs7Ozs7QUFNQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0EiLCJzb3VyY2VSb290IjoiIn0=\n//# sourceURL=webpack-internal:///9\n");
+
+/***/ }),
+/* 10 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+eval("\n\nObject.defineProperty(exports, \"__esModule\", {\n  value: true\n});\n// <https://jsfiddle.net/gabrieleromanato/qAGHT/>\nvar Base64 = {\n  _keyStr: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=',\n\n  encode: function encode(input) {\n    var output = '';\n    var chr1, chr2, chr3, enc1, enc2, enc3, enc4;\n    var i = 0;\n\n    input = Base64._utf8_encode(input);\n\n    while (i < input.length) {\n      chr1 = input.charCodeAt(i++);\n      chr2 = input.charCodeAt(i++);\n      chr3 = input.charCodeAt(i++);\n\n      enc1 = chr1 >> 2;\n      enc2 = (chr1 & 3) << 4 | chr2 >> 4;\n      enc3 = (chr2 & 15) << 2 | chr3 >> 6;\n      enc4 = chr3 & 63;\n\n      if (isNaN(chr2)) {\n        enc3 = enc4 = 64;\n      } else if (isNaN(chr3)) {\n        enc4 = 64;\n      }\n\n      output = output + this._keyStr.charAt(enc1) + this._keyStr.charAt(enc2) + this._keyStr.charAt(enc3) + this._keyStr.charAt(enc4);\n    }\n\n    return output;\n  },\n\n  decode: function decode(input) {\n    var output = '';\n    var chr1, chr2, chr3;\n    var enc1, enc2, enc3, enc4;\n    var i = 0;\n\n    input = input.replace(/[^A-Za-z0-9\\+\\/\\=]/g, '');\n\n    while (i < input.length) {\n      enc1 = this._keyStr.indexOf(input.charAt(i++));\n      enc2 = this._keyStr.indexOf(input.charAt(i++));\n      enc3 = this._keyStr.indexOf(input.charAt(i++));\n      enc4 = this._keyStr.indexOf(input.charAt(i++));\n\n      chr1 = enc1 << 2 | enc2 >> 4;\n      chr2 = (enc2 & 15) << 4 | enc3 >> 2;\n      chr3 = (enc3 & 3) << 6 | enc4;\n\n      output = output + String.fromCharCode(chr1);\n\n      if (enc3 != 64) {\n        output = output + String.fromCharCode(chr2);\n      }\n      if (enc4 != 64) {\n        output = output + String.fromCharCode(chr3);\n      }\n    }\n\n    output = Base64._utf8_decode(output);\n\n    return output;\n  },\n\n  _utf8_encode: function _utf8_encode(string) {\n    string = string.replace(/\\r\\n/g, '\\n');\n    var utftext = '';\n\n    for (var n = 0; n < string.length; n++) {\n      var c = string.charCodeAt(n);\n\n      if (c < 128) {\n        utftext += String.fromCharCode(c);\n      } else if (c > 127 && c < 2048) {\n        utftext += String.fromCharCode(c >> 6 | 192);\n        utftext += String.fromCharCode(c & 63 | 128);\n      } else {\n        utftext += String.fromCharCode(c >> 12 | 224);\n        utftext += String.fromCharCode(c >> 6 & 63 | 128);\n        utftext += String.fromCharCode(c & 63 | 128);\n      }\n    }\n\n    return utftext;\n  },\n\n  _utf8_decode: function _utf8_decode(utftext) {\n    var string = '';\n    var i = 0;\n    var c = c1 = c2 = 0;\n\n    while (i < utftext.length) {\n      c = utftext.charCodeAt(i);\n\n      if (c < 128) {\n        string += String.fromCharCode(c);\n        i++;\n      } else if (c > 191 && c < 224) {\n        c2 = utftext.charCodeAt(i + 1);\n        string += String.fromCharCode((c & 31) << 6 | c2 & 63);\n        i += 2;\n      } else {\n        c2 = utftext.charCodeAt(i + 1);\n        c3 = utftext.charCodeAt(i + 2);\n        string += String.fromCharCode((c & 15) << 12 | (c2 & 63) << 6 | c3 & 63);\n        i += 3;\n      }\n    }\n\n    return string;\n  }\n};\n\nexports.Base64 = Base64;\n//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoiMTAuanMiLCJzb3VyY2VzIjpbIndlYnBhY2s6Ly8vc3JjL2Jhc2U2NC5qcz83ZTA0Il0sInNvdXJjZXNDb250ZW50IjpbIi8vIDxodHRwczovL2pzZmlkZGxlLm5ldC9nYWJyaWVsZXJvbWFuYXRvL3FBR0hULz5cbmNvbnN0IEJhc2U2NCA9IHtcbiAgX2tleVN0cjogJ0FCQ0RFRkdISUpLTE1OT1BRUlNUVVZXWFlaYWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXowMTIzNDU2Nzg5Ky89JyxcblxuICBlbmNvZGU6IGZ1bmN0aW9uKGlucHV0KSB7XG4gICAgdmFyIG91dHB1dCA9ICcnO1xuICAgIHZhciBjaHIxLCBjaHIyLCBjaHIzLCBlbmMxLCBlbmMyLCBlbmMzLCBlbmM0O1xuICAgIHZhciBpID0gMDtcblxuICAgIGlucHV0ID0gQmFzZTY0Ll91dGY4X2VuY29kZShpbnB1dCk7XG5cbiAgICB3aGlsZSAoaSA8IGlucHV0Lmxlbmd0aCkge1xuICAgICAgY2hyMSA9IGlucHV0LmNoYXJDb2RlQXQoaSsrKTtcbiAgICAgIGNocjIgPSBpbnB1dC5jaGFyQ29kZUF0KGkrKyk7XG4gICAgICBjaHIzID0gaW5wdXQuY2hhckNvZGVBdChpKyspO1xuXG4gICAgICBlbmMxID0gY2hyMSA+PiAyO1xuICAgICAgZW5jMiA9ICgoY2hyMSAmIDMpIDw8IDQpIHwgKGNocjIgPj4gNCk7XG4gICAgICBlbmMzID0gKChjaHIyICYgMTUpIDw8IDIpIHwgKGNocjMgPj4gNik7XG4gICAgICBlbmM0ID0gY2hyMyAmIDYzO1xuXG4gICAgICBpZiAoaXNOYU4oY2hyMikpIHtcbiAgICAgICAgZW5jMyA9IGVuYzQgPSA2NDtcbiAgICAgIH0gZWxzZSBpZiAoaXNOYU4oY2hyMykpIHtcbiAgICAgICAgZW5jNCA9IDY0O1xuICAgICAgfVxuXG4gICAgICBvdXRwdXQgPVxuICAgICAgICBvdXRwdXQgK1xuICAgICAgICB0aGlzLl9rZXlTdHIuY2hhckF0KGVuYzEpICtcbiAgICAgICAgdGhpcy5fa2V5U3RyLmNoYXJBdChlbmMyKSArXG4gICAgICAgIHRoaXMuX2tleVN0ci5jaGFyQXQoZW5jMykgK1xuICAgICAgICB0aGlzLl9rZXlTdHIuY2hhckF0KGVuYzQpO1xuICAgIH1cblxuICAgIHJldHVybiBvdXRwdXQ7XG4gIH0sXG5cbiAgZGVjb2RlOiBmdW5jdGlvbihpbnB1dCkge1xuICAgIHZhciBvdXRwdXQgPSAnJztcbiAgICB2YXIgY2hyMSwgY2hyMiwgY2hyMztcbiAgICB2YXIgZW5jMSwgZW5jMiwgZW5jMywgZW5jNDtcbiAgICB2YXIgaSA9IDA7XG5cbiAgICBpbnB1dCA9IGlucHV0LnJlcGxhY2UoL1teQS1aYS16MC05XFwrXFwvXFw9XS9nLCAnJyk7XG5cbiAgICB3aGlsZSAoaSA8IGlucHV0Lmxlbmd0aCkge1xuICAgICAgZW5jMSA9IHRoaXMuX2tleVN0ci5pbmRleE9mKGlucHV0LmNoYXJBdChpKyspKTtcbiAgICAgIGVuYzIgPSB0aGlzLl9rZXlTdHIuaW5kZXhPZihpbnB1dC5jaGFyQXQoaSsrKSk7XG4gICAgICBlbmMzID0gdGhpcy5fa2V5U3RyLmluZGV4T2YoaW5wdXQuY2hhckF0KGkrKykpO1xuICAgICAgZW5jNCA9IHRoaXMuX2tleVN0ci5pbmRleE9mKGlucHV0LmNoYXJBdChpKyspKTtcblxuICAgICAgY2hyMSA9IChlbmMxIDw8IDIpIHwgKGVuYzIgPj4gNCk7XG4gICAgICBjaHIyID0gKChlbmMyICYgMTUpIDw8IDQpIHwgKGVuYzMgPj4gMik7XG4gICAgICBjaHIzID0gKChlbmMzICYgMykgPDwgNikgfCBlbmM0O1xuXG4gICAgICBvdXRwdXQgPSBvdXRwdXQgKyBTdHJpbmcuZnJvbUNoYXJDb2RlKGNocjEpO1xuXG4gICAgICBpZiAoZW5jMyAhPSA2NCkge1xuICAgICAgICBvdXRwdXQgPSBvdXRwdXQgKyBTdHJpbmcuZnJvbUNoYXJDb2RlKGNocjIpO1xuICAgICAgfVxuICAgICAgaWYgKGVuYzQgIT0gNjQpIHtcbiAgICAgICAgb3V0cHV0ID0gb3V0cHV0ICsgU3RyaW5nLmZyb21DaGFyQ29kZShjaHIzKTtcbiAgICAgIH1cbiAgICB9XG5cbiAgICBvdXRwdXQgPSBCYXNlNjQuX3V0ZjhfZGVjb2RlKG91dHB1dCk7XG5cbiAgICByZXR1cm4gb3V0cHV0O1xuICB9LFxuXG4gIF91dGY4X2VuY29kZTogZnVuY3Rpb24oc3RyaW5nKSB7XG4gICAgc3RyaW5nID0gc3RyaW5nLnJlcGxhY2UoL1xcclxcbi9nLCAnXFxuJyk7XG4gICAgdmFyIHV0ZnRleHQgPSAnJztcblxuICAgIGZvciAodmFyIG4gPSAwOyBuIDwgc3RyaW5nLmxlbmd0aDsgbisrKSB7XG4gICAgICB2YXIgYyA9IHN0cmluZy5jaGFyQ29kZUF0KG4pO1xuXG4gICAgICBpZiAoYyA8IDEyOCkge1xuICAgICAgICB1dGZ0ZXh0ICs9IFN0cmluZy5mcm9tQ2hhckNvZGUoYyk7XG4gICAgICB9IGVsc2UgaWYgKGMgPiAxMjcgJiYgYyA8IDIwNDgpIHtcbiAgICAgICAgdXRmdGV4dCArPSBTdHJpbmcuZnJvbUNoYXJDb2RlKChjID4+IDYpIHwgMTkyKTtcbiAgICAgICAgdXRmdGV4dCArPSBTdHJpbmcuZnJvbUNoYXJDb2RlKChjICYgNjMpIHwgMTI4KTtcbiAgICAgIH0gZWxzZSB7XG4gICAgICAgIHV0ZnRleHQgKz0gU3RyaW5nLmZyb21DaGFyQ29kZSgoYyA+PiAxMikgfCAyMjQpO1xuICAgICAgICB1dGZ0ZXh0ICs9IFN0cmluZy5mcm9tQ2hhckNvZGUoKChjID4+IDYpICYgNjMpIHwgMTI4KTtcbiAgICAgICAgdXRmdGV4dCArPSBTdHJpbmcuZnJvbUNoYXJDb2RlKChjICYgNjMpIHwgMTI4KTtcbiAgICAgIH1cbiAgICB9XG5cbiAgICByZXR1cm4gdXRmdGV4dDtcbiAgfSxcblxuICBfdXRmOF9kZWNvZGU6IGZ1bmN0aW9uKHV0ZnRleHQpIHtcbiAgICB2YXIgc3RyaW5nID0gJyc7XG4gICAgdmFyIGkgPSAwO1xuICAgIHZhciBjID0gKGMxID0gYzIgPSAwKTtcblxuICAgIHdoaWxlIChpIDwgdXRmdGV4dC5sZW5ndGgpIHtcbiAgICAgIGMgPSB1dGZ0ZXh0LmNoYXJDb2RlQXQoaSk7XG5cbiAgICAgIGlmIChjIDwgMTI4KSB7XG4gICAgICAgIHN0cmluZyArPSBTdHJpbmcuZnJvbUNoYXJDb2RlKGMpO1xuICAgICAgICBpKys7XG4gICAgICB9IGVsc2UgaWYgKGMgPiAxOTEgJiYgYyA8IDIyNCkge1xuICAgICAgICBjMiA9IHV0ZnRleHQuY2hhckNvZGVBdChpICsgMSk7XG4gICAgICAgIHN0cmluZyArPSBTdHJpbmcuZnJvbUNoYXJDb2RlKCgoYyAmIDMxKSA8PCA2KSB8IChjMiAmIDYzKSk7XG4gICAgICAgIGkgKz0gMjtcbiAgICAgIH0gZWxzZSB7XG4gICAgICAgIGMyID0gdXRmdGV4dC5jaGFyQ29kZUF0KGkgKyAxKTtcbiAgICAgICAgYzMgPSB1dGZ0ZXh0LmNoYXJDb2RlQXQoaSArIDIpO1xuICAgICAgICBzdHJpbmcgKz0gU3RyaW5nLmZyb21DaGFyQ29kZShcbiAgICAgICAgICAoKGMgJiAxNSkgPDwgMTIpIHwgKChjMiAmIDYzKSA8PCA2KSB8IChjMyAmIDYzKVxuICAgICAgICApO1xuICAgICAgICBpICs9IDM7XG4gICAgICB9XG4gICAgfVxuXG4gICAgcmV0dXJuIHN0cmluZztcbiAgfSxcbn07XG5cbmV4cG9ydCB7IEJhc2U2NCB9O1xuXG5cblxuLy8gV0VCUEFDSyBGT09URVIgLy9cbi8vIHNyYy9iYXNlNjQuanMiXSwibWFwcGluZ3MiOiI7Ozs7O0FBQUE7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFNQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUdBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQXRIQTtBQUNBO0FBd0hBIiwic291cmNlUm9vdCI6IiJ9\n//# sourceURL=webpack-internal:///10\n");
+
+/***/ }),
+/* 11 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+eval("/* WEBPACK VAR INJECTION */(function(process) {\n\nObject.defineProperty(exports, \"__esModule\", {\n  value: true\n});\nexports.compose = exports.applyMiddleware = exports.bindActionCreators = exports.combineReducers = exports.createStore = undefined;\n\nvar _createStore = __webpack_require__(1);\n\nvar _createStore2 = _interopRequireDefault(_createStore);\n\nvar _combineReducers = __webpack_require__(24);\n\nvar _combineReducers2 = _interopRequireDefault(_combineReducers);\n\nvar _bindActionCreators = __webpack_require__(25);\n\nvar _bindActionCreators2 = _interopRequireDefault(_bindActionCreators);\n\nvar _applyMiddleware = __webpack_require__(26);\n\nvar _applyMiddleware2 = _interopRequireDefault(_applyMiddleware);\n\nvar _compose = __webpack_require__(6);\n\nvar _compose2 = _interopRequireDefault(_compose);\n\nvar _warning = __webpack_require__(5);\n\nvar _warning2 = _interopRequireDefault(_warning);\n\nfunction _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }\n\n/*\n* This is a dummy function to check if the function name has been altered by minification.\n* If the function has been minified and NODE_ENV !== 'production', warn the user.\n*/\nfunction isCrushed() {}\n\nif (process.env.NODE_ENV !== 'production' && typeof isCrushed.name === 'string' && isCrushed.name !== 'isCrushed') {\n  (0, _warning2.default)('You are currently using minified code outside of NODE_ENV === \\'production\\'. ' + 'This means that you are running a slower development build of Redux. ' + 'You can use loose-envify (https://github.com/zertosh/loose-envify) for browserify ' + 'or DefinePlugin for webpack (http://stackoverflow.com/questions/30030031) ' + 'to ensure you have the correct code for your production build.');\n}\n\nexports.createStore = _createStore2.default;\nexports.combineReducers = _combineReducers2.default;\nexports.bindActionCreators = _bindActionCreators2.default;\nexports.applyMiddleware = _applyMiddleware2.default;\nexports.compose = _compose2.default;\n/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(0)))\n//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoiMTEuanMiLCJzb3VyY2VzIjpbIndlYnBhY2s6Ly8vbm9kZV9tb2R1bGVzL3JlZHV4L2VzL2luZGV4LmpzPzNlZDMiXSwic291cmNlc0NvbnRlbnQiOlsiaW1wb3J0IGNyZWF0ZVN0b3JlIGZyb20gJy4vY3JlYXRlU3RvcmUnO1xuaW1wb3J0IGNvbWJpbmVSZWR1Y2VycyBmcm9tICcuL2NvbWJpbmVSZWR1Y2Vycyc7XG5pbXBvcnQgYmluZEFjdGlvbkNyZWF0b3JzIGZyb20gJy4vYmluZEFjdGlvbkNyZWF0b3JzJztcbmltcG9ydCBhcHBseU1pZGRsZXdhcmUgZnJvbSAnLi9hcHBseU1pZGRsZXdhcmUnO1xuaW1wb3J0IGNvbXBvc2UgZnJvbSAnLi9jb21wb3NlJztcbmltcG9ydCB3YXJuaW5nIGZyb20gJy4vdXRpbHMvd2FybmluZyc7XG5cbi8qXG4qIFRoaXMgaXMgYSBkdW1teSBmdW5jdGlvbiB0byBjaGVjayBpZiB0aGUgZnVuY3Rpb24gbmFtZSBoYXMgYmVlbiBhbHRlcmVkIGJ5IG1pbmlmaWNhdGlvbi5cbiogSWYgdGhlIGZ1bmN0aW9uIGhhcyBiZWVuIG1pbmlmaWVkIGFuZCBOT0RFX0VOViAhPT0gJ3Byb2R1Y3Rpb24nLCB3YXJuIHRoZSB1c2VyLlxuKi9cbmZ1bmN0aW9uIGlzQ3J1c2hlZCgpIHt9XG5cbmlmIChwcm9jZXNzLmVudi5OT0RFX0VOViAhPT0gJ3Byb2R1Y3Rpb24nICYmIHR5cGVvZiBpc0NydXNoZWQubmFtZSA9PT0gJ3N0cmluZycgJiYgaXNDcnVzaGVkLm5hbWUgIT09ICdpc0NydXNoZWQnKSB7XG4gIHdhcm5pbmcoJ1lvdSBhcmUgY3VycmVudGx5IHVzaW5nIG1pbmlmaWVkIGNvZGUgb3V0c2lkZSBvZiBOT0RFX0VOViA9PT0gXFwncHJvZHVjdGlvblxcJy4gJyArICdUaGlzIG1lYW5zIHRoYXQgeW91IGFyZSBydW5uaW5nIGEgc2xvd2VyIGRldmVsb3BtZW50IGJ1aWxkIG9mIFJlZHV4LiAnICsgJ1lvdSBjYW4gdXNlIGxvb3NlLWVudmlmeSAoaHR0cHM6Ly9naXRodWIuY29tL3plcnRvc2gvbG9vc2UtZW52aWZ5KSBmb3IgYnJvd3NlcmlmeSAnICsgJ29yIERlZmluZVBsdWdpbiBmb3Igd2VicGFjayAoaHR0cDovL3N0YWNrb3ZlcmZsb3cuY29tL3F1ZXN0aW9ucy8zMDAzMDAzMSkgJyArICd0byBlbnN1cmUgeW91IGhhdmUgdGhlIGNvcnJlY3QgY29kZSBmb3IgeW91ciBwcm9kdWN0aW9uIGJ1aWxkLicpO1xufVxuXG5leHBvcnQgeyBjcmVhdGVTdG9yZSwgY29tYmluZVJlZHVjZXJzLCBiaW5kQWN0aW9uQ3JlYXRvcnMsIGFwcGx5TWlkZGxld2FyZSwgY29tcG9zZSB9O1xuXG5cbi8vIFdFQlBBQ0sgRk9PVEVSIC8vXG4vLyBub2RlX21vZHVsZXMvcmVkdXgvZXMvaW5kZXguanMiXSwibWFwcGluZ3MiOiI7Ozs7Ozs7QUFBQTtBQUNBOzs7QUFBQTtBQUNBOzs7QUFBQTtBQUNBOzs7QUFBQTtBQUNBOzs7QUFBQTtBQUNBOzs7QUFBQTtBQUNBOzs7OztBQUNBOzs7O0FBSUE7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFBQTtBQUFBO0FBQUE7QUFBQTtBIiwic291cmNlUm9vdCI6IiJ9\n//# sourceURL=webpack-internal:///11\n");
+
+/***/ }),
+/* 12 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+eval("\n\nObject.defineProperty(exports, \"__esModule\", {\n  value: true\n});\n\nvar _Symbol2 = __webpack_require__(3);\n\nvar _Symbol3 = _interopRequireDefault(_Symbol2);\n\nvar _getRawTag = __webpack_require__(15);\n\nvar _getRawTag2 = _interopRequireDefault(_getRawTag);\n\nvar _objectToString = __webpack_require__(16);\n\nvar _objectToString2 = _interopRequireDefault(_objectToString);\n\nfunction _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }\n\n/** `Object#toString` result references. */\nvar nullTag = '[object Null]',\n    undefinedTag = '[object Undefined]';\n\n/** Built-in value references. */\nvar symToStringTag = _Symbol3.default ? _Symbol3.default.toStringTag : undefined;\n\n/**\n * The base implementation of `getTag` without fallbacks for buggy environments.\n *\n * @private\n * @param {*} value The value to query.\n * @returns {string} Returns the `toStringTag`.\n */\nfunction baseGetTag(value) {\n  if (value == null) {\n    return value === undefined ? undefinedTag : nullTag;\n  }\n  return symToStringTag && symToStringTag in Object(value) ? (0, _getRawTag2.default)(value) : (0, _objectToString2.default)(value);\n}\n\nexports.default = baseGetTag;\n//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoiMTIuanMiLCJzb3VyY2VzIjpbIndlYnBhY2s6Ly8vbm9kZV9tb2R1bGVzL2xvZGFzaC1lcy9fYmFzZUdldFRhZy5qcz80NDYzIl0sInNvdXJjZXNDb250ZW50IjpbImltcG9ydCBTeW1ib2wgZnJvbSAnLi9fU3ltYm9sLmpzJztcbmltcG9ydCBnZXRSYXdUYWcgZnJvbSAnLi9fZ2V0UmF3VGFnLmpzJztcbmltcG9ydCBvYmplY3RUb1N0cmluZyBmcm9tICcuL19vYmplY3RUb1N0cmluZy5qcyc7XG5cbi8qKiBgT2JqZWN0I3RvU3RyaW5nYCByZXN1bHQgcmVmZXJlbmNlcy4gKi9cbnZhciBudWxsVGFnID0gJ1tvYmplY3QgTnVsbF0nLFxuICAgIHVuZGVmaW5lZFRhZyA9ICdbb2JqZWN0IFVuZGVmaW5lZF0nO1xuXG4vKiogQnVpbHQtaW4gdmFsdWUgcmVmZXJlbmNlcy4gKi9cbnZhciBzeW1Ub1N0cmluZ1RhZyA9IFN5bWJvbCA/IFN5bWJvbC50b1N0cmluZ1RhZyA6IHVuZGVmaW5lZDtcblxuLyoqXG4gKiBUaGUgYmFzZSBpbXBsZW1lbnRhdGlvbiBvZiBgZ2V0VGFnYCB3aXRob3V0IGZhbGxiYWNrcyBmb3IgYnVnZ3kgZW52aXJvbm1lbnRzLlxuICpcbiAqIEBwcml2YXRlXG4gKiBAcGFyYW0geyp9IHZhbHVlIFRoZSB2YWx1ZSB0byBxdWVyeS5cbiAqIEByZXR1cm5zIHtzdHJpbmd9IFJldHVybnMgdGhlIGB0b1N0cmluZ1RhZ2AuXG4gKi9cbmZ1bmN0aW9uIGJhc2VHZXRUYWcodmFsdWUpIHtcbiAgaWYgKHZhbHVlID09IG51bGwpIHtcbiAgICByZXR1cm4gdmFsdWUgPT09IHVuZGVmaW5lZCA/IHVuZGVmaW5lZFRhZyA6IG51bGxUYWc7XG4gIH1cbiAgcmV0dXJuIChzeW1Ub1N0cmluZ1RhZyAmJiBzeW1Ub1N0cmluZ1RhZyBpbiBPYmplY3QodmFsdWUpKVxuICAgID8gZ2V0UmF3VGFnKHZhbHVlKVxuICAgIDogb2JqZWN0VG9TdHJpbmcodmFsdWUpO1xufVxuXG5leHBvcnQgZGVmYXVsdCBiYXNlR2V0VGFnO1xuXG5cblxuLy8gV0VCUEFDSyBGT09URVIgLy9cbi8vIG5vZGVfbW9kdWxlcy9sb2Rhc2gtZXMvX2Jhc2VHZXRUYWcuanMiXSwibWFwcGluZ3MiOiI7Ozs7OztBQUFBO0FBQ0E7OztBQUFBO0FBQ0E7OztBQUFBO0FBQ0E7Ozs7O0FBQ0E7QUFDQTtBQUFBO0FBQ0E7QUFFQTtBQUNBO0FBQ0E7QUFDQTs7Ozs7OztBQU9BO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFHQTtBQUNBO0FBQ0EiLCJzb3VyY2VSb290IjoiIn0=\n//# sourceURL=webpack-internal:///12\n");
+
+/***/ }),
+/* 13 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+eval("\n\nObject.defineProperty(exports, \"__esModule\", {\n  value: true\n});\n\nvar _typeof = typeof Symbol === \"function\" && typeof Symbol.iterator === \"symbol\" ? function (obj) { return typeof obj; } : function (obj) { return obj && typeof Symbol === \"function\" && obj.constructor === Symbol && obj !== Symbol.prototype ? \"symbol\" : typeof obj; };\n\nvar _freeGlobal = __webpack_require__(14);\n\nvar _freeGlobal2 = _interopRequireDefault(_freeGlobal);\n\nfunction _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }\n\n/** Detect free variable `self`. */\nvar freeSelf = (typeof self === 'undefined' ? 'undefined' : _typeof(self)) == 'object' && self && self.Object === Object && self;\n\n/** Used as a reference to the global object. */\nvar root = _freeGlobal2.default || freeSelf || Function('return this')();\n\nexports.default = root;\n//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoiMTMuanMiLCJzb3VyY2VzIjpbIndlYnBhY2s6Ly8vbm9kZV9tb2R1bGVzL2xvZGFzaC1lcy9fcm9vdC5qcz9iOTU0Il0sInNvdXJjZXNDb250ZW50IjpbImltcG9ydCBmcmVlR2xvYmFsIGZyb20gJy4vX2ZyZWVHbG9iYWwuanMnO1xuXG4vKiogRGV0ZWN0IGZyZWUgdmFyaWFibGUgYHNlbGZgLiAqL1xudmFyIGZyZWVTZWxmID0gdHlwZW9mIHNlbGYgPT0gJ29iamVjdCcgJiYgc2VsZiAmJiBzZWxmLk9iamVjdCA9PT0gT2JqZWN0ICYmIHNlbGY7XG5cbi8qKiBVc2VkIGFzIGEgcmVmZXJlbmNlIHRvIHRoZSBnbG9iYWwgb2JqZWN0LiAqL1xudmFyIHJvb3QgPSBmcmVlR2xvYmFsIHx8IGZyZWVTZWxmIHx8IEZ1bmN0aW9uKCdyZXR1cm4gdGhpcycpKCk7XG5cbmV4cG9ydCBkZWZhdWx0IHJvb3Q7XG5cblxuXG4vLyBXRUJQQUNLIEZPT1RFUiAvL1xuLy8gbm9kZV9tb2R1bGVzL2xvZGFzaC1lcy9fcm9vdC5qcyJdLCJtYXBwaW5ncyI6Ijs7Ozs7Ozs7QUFBQTtBQUNBOzs7OztBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBIiwic291cmNlUm9vdCI6IiJ9\n//# sourceURL=webpack-internal:///13\n");
+
+/***/ }),
+/* 14 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+eval("/* WEBPACK VAR INJECTION */(function(global) {\n\nObject.defineProperty(exports, \"__esModule\", {\n  value: true\n});\n\nvar _typeof = typeof Symbol === \"function\" && typeof Symbol.iterator === \"symbol\" ? function (obj) { return typeof obj; } : function (obj) { return obj && typeof Symbol === \"function\" && obj.constructor === Symbol && obj !== Symbol.prototype ? \"symbol\" : typeof obj; };\n\n/** Detect free variable `global` from Node.js. */\nvar freeGlobal = (typeof global === 'undefined' ? 'undefined' : _typeof(global)) == 'object' && global && global.Object === Object && global;\n\nexports.default = freeGlobal;\n/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(4)))\n//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoiMTQuanMiLCJzb3VyY2VzIjpbIndlYnBhY2s6Ly8vbm9kZV9tb2R1bGVzL2xvZGFzaC1lcy9fZnJlZUdsb2JhbC5qcz82Nzg0Il0sInNvdXJjZXNDb250ZW50IjpbIi8qKiBEZXRlY3QgZnJlZSB2YXJpYWJsZSBgZ2xvYmFsYCBmcm9tIE5vZGUuanMuICovXG52YXIgZnJlZUdsb2JhbCA9IHR5cGVvZiBnbG9iYWwgPT0gJ29iamVjdCcgJiYgZ2xvYmFsICYmIGdsb2JhbC5PYmplY3QgPT09IE9iamVjdCAmJiBnbG9iYWw7XG5cbmV4cG9ydCBkZWZhdWx0IGZyZWVHbG9iYWw7XG5cblxuXG4vLyBXRUJQQUNLIEZPT1RFUiAvL1xuLy8gbm9kZV9tb2R1bGVzL2xvZGFzaC1lcy9fZnJlZUdsb2JhbC5qcyJdLCJtYXBwaW5ncyI6Ijs7Ozs7Ozs7QUFBQTtBQUNBO0FBQ0E7QUFDQTtBIiwic291cmNlUm9vdCI6IiJ9\n//# sourceURL=webpack-internal:///14\n");
+
+/***/ }),
+/* 15 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+eval("\n\nObject.defineProperty(exports, \"__esModule\", {\n  value: true\n});\n\nvar _Symbol2 = __webpack_require__(3);\n\nvar _Symbol3 = _interopRequireDefault(_Symbol2);\n\nfunction _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }\n\n/** Used for built-in method references. */\nvar objectProto = Object.prototype;\n\n/** Used to check objects for own properties. */\nvar hasOwnProperty = objectProto.hasOwnProperty;\n\n/**\n * Used to resolve the\n * [`toStringTag`](http://ecma-international.org/ecma-262/7.0/#sec-object.prototype.tostring)\n * of values.\n */\nvar nativeObjectToString = objectProto.toString;\n\n/** Built-in value references. */\nvar symToStringTag = _Symbol3.default ? _Symbol3.default.toStringTag : undefined;\n\n/**\n * A specialized version of `baseGetTag` which ignores `Symbol.toStringTag` values.\n *\n * @private\n * @param {*} value The value to query.\n * @returns {string} Returns the raw `toStringTag`.\n */\nfunction getRawTag(value) {\n  var isOwn = hasOwnProperty.call(value, symToStringTag),\n      tag = value[symToStringTag];\n\n  try {\n    value[symToStringTag] = undefined;\n    var unmasked = true;\n  } catch (e) {}\n\n  var result = nativeObjectToString.call(value);\n  if (unmasked) {\n    if (isOwn) {\n      value[symToStringTag] = tag;\n    } else {\n      delete value[symToStringTag];\n    }\n  }\n  return result;\n}\n\nexports.default = getRawTag;\n//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoiMTUuanMiLCJzb3VyY2VzIjpbIndlYnBhY2s6Ly8vbm9kZV9tb2R1bGVzL2xvZGFzaC1lcy9fZ2V0UmF3VGFnLmpzP2M0NDAiXSwic291cmNlc0NvbnRlbnQiOlsiaW1wb3J0IFN5bWJvbCBmcm9tICcuL19TeW1ib2wuanMnO1xuXG4vKiogVXNlZCBmb3IgYnVpbHQtaW4gbWV0aG9kIHJlZmVyZW5jZXMuICovXG52YXIgb2JqZWN0UHJvdG8gPSBPYmplY3QucHJvdG90eXBlO1xuXG4vKiogVXNlZCB0byBjaGVjayBvYmplY3RzIGZvciBvd24gcHJvcGVydGllcy4gKi9cbnZhciBoYXNPd25Qcm9wZXJ0eSA9IG9iamVjdFByb3RvLmhhc093blByb3BlcnR5O1xuXG4vKipcbiAqIFVzZWQgdG8gcmVzb2x2ZSB0aGVcbiAqIFtgdG9TdHJpbmdUYWdgXShodHRwOi8vZWNtYS1pbnRlcm5hdGlvbmFsLm9yZy9lY21hLTI2Mi83LjAvI3NlYy1vYmplY3QucHJvdG90eXBlLnRvc3RyaW5nKVxuICogb2YgdmFsdWVzLlxuICovXG52YXIgbmF0aXZlT2JqZWN0VG9TdHJpbmcgPSBvYmplY3RQcm90by50b1N0cmluZztcblxuLyoqIEJ1aWx0LWluIHZhbHVlIHJlZmVyZW5jZXMuICovXG52YXIgc3ltVG9TdHJpbmdUYWcgPSBTeW1ib2wgPyBTeW1ib2wudG9TdHJpbmdUYWcgOiB1bmRlZmluZWQ7XG5cbi8qKlxuICogQSBzcGVjaWFsaXplZCB2ZXJzaW9uIG9mIGBiYXNlR2V0VGFnYCB3aGljaCBpZ25vcmVzIGBTeW1ib2wudG9TdHJpbmdUYWdgIHZhbHVlcy5cbiAqXG4gKiBAcHJpdmF0ZVxuICogQHBhcmFtIHsqfSB2YWx1ZSBUaGUgdmFsdWUgdG8gcXVlcnkuXG4gKiBAcmV0dXJucyB7c3RyaW5nfSBSZXR1cm5zIHRoZSByYXcgYHRvU3RyaW5nVGFnYC5cbiAqL1xuZnVuY3Rpb24gZ2V0UmF3VGFnKHZhbHVlKSB7XG4gIHZhciBpc093biA9IGhhc093blByb3BlcnR5LmNhbGwodmFsdWUsIHN5bVRvU3RyaW5nVGFnKSxcbiAgICAgIHRhZyA9IHZhbHVlW3N5bVRvU3RyaW5nVGFnXTtcblxuICB0cnkge1xuICAgIHZhbHVlW3N5bVRvU3RyaW5nVGFnXSA9IHVuZGVmaW5lZDtcbiAgICB2YXIgdW5tYXNrZWQgPSB0cnVlO1xuICB9IGNhdGNoIChlKSB7fVxuXG4gIHZhciByZXN1bHQgPSBuYXRpdmVPYmplY3RUb1N0cmluZy5jYWxsKHZhbHVlKTtcbiAgaWYgKHVubWFza2VkKSB7XG4gICAgaWYgKGlzT3duKSB7XG4gICAgICB2YWx1ZVtzeW1Ub1N0cmluZ1RhZ10gPSB0YWc7XG4gICAgfSBlbHNlIHtcbiAgICAgIGRlbGV0ZSB2YWx1ZVtzeW1Ub1N0cmluZ1RhZ107XG4gICAgfVxuICB9XG4gIHJldHVybiByZXN1bHQ7XG59XG5cbmV4cG9ydCBkZWZhdWx0IGdldFJhd1RhZztcblxuXG5cbi8vIFdFQlBBQ0sgRk9PVEVSIC8vXG4vLyBub2RlX21vZHVsZXMvbG9kYXNoLWVzL19nZXRSYXdUYWcuanMiXSwibWFwcGluZ3MiOiI7Ozs7OztBQUFBO0FBQ0E7Ozs7O0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7Ozs7O0FBS0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBOzs7Ozs7O0FBT0E7QUFDQTtBQUFBO0FBQ0E7QUFFQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBIiwic291cmNlUm9vdCI6IiJ9\n//# sourceURL=webpack-internal:///15\n");
+
+/***/ }),
+/* 16 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+eval("\n\nObject.defineProperty(exports, \"__esModule\", {\n  value: true\n});\n/** Used for built-in method references. */\nvar objectProto = Object.prototype;\n\n/**\n * Used to resolve the\n * [`toStringTag`](http://ecma-international.org/ecma-262/7.0/#sec-object.prototype.tostring)\n * of values.\n */\nvar nativeObjectToString = objectProto.toString;\n\n/**\n * Converts `value` to a string using `Object.prototype.toString`.\n *\n * @private\n * @param {*} value The value to convert.\n * @returns {string} Returns the converted string.\n */\nfunction objectToString(value) {\n  return nativeObjectToString.call(value);\n}\n\nexports.default = objectToString;\n//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoiMTYuanMiLCJzb3VyY2VzIjpbIndlYnBhY2s6Ly8vbm9kZV9tb2R1bGVzL2xvZGFzaC1lcy9fb2JqZWN0VG9TdHJpbmcuanM/NDgyZSJdLCJzb3VyY2VzQ29udGVudCI6WyIvKiogVXNlZCBmb3IgYnVpbHQtaW4gbWV0aG9kIHJlZmVyZW5jZXMuICovXG52YXIgb2JqZWN0UHJvdG8gPSBPYmplY3QucHJvdG90eXBlO1xuXG4vKipcbiAqIFVzZWQgdG8gcmVzb2x2ZSB0aGVcbiAqIFtgdG9TdHJpbmdUYWdgXShodHRwOi8vZWNtYS1pbnRlcm5hdGlvbmFsLm9yZy9lY21hLTI2Mi83LjAvI3NlYy1vYmplY3QucHJvdG90eXBlLnRvc3RyaW5nKVxuICogb2YgdmFsdWVzLlxuICovXG52YXIgbmF0aXZlT2JqZWN0VG9TdHJpbmcgPSBvYmplY3RQcm90by50b1N0cmluZztcblxuLyoqXG4gKiBDb252ZXJ0cyBgdmFsdWVgIHRvIGEgc3RyaW5nIHVzaW5nIGBPYmplY3QucHJvdG90eXBlLnRvU3RyaW5nYC5cbiAqXG4gKiBAcHJpdmF0ZVxuICogQHBhcmFtIHsqfSB2YWx1ZSBUaGUgdmFsdWUgdG8gY29udmVydC5cbiAqIEByZXR1cm5zIHtzdHJpbmd9IFJldHVybnMgdGhlIGNvbnZlcnRlZCBzdHJpbmcuXG4gKi9cbmZ1bmN0aW9uIG9iamVjdFRvU3RyaW5nKHZhbHVlKSB7XG4gIHJldHVybiBuYXRpdmVPYmplY3RUb1N0cmluZy5jYWxsKHZhbHVlKTtcbn1cblxuZXhwb3J0IGRlZmF1bHQgb2JqZWN0VG9TdHJpbmc7XG5cblxuXG4vLyBXRUJQQUNLIEZPT1RFUiAvL1xuLy8gbm9kZV9tb2R1bGVzL2xvZGFzaC1lcy9fb2JqZWN0VG9TdHJpbmcuanMiXSwibWFwcGluZ3MiOiI7Ozs7O0FBQUE7QUFDQTtBQUNBO0FBQ0E7Ozs7O0FBS0E7QUFDQTtBQUNBOzs7Ozs7O0FBT0E7QUFDQTtBQUNBO0FBQ0E7QUFDQSIsInNvdXJjZVJvb3QiOiIifQ==\n//# sourceURL=webpack-internal:///16\n");
+
+/***/ }),
+/* 17 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+eval("\n\nObject.defineProperty(exports, \"__esModule\", {\n  value: true\n});\n\nvar _overArg = __webpack_require__(18);\n\nvar _overArg2 = _interopRequireDefault(_overArg);\n\nfunction _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }\n\n/** Built-in value references. */\nvar getPrototype = (0, _overArg2.default)(Object.getPrototypeOf, Object);\n\nexports.default = getPrototype;\n//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoiMTcuanMiLCJzb3VyY2VzIjpbIndlYnBhY2s6Ly8vbm9kZV9tb2R1bGVzL2xvZGFzaC1lcy9fZ2V0UHJvdG90eXBlLmpzPzFiNWUiXSwic291cmNlc0NvbnRlbnQiOlsiaW1wb3J0IG92ZXJBcmcgZnJvbSAnLi9fb3ZlckFyZy5qcyc7XG5cbi8qKiBCdWlsdC1pbiB2YWx1ZSByZWZlcmVuY2VzLiAqL1xudmFyIGdldFByb3RvdHlwZSA9IG92ZXJBcmcoT2JqZWN0LmdldFByb3RvdHlwZU9mLCBPYmplY3QpO1xuXG5leHBvcnQgZGVmYXVsdCBnZXRQcm90b3R5cGU7XG5cblxuXG4vLyBXRUJQQUNLIEZPT1RFUiAvL1xuLy8gbm9kZV9tb2R1bGVzL2xvZGFzaC1lcy9fZ2V0UHJvdG90eXBlLmpzIl0sIm1hcHBpbmdzIjoiOzs7Ozs7QUFBQTtBQUNBOzs7OztBQUNBO0FBQ0E7QUFDQTtBQUNBIiwic291cmNlUm9vdCI6IiJ9\n//# sourceURL=webpack-internal:///17\n");
+
+/***/ }),
+/* 18 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+eval("\n\nObject.defineProperty(exports, \"__esModule\", {\n  value: true\n});\n/**\n * Creates a unary function that invokes `func` with its argument transformed.\n *\n * @private\n * @param {Function} func The function to wrap.\n * @param {Function} transform The argument transform.\n * @returns {Function} Returns the new function.\n */\nfunction overArg(func, transform) {\n  return function (arg) {\n    return func(transform(arg));\n  };\n}\n\nexports.default = overArg;\n//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoiMTguanMiLCJzb3VyY2VzIjpbIndlYnBhY2s6Ly8vbm9kZV9tb2R1bGVzL2xvZGFzaC1lcy9fb3ZlckFyZy5qcz82YTU4Il0sInNvdXJjZXNDb250ZW50IjpbIi8qKlxuICogQ3JlYXRlcyBhIHVuYXJ5IGZ1bmN0aW9uIHRoYXQgaW52b2tlcyBgZnVuY2Agd2l0aCBpdHMgYXJndW1lbnQgdHJhbnNmb3JtZWQuXG4gKlxuICogQHByaXZhdGVcbiAqIEBwYXJhbSB7RnVuY3Rpb259IGZ1bmMgVGhlIGZ1bmN0aW9uIHRvIHdyYXAuXG4gKiBAcGFyYW0ge0Z1bmN0aW9ufSB0cmFuc2Zvcm0gVGhlIGFyZ3VtZW50IHRyYW5zZm9ybS5cbiAqIEByZXR1cm5zIHtGdW5jdGlvbn0gUmV0dXJucyB0aGUgbmV3IGZ1bmN0aW9uLlxuICovXG5mdW5jdGlvbiBvdmVyQXJnKGZ1bmMsIHRyYW5zZm9ybSkge1xuICByZXR1cm4gZnVuY3Rpb24oYXJnKSB7XG4gICAgcmV0dXJuIGZ1bmModHJhbnNmb3JtKGFyZykpO1xuICB9O1xufVxuXG5leHBvcnQgZGVmYXVsdCBvdmVyQXJnO1xuXG5cblxuLy8gV0VCUEFDSyBGT09URVIgLy9cbi8vIG5vZGVfbW9kdWxlcy9sb2Rhc2gtZXMvX292ZXJBcmcuanMiXSwibWFwcGluZ3MiOiI7Ozs7O0FBQUE7Ozs7Ozs7O0FBUUE7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0EiLCJzb3VyY2VSb290IjoiIn0=\n//# sourceURL=webpack-internal:///18\n");
+
+/***/ }),
+/* 19 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+eval("\n\nObject.defineProperty(exports, \"__esModule\", {\n  value: true\n});\n\nvar _typeof = typeof Symbol === \"function\" && typeof Symbol.iterator === \"symbol\" ? function (obj) { return typeof obj; } : function (obj) { return obj && typeof Symbol === \"function\" && obj.constructor === Symbol && obj !== Symbol.prototype ? \"symbol\" : typeof obj; };\n\n/**\n * Checks if `value` is object-like. A value is object-like if it's not `null`\n * and has a `typeof` result of \"object\".\n *\n * @static\n * @memberOf _\n * @since 4.0.0\n * @category Lang\n * @param {*} value The value to check.\n * @returns {boolean} Returns `true` if `value` is object-like, else `false`.\n * @example\n *\n * _.isObjectLike({});\n * // => true\n *\n * _.isObjectLike([1, 2, 3]);\n * // => true\n *\n * _.isObjectLike(_.noop);\n * // => false\n *\n * _.isObjectLike(null);\n * // => false\n */\nfunction isObjectLike(value) {\n  return value != null && (typeof value === 'undefined' ? 'undefined' : _typeof(value)) == 'object';\n}\n\nexports.default = isObjectLike;\n//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoiMTkuanMiLCJzb3VyY2VzIjpbIndlYnBhY2s6Ly8vbm9kZV9tb2R1bGVzL2xvZGFzaC1lcy9pc09iamVjdExpa2UuanM/NjEwNSJdLCJzb3VyY2VzQ29udGVudCI6WyIvKipcbiAqIENoZWNrcyBpZiBgdmFsdWVgIGlzIG9iamVjdC1saWtlLiBBIHZhbHVlIGlzIG9iamVjdC1saWtlIGlmIGl0J3Mgbm90IGBudWxsYFxuICogYW5kIGhhcyBhIGB0eXBlb2ZgIHJlc3VsdCBvZiBcIm9iamVjdFwiLlxuICpcbiAqIEBzdGF0aWNcbiAqIEBtZW1iZXJPZiBfXG4gKiBAc2luY2UgNC4wLjBcbiAqIEBjYXRlZ29yeSBMYW5nXG4gKiBAcGFyYW0geyp9IHZhbHVlIFRoZSB2YWx1ZSB0byBjaGVjay5cbiAqIEByZXR1cm5zIHtib29sZWFufSBSZXR1cm5zIGB0cnVlYCBpZiBgdmFsdWVgIGlzIG9iamVjdC1saWtlLCBlbHNlIGBmYWxzZWAuXG4gKiBAZXhhbXBsZVxuICpcbiAqIF8uaXNPYmplY3RMaWtlKHt9KTtcbiAqIC8vID0+IHRydWVcbiAqXG4gKiBfLmlzT2JqZWN0TGlrZShbMSwgMiwgM10pO1xuICogLy8gPT4gdHJ1ZVxuICpcbiAqIF8uaXNPYmplY3RMaWtlKF8ubm9vcCk7XG4gKiAvLyA9PiBmYWxzZVxuICpcbiAqIF8uaXNPYmplY3RMaWtlKG51bGwpO1xuICogLy8gPT4gZmFsc2VcbiAqL1xuZnVuY3Rpb24gaXNPYmplY3RMaWtlKHZhbHVlKSB7XG4gIHJldHVybiB2YWx1ZSAhPSBudWxsICYmIHR5cGVvZiB2YWx1ZSA9PSAnb2JqZWN0Jztcbn1cblxuZXhwb3J0IGRlZmF1bHQgaXNPYmplY3RMaWtlO1xuXG5cblxuLy8gV0VCUEFDSyBGT09URVIgLy9cbi8vIG5vZGVfbW9kdWxlcy9sb2Rhc2gtZXMvaXNPYmplY3RMaWtlLmpzIl0sIm1hcHBpbmdzIjoiOzs7Ozs7OztBQUFBOzs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7QUF3QkE7QUFDQTtBQUNBO0FBQ0E7QUFDQSIsInNvdXJjZVJvb3QiOiIifQ==\n//# sourceURL=webpack-internal:///19\n");
+
+/***/ }),
+/* 20 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+eval("\n\nmodule.exports = __webpack_require__(21);\n//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoiMjAuanMiLCJzb3VyY2VzIjpbIndlYnBhY2s6Ly8vbm9kZV9tb2R1bGVzL3N5bWJvbC1vYnNlcnZhYmxlL2luZGV4LmpzP2NmYzgiXSwic291cmNlc0NvbnRlbnQiOlsibW9kdWxlLmV4cG9ydHMgPSByZXF1aXJlKCcuL2xpYi9pbmRleCcpO1xuXG5cblxuLy8gV0VCUEFDSyBGT09URVIgLy9cbi8vIG5vZGVfbW9kdWxlcy9zeW1ib2wtb2JzZXJ2YWJsZS9pbmRleC5qcyJdLCJtYXBwaW5ncyI6Ijs7QUFBQSIsInNvdXJjZVJvb3QiOiIifQ==\n//# sourceURL=webpack-internal:///20\n");
+
+/***/ }),
+/* 21 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+eval("/* WEBPACK VAR INJECTION */(function(global, module) {\n\nObject.defineProperty(exports, \"__esModule\", {\n  value: true\n});\n\nvar _ponyfill = __webpack_require__(23);\n\nvar _ponyfill2 = _interopRequireDefault(_ponyfill);\n\nfunction _interopRequireDefault(obj) {\n  return obj && obj.__esModule ? obj : { 'default': obj };\n}\n\nvar root; /* global window */\n\nif (typeof self !== 'undefined') {\n  root = self;\n} else if (typeof window !== 'undefined') {\n  root = window;\n} else if (typeof global !== 'undefined') {\n  root = global;\n} else if (true) {\n  root = module;\n} else {\n  root = Function('return this')();\n}\n\nvar result = (0, _ponyfill2['default'])(root);\nexports['default'] = result;\n/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(4), __webpack_require__(22)(module)))\n//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoiMjEuanMiLCJzb3VyY2VzIjpbIndlYnBhY2s6Ly8vbm9kZV9tb2R1bGVzL3N5bWJvbC1vYnNlcnZhYmxlL2xpYi9pbmRleC5qcz83YzFiIl0sInNvdXJjZXNDb250ZW50IjpbIid1c2Ugc3RyaWN0JztcblxuT2JqZWN0LmRlZmluZVByb3BlcnR5KGV4cG9ydHMsIFwiX19lc01vZHVsZVwiLCB7XG4gIHZhbHVlOiB0cnVlXG59KTtcblxudmFyIF9wb255ZmlsbCA9IHJlcXVpcmUoJy4vcG9ueWZpbGwnKTtcblxudmFyIF9wb255ZmlsbDIgPSBfaW50ZXJvcFJlcXVpcmVEZWZhdWx0KF9wb255ZmlsbCk7XG5cbmZ1bmN0aW9uIF9pbnRlcm9wUmVxdWlyZURlZmF1bHQob2JqKSB7IHJldHVybiBvYmogJiYgb2JqLl9fZXNNb2R1bGUgPyBvYmogOiB7ICdkZWZhdWx0Jzogb2JqIH07IH1cblxudmFyIHJvb3Q7IC8qIGdsb2JhbCB3aW5kb3cgKi9cblxuXG5pZiAodHlwZW9mIHNlbGYgIT09ICd1bmRlZmluZWQnKSB7XG4gIHJvb3QgPSBzZWxmO1xufSBlbHNlIGlmICh0eXBlb2Ygd2luZG93ICE9PSAndW5kZWZpbmVkJykge1xuICByb290ID0gd2luZG93O1xufSBlbHNlIGlmICh0eXBlb2YgZ2xvYmFsICE9PSAndW5kZWZpbmVkJykge1xuICByb290ID0gZ2xvYmFsO1xufSBlbHNlIGlmICh0eXBlb2YgbW9kdWxlICE9PSAndW5kZWZpbmVkJykge1xuICByb290ID0gbW9kdWxlO1xufSBlbHNlIHtcbiAgcm9vdCA9IEZ1bmN0aW9uKCdyZXR1cm4gdGhpcycpKCk7XG59XG5cbnZhciByZXN1bHQgPSAoMCwgX3BvbnlmaWxsMlsnZGVmYXVsdCddKShyb290KTtcbmV4cG9ydHNbJ2RlZmF1bHQnXSA9IHJlc3VsdDtcblxuXG4vLyBXRUJQQUNLIEZPT1RFUiAvL1xuLy8gbm9kZV9tb2R1bGVzL3N5bWJvbC1vYnNlcnZhYmxlL2xpYi9pbmRleC5qcyJdLCJtYXBwaW5ncyI6IkFBQUE7QUFDQTtBQUNBO0FBQ0E7QUFEQTtBQUNBO0FBR0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUFBO0FBQUE7QUFDQTtBQUNBO0FBQ0E7QUFFQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0EiLCJzb3VyY2VSb290IjoiIn0=\n//# sourceURL=webpack-internal:///21\n");
+
+/***/ }),
+/* 22 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+eval("\n\nmodule.exports = function (module) {\n\tif (!module.webpackPolyfill) {\n\t\tmodule.deprecate = function () {};\n\t\tmodule.paths = [];\n\t\t// module.parent = undefined by default\n\t\tif (!module.children) module.children = [];\n\t\tObject.defineProperty(module, \"loaded\", {\n\t\t\tenumerable: true,\n\t\t\tget: function get() {\n\t\t\t\treturn module.l;\n\t\t\t}\n\t\t});\n\t\tObject.defineProperty(module, \"id\", {\n\t\t\tenumerable: true,\n\t\t\tget: function get() {\n\t\t\t\treturn module.i;\n\t\t\t}\n\t\t});\n\t\tmodule.webpackPolyfill = 1;\n\t}\n\treturn module;\n};\n//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoiMjIuanMiLCJzb3VyY2VzIjpbIndlYnBhY2s6Ly8vbm9kZV9tb2R1bGVzL3dlYnBhY2svYnVpbGRpbi9tb2R1bGUuanM/ZWY1MSJdLCJzb3VyY2VzQ29udGVudCI6WyJtb2R1bGUuZXhwb3J0cyA9IGZ1bmN0aW9uKG1vZHVsZSkge1xuXHRpZighbW9kdWxlLndlYnBhY2tQb2x5ZmlsbCkge1xuXHRcdG1vZHVsZS5kZXByZWNhdGUgPSBmdW5jdGlvbigpIHt9O1xuXHRcdG1vZHVsZS5wYXRocyA9IFtdO1xuXHRcdC8vIG1vZHVsZS5wYXJlbnQgPSB1bmRlZmluZWQgYnkgZGVmYXVsdFxuXHRcdGlmKCFtb2R1bGUuY2hpbGRyZW4pIG1vZHVsZS5jaGlsZHJlbiA9IFtdO1xuXHRcdE9iamVjdC5kZWZpbmVQcm9wZXJ0eShtb2R1bGUsIFwibG9hZGVkXCIsIHtcblx0XHRcdGVudW1lcmFibGU6IHRydWUsXG5cdFx0XHRnZXQ6IGZ1bmN0aW9uKCkge1xuXHRcdFx0XHRyZXR1cm4gbW9kdWxlLmw7XG5cdFx0XHR9XG5cdFx0fSk7XG5cdFx0T2JqZWN0LmRlZmluZVByb3BlcnR5KG1vZHVsZSwgXCJpZFwiLCB7XG5cdFx0XHRlbnVtZXJhYmxlOiB0cnVlLFxuXHRcdFx0Z2V0OiBmdW5jdGlvbigpIHtcblx0XHRcdFx0cmV0dXJuIG1vZHVsZS5pO1xuXHRcdFx0fVxuXHRcdH0pO1xuXHRcdG1vZHVsZS53ZWJwYWNrUG9seWZpbGwgPSAxO1xuXHR9XG5cdHJldHVybiBtb2R1bGU7XG59O1xuXG5cblxuLy8gV0VCUEFDSyBGT09URVIgLy9cbi8vIG5vZGVfbW9kdWxlcy93ZWJwYWNrL2J1aWxkaW4vbW9kdWxlLmpzIl0sIm1hcHBpbmdzIjoiOztBQUFBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFKQTtBQU1BO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFKQTtBQU1BO0FBQ0E7QUFDQTtBQUNBIiwic291cmNlUm9vdCI6IiJ9\n//# sourceURL=webpack-internal:///22\n");
+
+/***/ }),
+/* 23 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+eval("\n\nObject.defineProperty(exports, \"__esModule\", {\n\tvalue: true\n});\nexports['default'] = symbolObservablePonyfill;\nfunction symbolObservablePonyfill(root) {\n\tvar result;\n\tvar _Symbol = root.Symbol;\n\n\tif (typeof _Symbol === 'function') {\n\t\tif (_Symbol.observable) {\n\t\t\tresult = _Symbol.observable;\n\t\t} else {\n\t\t\tresult = _Symbol('observable');\n\t\t\t_Symbol.observable = result;\n\t\t}\n\t} else {\n\t\tresult = '@@observable';\n\t}\n\n\treturn result;\n};\n//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoiMjMuanMiLCJzb3VyY2VzIjpbIndlYnBhY2s6Ly8vbm9kZV9tb2R1bGVzL3N5bWJvbC1vYnNlcnZhYmxlL2xpYi9wb255ZmlsbC5qcz85NDM2Il0sInNvdXJjZXNDb250ZW50IjpbIid1c2Ugc3RyaWN0JztcblxuT2JqZWN0LmRlZmluZVByb3BlcnR5KGV4cG9ydHMsIFwiX19lc01vZHVsZVwiLCB7XG5cdHZhbHVlOiB0cnVlXG59KTtcbmV4cG9ydHNbJ2RlZmF1bHQnXSA9IHN5bWJvbE9ic2VydmFibGVQb255ZmlsbDtcbmZ1bmN0aW9uIHN5bWJvbE9ic2VydmFibGVQb255ZmlsbChyb290KSB7XG5cdHZhciByZXN1bHQ7XG5cdHZhciBfU3ltYm9sID0gcm9vdC5TeW1ib2w7XG5cblx0aWYgKHR5cGVvZiBfU3ltYm9sID09PSAnZnVuY3Rpb24nKSB7XG5cdFx0aWYgKF9TeW1ib2wub2JzZXJ2YWJsZSkge1xuXHRcdFx0cmVzdWx0ID0gX1N5bWJvbC5vYnNlcnZhYmxlO1xuXHRcdH0gZWxzZSB7XG5cdFx0XHRyZXN1bHQgPSBfU3ltYm9sKCdvYnNlcnZhYmxlJyk7XG5cdFx0XHRfU3ltYm9sLm9ic2VydmFibGUgPSByZXN1bHQ7XG5cdFx0fVxuXHR9IGVsc2Uge1xuXHRcdHJlc3VsdCA9ICdAQG9ic2VydmFibGUnO1xuXHR9XG5cblx0cmV0dXJuIHJlc3VsdDtcbn07XG5cblxuLy8gV0VCUEFDSyBGT09URVIgLy9cbi8vIG5vZGVfbW9kdWxlcy9zeW1ib2wtb2JzZXJ2YWJsZS9saWIvcG9ueWZpbGwuanMiXSwibWFwcGluZ3MiOiJBQUFBO0FBQ0E7QUFDQTtBQUNBO0FBREE7QUFHQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0EiLCJzb3VyY2VSb290IjoiIn0=\n//# sourceURL=webpack-internal:///23\n");
+
+/***/ }),
+/* 24 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+eval("/* WEBPACK VAR INJECTION */(function(process) {\n\nObject.defineProperty(exports, \"__esModule\", {\n  value: true\n});\nexports.default = combineReducers;\n\nvar _createStore = __webpack_require__(1);\n\nvar _isPlainObject = __webpack_require__(2);\n\nvar _isPlainObject2 = _interopRequireDefault(_isPlainObject);\n\nvar _warning = __webpack_require__(5);\n\nvar _warning2 = _interopRequireDefault(_warning);\n\nfunction _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }\n\nfunction getUndefinedStateErrorMessage(key, action) {\n  var actionType = action && action.type;\n  var actionName = actionType && '\"' + actionType.toString() + '\"' || 'an action';\n\n  return 'Given action ' + actionName + ', reducer \"' + key + '\" returned undefined. ' + 'To ignore an action, you must explicitly return the previous state. ' + 'If you want this reducer to hold no value, you can return null instead of undefined.';\n}\n\nfunction getUnexpectedStateShapeWarningMessage(inputState, reducers, action, unexpectedKeyCache) {\n  var reducerKeys = Object.keys(reducers);\n  var argumentName = action && action.type === _createStore.ActionTypes.INIT ? 'preloadedState argument passed to createStore' : 'previous state received by the reducer';\n\n  if (reducerKeys.length === 0) {\n    return 'Store does not have a valid reducer. Make sure the argument passed ' + 'to combineReducers is an object whose values are reducers.';\n  }\n\n  if (!(0, _isPlainObject2.default)(inputState)) {\n    return 'The ' + argumentName + ' has unexpected type of \"' + {}.toString.call(inputState).match(/\\s([a-z|A-Z]+)/)[1] + '\". Expected argument to be an object with the following ' + ('keys: \"' + reducerKeys.join('\", \"') + '\"');\n  }\n\n  var unexpectedKeys = Object.keys(inputState).filter(function (key) {\n    return !reducers.hasOwnProperty(key) && !unexpectedKeyCache[key];\n  });\n\n  unexpectedKeys.forEach(function (key) {\n    unexpectedKeyCache[key] = true;\n  });\n\n  if (unexpectedKeys.length > 0) {\n    return 'Unexpected ' + (unexpectedKeys.length > 1 ? 'keys' : 'key') + ' ' + ('\"' + unexpectedKeys.join('\", \"') + '\" found in ' + argumentName + '. ') + 'Expected to find one of the known reducer keys instead: ' + ('\"' + reducerKeys.join('\", \"') + '\". Unexpected keys will be ignored.');\n  }\n}\n\nfunction assertReducerShape(reducers) {\n  Object.keys(reducers).forEach(function (key) {\n    var reducer = reducers[key];\n    var initialState = reducer(undefined, { type: _createStore.ActionTypes.INIT });\n\n    if (typeof initialState === 'undefined') {\n      throw new Error('Reducer \"' + key + '\" returned undefined during initialization. ' + 'If the state passed to the reducer is undefined, you must ' + 'explicitly return the initial state. The initial state may ' + 'not be undefined. If you don\\'t want to set a value for this reducer, ' + 'you can use null instead of undefined.');\n    }\n\n    var type = '@@redux/PROBE_UNKNOWN_ACTION_' + Math.random().toString(36).substring(7).split('').join('.');\n    if (typeof reducer(undefined, { type: type }) === 'undefined') {\n      throw new Error('Reducer \"' + key + '\" returned undefined when probed with a random type. ' + ('Don\\'t try to handle ' + _createStore.ActionTypes.INIT + ' or other actions in \"redux/*\" ') + 'namespace. They are considered private. Instead, you must return the ' + 'current state for any unknown actions, unless it is undefined, ' + 'in which case you must return the initial state, regardless of the ' + 'action type. The initial state may not be undefined, but can be null.');\n    }\n  });\n}\n\n/**\n * Turns an object whose values are different reducer functions, into a single\n * reducer function. It will call every child reducer, and gather their results\n * into a single state object, whose keys correspond to the keys of the passed\n * reducer functions.\n *\n * @param {Object} reducers An object whose values correspond to different\n * reducer functions that need to be combined into one. One handy way to obtain\n * it is to use ES6 `import * as reducers` syntax. The reducers may never return\n * undefined for any action. Instead, they should return their initial state\n * if the state passed to them was undefined, and the current state for any\n * unrecognized action.\n *\n * @returns {Function} A reducer function that invokes every reducer inside the\n * passed object, and builds a state object with the same shape.\n */\nfunction combineReducers(reducers) {\n  var reducerKeys = Object.keys(reducers);\n  var finalReducers = {};\n  for (var i = 0; i < reducerKeys.length; i++) {\n    var key = reducerKeys[i];\n\n    if (process.env.NODE_ENV !== 'production') {\n      if (typeof reducers[key] === 'undefined') {\n        (0, _warning2.default)('No reducer provided for key \"' + key + '\"');\n      }\n    }\n\n    if (typeof reducers[key] === 'function') {\n      finalReducers[key] = reducers[key];\n    }\n  }\n  var finalReducerKeys = Object.keys(finalReducers);\n\n  var unexpectedKeyCache = void 0;\n  if (process.env.NODE_ENV !== 'production') {\n    unexpectedKeyCache = {};\n  }\n\n  var shapeAssertionError = void 0;\n  try {\n    assertReducerShape(finalReducers);\n  } catch (e) {\n    shapeAssertionError = e;\n  }\n\n  return function combination() {\n    var state = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {};\n    var action = arguments[1];\n\n    if (shapeAssertionError) {\n      throw shapeAssertionError;\n    }\n\n    if (process.env.NODE_ENV !== 'production') {\n      var warningMessage = getUnexpectedStateShapeWarningMessage(state, finalReducers, action, unexpectedKeyCache);\n      if (warningMessage) {\n        (0, _warning2.default)(warningMessage);\n      }\n    }\n\n    var hasChanged = false;\n    var nextState = {};\n    for (var _i = 0; _i < finalReducerKeys.length; _i++) {\n      var _key = finalReducerKeys[_i];\n      var reducer = finalReducers[_key];\n      var previousStateForKey = state[_key];\n      var nextStateForKey = reducer(previousStateForKey, action);\n      if (typeof nextStateForKey === 'undefined') {\n        var errorMessage = getUndefinedStateErrorMessage(_key, action);\n        throw new Error(errorMessage);\n      }\n      nextState[_key] = nextStateForKey;\n      hasChanged = hasChanged || nextStateForKey !== previousStateForKey;\n    }\n    return hasChanged ? nextState : state;\n  };\n}\n/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(0)))\n//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoiMjQuanMiLCJzb3VyY2VzIjpbIndlYnBhY2s6Ly8vbm9kZV9tb2R1bGVzL3JlZHV4L2VzL2NvbWJpbmVSZWR1Y2Vycy5qcz8xNzMxIl0sInNvdXJjZXNDb250ZW50IjpbImltcG9ydCB7IEFjdGlvblR5cGVzIH0gZnJvbSAnLi9jcmVhdGVTdG9yZSc7XG5pbXBvcnQgaXNQbGFpbk9iamVjdCBmcm9tICdsb2Rhc2gtZXMvaXNQbGFpbk9iamVjdCc7XG5pbXBvcnQgd2FybmluZyBmcm9tICcuL3V0aWxzL3dhcm5pbmcnO1xuXG5mdW5jdGlvbiBnZXRVbmRlZmluZWRTdGF0ZUVycm9yTWVzc2FnZShrZXksIGFjdGlvbikge1xuICB2YXIgYWN0aW9uVHlwZSA9IGFjdGlvbiAmJiBhY3Rpb24udHlwZTtcbiAgdmFyIGFjdGlvbk5hbWUgPSBhY3Rpb25UeXBlICYmICdcIicgKyBhY3Rpb25UeXBlLnRvU3RyaW5nKCkgKyAnXCInIHx8ICdhbiBhY3Rpb24nO1xuXG4gIHJldHVybiAnR2l2ZW4gYWN0aW9uICcgKyBhY3Rpb25OYW1lICsgJywgcmVkdWNlciBcIicgKyBrZXkgKyAnXCIgcmV0dXJuZWQgdW5kZWZpbmVkLiAnICsgJ1RvIGlnbm9yZSBhbiBhY3Rpb24sIHlvdSBtdXN0IGV4cGxpY2l0bHkgcmV0dXJuIHRoZSBwcmV2aW91cyBzdGF0ZS4gJyArICdJZiB5b3Ugd2FudCB0aGlzIHJlZHVjZXIgdG8gaG9sZCBubyB2YWx1ZSwgeW91IGNhbiByZXR1cm4gbnVsbCBpbnN0ZWFkIG9mIHVuZGVmaW5lZC4nO1xufVxuXG5mdW5jdGlvbiBnZXRVbmV4cGVjdGVkU3RhdGVTaGFwZVdhcm5pbmdNZXNzYWdlKGlucHV0U3RhdGUsIHJlZHVjZXJzLCBhY3Rpb24sIHVuZXhwZWN0ZWRLZXlDYWNoZSkge1xuICB2YXIgcmVkdWNlcktleXMgPSBPYmplY3Qua2V5cyhyZWR1Y2Vycyk7XG4gIHZhciBhcmd1bWVudE5hbWUgPSBhY3Rpb24gJiYgYWN0aW9uLnR5cGUgPT09IEFjdGlvblR5cGVzLklOSVQgPyAncHJlbG9hZGVkU3RhdGUgYXJndW1lbnQgcGFzc2VkIHRvIGNyZWF0ZVN0b3JlJyA6ICdwcmV2aW91cyBzdGF0ZSByZWNlaXZlZCBieSB0aGUgcmVkdWNlcic7XG5cbiAgaWYgKHJlZHVjZXJLZXlzLmxlbmd0aCA9PT0gMCkge1xuICAgIHJldHVybiAnU3RvcmUgZG9lcyBub3QgaGF2ZSBhIHZhbGlkIHJlZHVjZXIuIE1ha2Ugc3VyZSB0aGUgYXJndW1lbnQgcGFzc2VkICcgKyAndG8gY29tYmluZVJlZHVjZXJzIGlzIGFuIG9iamVjdCB3aG9zZSB2YWx1ZXMgYXJlIHJlZHVjZXJzLic7XG4gIH1cblxuICBpZiAoIWlzUGxhaW5PYmplY3QoaW5wdXRTdGF0ZSkpIHtcbiAgICByZXR1cm4gJ1RoZSAnICsgYXJndW1lbnROYW1lICsgJyBoYXMgdW5leHBlY3RlZCB0eXBlIG9mIFwiJyArIHt9LnRvU3RyaW5nLmNhbGwoaW5wdXRTdGF0ZSkubWF0Y2goL1xccyhbYS16fEEtWl0rKS8pWzFdICsgJ1wiLiBFeHBlY3RlZCBhcmd1bWVudCB0byBiZSBhbiBvYmplY3Qgd2l0aCB0aGUgZm9sbG93aW5nICcgKyAoJ2tleXM6IFwiJyArIHJlZHVjZXJLZXlzLmpvaW4oJ1wiLCBcIicpICsgJ1wiJyk7XG4gIH1cblxuICB2YXIgdW5leHBlY3RlZEtleXMgPSBPYmplY3Qua2V5cyhpbnB1dFN0YXRlKS5maWx0ZXIoZnVuY3Rpb24gKGtleSkge1xuICAgIHJldHVybiAhcmVkdWNlcnMuaGFzT3duUHJvcGVydHkoa2V5KSAmJiAhdW5leHBlY3RlZEtleUNhY2hlW2tleV07XG4gIH0pO1xuXG4gIHVuZXhwZWN0ZWRLZXlzLmZvckVhY2goZnVuY3Rpb24gKGtleSkge1xuICAgIHVuZXhwZWN0ZWRLZXlDYWNoZVtrZXldID0gdHJ1ZTtcbiAgfSk7XG5cbiAgaWYgKHVuZXhwZWN0ZWRLZXlzLmxlbmd0aCA+IDApIHtcbiAgICByZXR1cm4gJ1VuZXhwZWN0ZWQgJyArICh1bmV4cGVjdGVkS2V5cy5sZW5ndGggPiAxID8gJ2tleXMnIDogJ2tleScpICsgJyAnICsgKCdcIicgKyB1bmV4cGVjdGVkS2V5cy5qb2luKCdcIiwgXCInKSArICdcIiBmb3VuZCBpbiAnICsgYXJndW1lbnROYW1lICsgJy4gJykgKyAnRXhwZWN0ZWQgdG8gZmluZCBvbmUgb2YgdGhlIGtub3duIHJlZHVjZXIga2V5cyBpbnN0ZWFkOiAnICsgKCdcIicgKyByZWR1Y2VyS2V5cy5qb2luKCdcIiwgXCInKSArICdcIi4gVW5leHBlY3RlZCBrZXlzIHdpbGwgYmUgaWdub3JlZC4nKTtcbiAgfVxufVxuXG5mdW5jdGlvbiBhc3NlcnRSZWR1Y2VyU2hhcGUocmVkdWNlcnMpIHtcbiAgT2JqZWN0LmtleXMocmVkdWNlcnMpLmZvckVhY2goZnVuY3Rpb24gKGtleSkge1xuICAgIHZhciByZWR1Y2VyID0gcmVkdWNlcnNba2V5XTtcbiAgICB2YXIgaW5pdGlhbFN0YXRlID0gcmVkdWNlcih1bmRlZmluZWQsIHsgdHlwZTogQWN0aW9uVHlwZXMuSU5JVCB9KTtcblxuICAgIGlmICh0eXBlb2YgaW5pdGlhbFN0YXRlID09PSAndW5kZWZpbmVkJykge1xuICAgICAgdGhyb3cgbmV3IEVycm9yKCdSZWR1Y2VyIFwiJyArIGtleSArICdcIiByZXR1cm5lZCB1bmRlZmluZWQgZHVyaW5nIGluaXRpYWxpemF0aW9uLiAnICsgJ0lmIHRoZSBzdGF0ZSBwYXNzZWQgdG8gdGhlIHJlZHVjZXIgaXMgdW5kZWZpbmVkLCB5b3UgbXVzdCAnICsgJ2V4cGxpY2l0bHkgcmV0dXJuIHRoZSBpbml0aWFsIHN0YXRlLiBUaGUgaW5pdGlhbCBzdGF0ZSBtYXkgJyArICdub3QgYmUgdW5kZWZpbmVkLiBJZiB5b3UgZG9uXFwndCB3YW50IHRvIHNldCBhIHZhbHVlIGZvciB0aGlzIHJlZHVjZXIsICcgKyAneW91IGNhbiB1c2UgbnVsbCBpbnN0ZWFkIG9mIHVuZGVmaW5lZC4nKTtcbiAgICB9XG5cbiAgICB2YXIgdHlwZSA9ICdAQHJlZHV4L1BST0JFX1VOS05PV05fQUNUSU9OXycgKyBNYXRoLnJhbmRvbSgpLnRvU3RyaW5nKDM2KS5zdWJzdHJpbmcoNykuc3BsaXQoJycpLmpvaW4oJy4nKTtcbiAgICBpZiAodHlwZW9mIHJlZHVjZXIodW5kZWZpbmVkLCB7IHR5cGU6IHR5cGUgfSkgPT09ICd1bmRlZmluZWQnKSB7XG4gICAgICB0aHJvdyBuZXcgRXJyb3IoJ1JlZHVjZXIgXCInICsga2V5ICsgJ1wiIHJldHVybmVkIHVuZGVmaW5lZCB3aGVuIHByb2JlZCB3aXRoIGEgcmFuZG9tIHR5cGUuICcgKyAoJ0RvblxcJ3QgdHJ5IHRvIGhhbmRsZSAnICsgQWN0aW9uVHlwZXMuSU5JVCArICcgb3Igb3RoZXIgYWN0aW9ucyBpbiBcInJlZHV4LypcIiAnKSArICduYW1lc3BhY2UuIFRoZXkgYXJlIGNvbnNpZGVyZWQgcHJpdmF0ZS4gSW5zdGVhZCwgeW91IG11c3QgcmV0dXJuIHRoZSAnICsgJ2N1cnJlbnQgc3RhdGUgZm9yIGFueSB1bmtub3duIGFjdGlvbnMsIHVubGVzcyBpdCBpcyB1bmRlZmluZWQsICcgKyAnaW4gd2hpY2ggY2FzZSB5b3UgbXVzdCByZXR1cm4gdGhlIGluaXRpYWwgc3RhdGUsIHJlZ2FyZGxlc3Mgb2YgdGhlICcgKyAnYWN0aW9uIHR5cGUuIFRoZSBpbml0aWFsIHN0YXRlIG1heSBub3QgYmUgdW5kZWZpbmVkLCBidXQgY2FuIGJlIG51bGwuJyk7XG4gICAgfVxuICB9KTtcbn1cblxuLyoqXG4gKiBUdXJucyBhbiBvYmplY3Qgd2hvc2UgdmFsdWVzIGFyZSBkaWZmZXJlbnQgcmVkdWNlciBmdW5jdGlvbnMsIGludG8gYSBzaW5nbGVcbiAqIHJlZHVjZXIgZnVuY3Rpb24uIEl0IHdpbGwgY2FsbCBldmVyeSBjaGlsZCByZWR1Y2VyLCBhbmQgZ2F0aGVyIHRoZWlyIHJlc3VsdHNcbiAqIGludG8gYSBzaW5nbGUgc3RhdGUgb2JqZWN0LCB3aG9zZSBrZXlzIGNvcnJlc3BvbmQgdG8gdGhlIGtleXMgb2YgdGhlIHBhc3NlZFxuICogcmVkdWNlciBmdW5jdGlvbnMuXG4gKlxuICogQHBhcmFtIHtPYmplY3R9IHJlZHVjZXJzIEFuIG9iamVjdCB3aG9zZSB2YWx1ZXMgY29ycmVzcG9uZCB0byBkaWZmZXJlbnRcbiAqIHJlZHVjZXIgZnVuY3Rpb25zIHRoYXQgbmVlZCB0byBiZSBjb21iaW5lZCBpbnRvIG9uZS4gT25lIGhhbmR5IHdheSB0byBvYnRhaW5cbiAqIGl0IGlzIHRvIHVzZSBFUzYgYGltcG9ydCAqIGFzIHJlZHVjZXJzYCBzeW50YXguIFRoZSByZWR1Y2VycyBtYXkgbmV2ZXIgcmV0dXJuXG4gKiB1bmRlZmluZWQgZm9yIGFueSBhY3Rpb24uIEluc3RlYWQsIHRoZXkgc2hvdWxkIHJldHVybiB0aGVpciBpbml0aWFsIHN0YXRlXG4gKiBpZiB0aGUgc3RhdGUgcGFzc2VkIHRvIHRoZW0gd2FzIHVuZGVmaW5lZCwgYW5kIHRoZSBjdXJyZW50IHN0YXRlIGZvciBhbnlcbiAqIHVucmVjb2duaXplZCBhY3Rpb24uXG4gKlxuICogQHJldHVybnMge0Z1bmN0aW9ufSBBIHJlZHVjZXIgZnVuY3Rpb24gdGhhdCBpbnZva2VzIGV2ZXJ5IHJlZHVjZXIgaW5zaWRlIHRoZVxuICogcGFzc2VkIG9iamVjdCwgYW5kIGJ1aWxkcyBhIHN0YXRlIG9iamVjdCB3aXRoIHRoZSBzYW1lIHNoYXBlLlxuICovXG5leHBvcnQgZGVmYXVsdCBmdW5jdGlvbiBjb21iaW5lUmVkdWNlcnMocmVkdWNlcnMpIHtcbiAgdmFyIHJlZHVjZXJLZXlzID0gT2JqZWN0LmtleXMocmVkdWNlcnMpO1xuICB2YXIgZmluYWxSZWR1Y2VycyA9IHt9O1xuICBmb3IgKHZhciBpID0gMDsgaSA8IHJlZHVjZXJLZXlzLmxlbmd0aDsgaSsrKSB7XG4gICAgdmFyIGtleSA9IHJlZHVjZXJLZXlzW2ldO1xuXG4gICAgaWYgKHByb2Nlc3MuZW52Lk5PREVfRU5WICE9PSAncHJvZHVjdGlvbicpIHtcbiAgICAgIGlmICh0eXBlb2YgcmVkdWNlcnNba2V5XSA9PT0gJ3VuZGVmaW5lZCcpIHtcbiAgICAgICAgd2FybmluZygnTm8gcmVkdWNlciBwcm92aWRlZCBmb3Iga2V5IFwiJyArIGtleSArICdcIicpO1xuICAgICAgfVxuICAgIH1cblxuICAgIGlmICh0eXBlb2YgcmVkdWNlcnNba2V5XSA9PT0gJ2Z1bmN0aW9uJykge1xuICAgICAgZmluYWxSZWR1Y2Vyc1trZXldID0gcmVkdWNlcnNba2V5XTtcbiAgICB9XG4gIH1cbiAgdmFyIGZpbmFsUmVkdWNlcktleXMgPSBPYmplY3Qua2V5cyhmaW5hbFJlZHVjZXJzKTtcblxuICB2YXIgdW5leHBlY3RlZEtleUNhY2hlID0gdm9pZCAwO1xuICBpZiAocHJvY2Vzcy5lbnYuTk9ERV9FTlYgIT09ICdwcm9kdWN0aW9uJykge1xuICAgIHVuZXhwZWN0ZWRLZXlDYWNoZSA9IHt9O1xuICB9XG5cbiAgdmFyIHNoYXBlQXNzZXJ0aW9uRXJyb3IgPSB2b2lkIDA7XG4gIHRyeSB7XG4gICAgYXNzZXJ0UmVkdWNlclNoYXBlKGZpbmFsUmVkdWNlcnMpO1xuICB9IGNhdGNoIChlKSB7XG4gICAgc2hhcGVBc3NlcnRpb25FcnJvciA9IGU7XG4gIH1cblxuICByZXR1cm4gZnVuY3Rpb24gY29tYmluYXRpb24oKSB7XG4gICAgdmFyIHN0YXRlID0gYXJndW1lbnRzLmxlbmd0aCA+IDAgJiYgYXJndW1lbnRzWzBdICE9PSB1bmRlZmluZWQgPyBhcmd1bWVudHNbMF0gOiB7fTtcbiAgICB2YXIgYWN0aW9uID0gYXJndW1lbnRzWzFdO1xuXG4gICAgaWYgKHNoYXBlQXNzZXJ0aW9uRXJyb3IpIHtcbiAgICAgIHRocm93IHNoYXBlQXNzZXJ0aW9uRXJyb3I7XG4gICAgfVxuXG4gICAgaWYgKHByb2Nlc3MuZW52Lk5PREVfRU5WICE9PSAncHJvZHVjdGlvbicpIHtcbiAgICAgIHZhciB3YXJuaW5nTWVzc2FnZSA9IGdldFVuZXhwZWN0ZWRTdGF0ZVNoYXBlV2FybmluZ01lc3NhZ2Uoc3RhdGUsIGZpbmFsUmVkdWNlcnMsIGFjdGlvbiwgdW5leHBlY3RlZEtleUNhY2hlKTtcbiAgICAgIGlmICh3YXJuaW5nTWVzc2FnZSkge1xuICAgICAgICB3YXJuaW5nKHdhcm5pbmdNZXNzYWdlKTtcbiAgICAgIH1cbiAgICB9XG5cbiAgICB2YXIgaGFzQ2hhbmdlZCA9IGZhbHNlO1xuICAgIHZhciBuZXh0U3RhdGUgPSB7fTtcbiAgICBmb3IgKHZhciBfaSA9IDA7IF9pIDwgZmluYWxSZWR1Y2VyS2V5cy5sZW5ndGg7IF9pKyspIHtcbiAgICAgIHZhciBfa2V5ID0gZmluYWxSZWR1Y2VyS2V5c1tfaV07XG4gICAgICB2YXIgcmVkdWNlciA9IGZpbmFsUmVkdWNlcnNbX2tleV07XG4gICAgICB2YXIgcHJldmlvdXNTdGF0ZUZvcktleSA9IHN0YXRlW19rZXldO1xuICAgICAgdmFyIG5leHRTdGF0ZUZvcktleSA9IHJlZHVjZXIocHJldmlvdXNTdGF0ZUZvcktleSwgYWN0aW9uKTtcbiAgICAgIGlmICh0eXBlb2YgbmV4dFN0YXRlRm9yS2V5ID09PSAndW5kZWZpbmVkJykge1xuICAgICAgICB2YXIgZXJyb3JNZXNzYWdlID0gZ2V0VW5kZWZpbmVkU3RhdGVFcnJvck1lc3NhZ2UoX2tleSwgYWN0aW9uKTtcbiAgICAgICAgdGhyb3cgbmV3IEVycm9yKGVycm9yTWVzc2FnZSk7XG4gICAgICB9XG4gICAgICBuZXh0U3RhdGVbX2tleV0gPSBuZXh0U3RhdGVGb3JLZXk7XG4gICAgICBoYXNDaGFuZ2VkID0gaGFzQ2hhbmdlZCB8fCBuZXh0U3RhdGVGb3JLZXkgIT09IHByZXZpb3VzU3RhdGVGb3JLZXk7XG4gICAgfVxuICAgIHJldHVybiBoYXNDaGFuZ2VkID8gbmV4dFN0YXRlIDogc3RhdGU7XG4gIH07XG59XG5cblxuLy8gV0VCUEFDSyBGT09URVIgLy9cbi8vIG5vZGVfbW9kdWxlcy9yZWR1eC9lcy9jb21iaW5lUmVkdWNlcnMuanMiXSwibWFwcGluZ3MiOiI7Ozs7O0FBb0VBO0FBQ0E7QUFyRUE7QUFDQTtBQUFBO0FBQ0E7OztBQUFBO0FBQ0E7Ozs7O0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7Ozs7Ozs7Ozs7Ozs7Ozs7QUFnQkE7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBIiwic291cmNlUm9vdCI6IiJ9\n//# sourceURL=webpack-internal:///24\n");
+
+/***/ }),
+/* 25 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+eval("\n\nObject.defineProperty(exports, \"__esModule\", {\n  value: true\n});\n\nvar _typeof = typeof Symbol === \"function\" && typeof Symbol.iterator === \"symbol\" ? function (obj) { return typeof obj; } : function (obj) { return obj && typeof Symbol === \"function\" && obj.constructor === Symbol && obj !== Symbol.prototype ? \"symbol\" : typeof obj; };\n\nexports.default = bindActionCreators;\nfunction bindActionCreator(actionCreator, dispatch) {\n  return function () {\n    return dispatch(actionCreator.apply(undefined, arguments));\n  };\n}\n\n/**\n * Turns an object whose values are action creators, into an object with the\n * same keys, but with every function wrapped into a `dispatch` call so they\n * may be invoked directly. This is just a convenience method, as you can call\n * `store.dispatch(MyActionCreators.doSomething())` yourself just fine.\n *\n * For convenience, you can also pass a single function as the first argument,\n * and get a function in return.\n *\n * @param {Function|Object} actionCreators An object whose values are action\n * creator functions. One handy way to obtain it is to use ES6 `import * as`\n * syntax. You may also pass a single function.\n *\n * @param {Function} dispatch The `dispatch` function available on your Redux\n * store.\n *\n * @returns {Function|Object} The object mimicking the original object, but with\n * every action creator wrapped into the `dispatch` call. If you passed a\n * function as `actionCreators`, the return value will also be a single\n * function.\n */\nfunction bindActionCreators(actionCreators, dispatch) {\n  if (typeof actionCreators === 'function') {\n    return bindActionCreator(actionCreators, dispatch);\n  }\n\n  if ((typeof actionCreators === 'undefined' ? 'undefined' : _typeof(actionCreators)) !== 'object' || actionCreators === null) {\n    throw new Error('bindActionCreators expected an object or a function, instead received ' + (actionCreators === null ? 'null' : typeof actionCreators === 'undefined' ? 'undefined' : _typeof(actionCreators)) + '. ' + 'Did you write \"import ActionCreators from\" instead of \"import * as ActionCreators from\"?');\n  }\n\n  var keys = Object.keys(actionCreators);\n  var boundActionCreators = {};\n  for (var i = 0; i < keys.length; i++) {\n    var key = keys[i];\n    var actionCreator = actionCreators[key];\n    if (typeof actionCreator === 'function') {\n      boundActionCreators[key] = bindActionCreator(actionCreator, dispatch);\n    }\n  }\n  return boundActionCreators;\n}\n//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoiMjUuanMiLCJzb3VyY2VzIjpbIndlYnBhY2s6Ly8vbm9kZV9tb2R1bGVzL3JlZHV4L2VzL2JpbmRBY3Rpb25DcmVhdG9ycy5qcz82ZTYyIl0sInNvdXJjZXNDb250ZW50IjpbImZ1bmN0aW9uIGJpbmRBY3Rpb25DcmVhdG9yKGFjdGlvbkNyZWF0b3IsIGRpc3BhdGNoKSB7XG4gIHJldHVybiBmdW5jdGlvbiAoKSB7XG4gICAgcmV0dXJuIGRpc3BhdGNoKGFjdGlvbkNyZWF0b3IuYXBwbHkodW5kZWZpbmVkLCBhcmd1bWVudHMpKTtcbiAgfTtcbn1cblxuLyoqXG4gKiBUdXJucyBhbiBvYmplY3Qgd2hvc2UgdmFsdWVzIGFyZSBhY3Rpb24gY3JlYXRvcnMsIGludG8gYW4gb2JqZWN0IHdpdGggdGhlXG4gKiBzYW1lIGtleXMsIGJ1dCB3aXRoIGV2ZXJ5IGZ1bmN0aW9uIHdyYXBwZWQgaW50byBhIGBkaXNwYXRjaGAgY2FsbCBzbyB0aGV5XG4gKiBtYXkgYmUgaW52b2tlZCBkaXJlY3RseS4gVGhpcyBpcyBqdXN0IGEgY29udmVuaWVuY2UgbWV0aG9kLCBhcyB5b3UgY2FuIGNhbGxcbiAqIGBzdG9yZS5kaXNwYXRjaChNeUFjdGlvbkNyZWF0b3JzLmRvU29tZXRoaW5nKCkpYCB5b3Vyc2VsZiBqdXN0IGZpbmUuXG4gKlxuICogRm9yIGNvbnZlbmllbmNlLCB5b3UgY2FuIGFsc28gcGFzcyBhIHNpbmdsZSBmdW5jdGlvbiBhcyB0aGUgZmlyc3QgYXJndW1lbnQsXG4gKiBhbmQgZ2V0IGEgZnVuY3Rpb24gaW4gcmV0dXJuLlxuICpcbiAqIEBwYXJhbSB7RnVuY3Rpb258T2JqZWN0fSBhY3Rpb25DcmVhdG9ycyBBbiBvYmplY3Qgd2hvc2UgdmFsdWVzIGFyZSBhY3Rpb25cbiAqIGNyZWF0b3IgZnVuY3Rpb25zLiBPbmUgaGFuZHkgd2F5IHRvIG9idGFpbiBpdCBpcyB0byB1c2UgRVM2IGBpbXBvcnQgKiBhc2BcbiAqIHN5bnRheC4gWW91IG1heSBhbHNvIHBhc3MgYSBzaW5nbGUgZnVuY3Rpb24uXG4gKlxuICogQHBhcmFtIHtGdW5jdGlvbn0gZGlzcGF0Y2ggVGhlIGBkaXNwYXRjaGAgZnVuY3Rpb24gYXZhaWxhYmxlIG9uIHlvdXIgUmVkdXhcbiAqIHN0b3JlLlxuICpcbiAqIEByZXR1cm5zIHtGdW5jdGlvbnxPYmplY3R9IFRoZSBvYmplY3QgbWltaWNraW5nIHRoZSBvcmlnaW5hbCBvYmplY3QsIGJ1dCB3aXRoXG4gKiBldmVyeSBhY3Rpb24gY3JlYXRvciB3cmFwcGVkIGludG8gdGhlIGBkaXNwYXRjaGAgY2FsbC4gSWYgeW91IHBhc3NlZCBhXG4gKiBmdW5jdGlvbiBhcyBgYWN0aW9uQ3JlYXRvcnNgLCB0aGUgcmV0dXJuIHZhbHVlIHdpbGwgYWxzbyBiZSBhIHNpbmdsZVxuICogZnVuY3Rpb24uXG4gKi9cbmV4cG9ydCBkZWZhdWx0IGZ1bmN0aW9uIGJpbmRBY3Rpb25DcmVhdG9ycyhhY3Rpb25DcmVhdG9ycywgZGlzcGF0Y2gpIHtcbiAgaWYgKHR5cGVvZiBhY3Rpb25DcmVhdG9ycyA9PT0gJ2Z1bmN0aW9uJykge1xuICAgIHJldHVybiBiaW5kQWN0aW9uQ3JlYXRvcihhY3Rpb25DcmVhdG9ycywgZGlzcGF0Y2gpO1xuICB9XG5cbiAgaWYgKHR5cGVvZiBhY3Rpb25DcmVhdG9ycyAhPT0gJ29iamVjdCcgfHwgYWN0aW9uQ3JlYXRvcnMgPT09IG51bGwpIHtcbiAgICB0aHJvdyBuZXcgRXJyb3IoJ2JpbmRBY3Rpb25DcmVhdG9ycyBleHBlY3RlZCBhbiBvYmplY3Qgb3IgYSBmdW5jdGlvbiwgaW5zdGVhZCByZWNlaXZlZCAnICsgKGFjdGlvbkNyZWF0b3JzID09PSBudWxsID8gJ251bGwnIDogdHlwZW9mIGFjdGlvbkNyZWF0b3JzKSArICcuICcgKyAnRGlkIHlvdSB3cml0ZSBcImltcG9ydCBBY3Rpb25DcmVhdG9ycyBmcm9tXCIgaW5zdGVhZCBvZiBcImltcG9ydCAqIGFzIEFjdGlvbkNyZWF0b3JzIGZyb21cIj8nKTtcbiAgfVxuXG4gIHZhciBrZXlzID0gT2JqZWN0LmtleXMoYWN0aW9uQ3JlYXRvcnMpO1xuICB2YXIgYm91bmRBY3Rpb25DcmVhdG9ycyA9IHt9O1xuICBmb3IgKHZhciBpID0gMDsgaSA8IGtleXMubGVuZ3RoOyBpKyspIHtcbiAgICB2YXIga2V5ID0ga2V5c1tpXTtcbiAgICB2YXIgYWN0aW9uQ3JlYXRvciA9IGFjdGlvbkNyZWF0b3JzW2tleV07XG4gICAgaWYgKHR5cGVvZiBhY3Rpb25DcmVhdG9yID09PSAnZnVuY3Rpb24nKSB7XG4gICAgICBib3VuZEFjdGlvbkNyZWF0b3JzW2tleV0gPSBiaW5kQWN0aW9uQ3JlYXRvcihhY3Rpb25DcmVhdG9yLCBkaXNwYXRjaCk7XG4gICAgfVxuICB9XG4gIHJldHVybiBib3VuZEFjdGlvbkNyZWF0b3JzO1xufVxuXG5cbi8vIFdFQlBBQ0sgRk9PVEVSIC8vXG4vLyBub2RlX21vZHVsZXMvcmVkdXgvZXMvYmluZEFjdGlvbkNyZWF0b3JzLmpzIl0sIm1hcHBpbmdzIjoiOzs7Ozs7OztBQTJCQTtBQTNCQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7O0FBcUJBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0EiLCJzb3VyY2VSb290IjoiIn0=\n//# sourceURL=webpack-internal:///25\n");
+
+/***/ }),
+/* 26 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+eval("\n\nObject.defineProperty(exports, \"__esModule\", {\n  value: true\n});\nexports.default = applyMiddleware;\n\nvar _compose = __webpack_require__(6);\n\nvar _compose2 = _interopRequireDefault(_compose);\n\nfunction _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }\n\nvar _extends = Object.assign || function (target) {\n  for (var i = 1; i < arguments.length; i++) {\n    var source = arguments[i];for (var key in source) {\n      if (Object.prototype.hasOwnProperty.call(source, key)) {\n        target[key] = source[key];\n      }\n    }\n  }return target;\n};\n\n/**\n * Creates a store enhancer that applies middleware to the dispatch method\n * of the Redux store. This is handy for a variety of tasks, such as expressing\n * asynchronous actions in a concise manner, or logging every action payload.\n *\n * See `redux-thunk` package as an example of the Redux middleware.\n *\n * Because middleware is potentially asynchronous, this should be the first\n * store enhancer in the composition chain.\n *\n * Note that each middleware will be given the `dispatch` and `getState` functions\n * as named arguments.\n *\n * @param {...Function} middlewares The middleware chain to be applied.\n * @returns {Function} A store enhancer applying the middleware.\n */\nfunction applyMiddleware() {\n  for (var _len = arguments.length, middlewares = Array(_len), _key = 0; _key < _len; _key++) {\n    middlewares[_key] = arguments[_key];\n  }\n\n  return function (createStore) {\n    return function (reducer, preloadedState, enhancer) {\n      var store = createStore(reducer, preloadedState, enhancer);\n      var _dispatch = store.dispatch;\n      var chain = [];\n\n      var middlewareAPI = {\n        getState: store.getState,\n        dispatch: function dispatch(action) {\n          return _dispatch(action);\n        }\n      };\n      chain = middlewares.map(function (middleware) {\n        return middleware(middlewareAPI);\n      });\n      _dispatch = _compose2.default.apply(undefined, chain)(store.dispatch);\n\n      return _extends({}, store, {\n        dispatch: _dispatch\n      });\n    };\n  };\n}\n//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoiMjYuanMiLCJzb3VyY2VzIjpbIndlYnBhY2s6Ly8vbm9kZV9tb2R1bGVzL3JlZHV4L2VzL2FwcGx5TWlkZGxld2FyZS5qcz8yOTZhIl0sInNvdXJjZXNDb250ZW50IjpbInZhciBfZXh0ZW5kcyA9IE9iamVjdC5hc3NpZ24gfHwgZnVuY3Rpb24gKHRhcmdldCkgeyBmb3IgKHZhciBpID0gMTsgaSA8IGFyZ3VtZW50cy5sZW5ndGg7IGkrKykgeyB2YXIgc291cmNlID0gYXJndW1lbnRzW2ldOyBmb3IgKHZhciBrZXkgaW4gc291cmNlKSB7IGlmIChPYmplY3QucHJvdG90eXBlLmhhc093blByb3BlcnR5LmNhbGwoc291cmNlLCBrZXkpKSB7IHRhcmdldFtrZXldID0gc291cmNlW2tleV07IH0gfSB9IHJldHVybiB0YXJnZXQ7IH07XG5cbmltcG9ydCBjb21wb3NlIGZyb20gJy4vY29tcG9zZSc7XG5cbi8qKlxuICogQ3JlYXRlcyBhIHN0b3JlIGVuaGFuY2VyIHRoYXQgYXBwbGllcyBtaWRkbGV3YXJlIHRvIHRoZSBkaXNwYXRjaCBtZXRob2RcbiAqIG9mIHRoZSBSZWR1eCBzdG9yZS4gVGhpcyBpcyBoYW5keSBmb3IgYSB2YXJpZXR5IG9mIHRhc2tzLCBzdWNoIGFzIGV4cHJlc3NpbmdcbiAqIGFzeW5jaHJvbm91cyBhY3Rpb25zIGluIGEgY29uY2lzZSBtYW5uZXIsIG9yIGxvZ2dpbmcgZXZlcnkgYWN0aW9uIHBheWxvYWQuXG4gKlxuICogU2VlIGByZWR1eC10aHVua2AgcGFja2FnZSBhcyBhbiBleGFtcGxlIG9mIHRoZSBSZWR1eCBtaWRkbGV3YXJlLlxuICpcbiAqIEJlY2F1c2UgbWlkZGxld2FyZSBpcyBwb3RlbnRpYWxseSBhc3luY2hyb25vdXMsIHRoaXMgc2hvdWxkIGJlIHRoZSBmaXJzdFxuICogc3RvcmUgZW5oYW5jZXIgaW4gdGhlIGNvbXBvc2l0aW9uIGNoYWluLlxuICpcbiAqIE5vdGUgdGhhdCBlYWNoIG1pZGRsZXdhcmUgd2lsbCBiZSBnaXZlbiB0aGUgYGRpc3BhdGNoYCBhbmQgYGdldFN0YXRlYCBmdW5jdGlvbnNcbiAqIGFzIG5hbWVkIGFyZ3VtZW50cy5cbiAqXG4gKiBAcGFyYW0gey4uLkZ1bmN0aW9ufSBtaWRkbGV3YXJlcyBUaGUgbWlkZGxld2FyZSBjaGFpbiB0byBiZSBhcHBsaWVkLlxuICogQHJldHVybnMge0Z1bmN0aW9ufSBBIHN0b3JlIGVuaGFuY2VyIGFwcGx5aW5nIHRoZSBtaWRkbGV3YXJlLlxuICovXG5leHBvcnQgZGVmYXVsdCBmdW5jdGlvbiBhcHBseU1pZGRsZXdhcmUoKSB7XG4gIGZvciAodmFyIF9sZW4gPSBhcmd1bWVudHMubGVuZ3RoLCBtaWRkbGV3YXJlcyA9IEFycmF5KF9sZW4pLCBfa2V5ID0gMDsgX2tleSA8IF9sZW47IF9rZXkrKykge1xuICAgIG1pZGRsZXdhcmVzW19rZXldID0gYXJndW1lbnRzW19rZXldO1xuICB9XG5cbiAgcmV0dXJuIGZ1bmN0aW9uIChjcmVhdGVTdG9yZSkge1xuICAgIHJldHVybiBmdW5jdGlvbiAocmVkdWNlciwgcHJlbG9hZGVkU3RhdGUsIGVuaGFuY2VyKSB7XG4gICAgICB2YXIgc3RvcmUgPSBjcmVhdGVTdG9yZShyZWR1Y2VyLCBwcmVsb2FkZWRTdGF0ZSwgZW5oYW5jZXIpO1xuICAgICAgdmFyIF9kaXNwYXRjaCA9IHN0b3JlLmRpc3BhdGNoO1xuICAgICAgdmFyIGNoYWluID0gW107XG5cbiAgICAgIHZhciBtaWRkbGV3YXJlQVBJID0ge1xuICAgICAgICBnZXRTdGF0ZTogc3RvcmUuZ2V0U3RhdGUsXG4gICAgICAgIGRpc3BhdGNoOiBmdW5jdGlvbiBkaXNwYXRjaChhY3Rpb24pIHtcbiAgICAgICAgICByZXR1cm4gX2Rpc3BhdGNoKGFjdGlvbik7XG4gICAgICAgIH1cbiAgICAgIH07XG4gICAgICBjaGFpbiA9IG1pZGRsZXdhcmVzLm1hcChmdW5jdGlvbiAobWlkZGxld2FyZSkge1xuICAgICAgICByZXR1cm4gbWlkZGxld2FyZShtaWRkbGV3YXJlQVBJKTtcbiAgICAgIH0pO1xuICAgICAgX2Rpc3BhdGNoID0gY29tcG9zZS5hcHBseSh1bmRlZmluZWQsIGNoYWluKShzdG9yZS5kaXNwYXRjaCk7XG5cbiAgICAgIHJldHVybiBfZXh0ZW5kcyh7fSwgc3RvcmUsIHtcbiAgICAgICAgZGlzcGF0Y2g6IF9kaXNwYXRjaFxuICAgICAgfSk7XG4gICAgfTtcbiAgfTtcbn1cblxuXG4vLyBXRUJQQUNLIEZPT1RFUiAvL1xuLy8gbm9kZV9tb2R1bGVzL3JlZHV4L2VzL2FwcGx5TWlkZGxld2FyZS5qcyJdLCJtYXBwaW5ncyI6Ijs7Ozs7QUFvQkE7QUFDQTtBQW5CQTtBQUNBOzs7OztBQUhBO0FBQUE7QUFBQTtBQUFBO0FBQUE7QUFBQTtBQUFBO0FBQUE7QUFBQTtBQUNBO0FBR0E7Ozs7Ozs7Ozs7Ozs7Ozs7QUFnQkE7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFKQTtBQU1BO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBREE7QUFHQTtBQUNBO0FBQ0EiLCJzb3VyY2VSb290IjoiIn0=\n//# sourceURL=webpack-internal:///26\n");
+
+/***/ })
+/******/ ]);

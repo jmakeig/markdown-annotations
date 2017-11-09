@@ -4,7 +4,7 @@
   "description": "Annotate Markdown documents locally in your browser",
   "main": "src/annotate.js",
   "scripts": {
-    "build": "rollup -c",
+    "build": "webpack",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
@@ -22,10 +22,10 @@
   },
   "homepage": "https://github.com/jmakeig/markdown-annotations#readme",
   "devDependencies": {
-    "rollup": "^0.51.1",
-    "rollup-plugin-commonjs": "^8.2.6",
-    "rollup-plugin-node-resolve": "^3.0.0",
-    "rollup-plugin-replace": "^2.0.0"
+    "babel-core": "^6.26.0",
+    "babel-loader": "^7.1.2",
+    "babel-preset-env": "^1.6.1",
+    "webpack": "^3.8.1"
   },
   "dependencies": {
     "redux": "^3.7.2"

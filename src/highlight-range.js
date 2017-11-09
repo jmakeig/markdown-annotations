@@ -46,9 +46,9 @@ function highlightRange(
     return;
   }
 
-  if (typeof highlightClass == 'undefined') {
-    highlightClass = 'highlighted-range';
-  }
+  // if (typeof highlightClass == 'undefined') {
+  //   highlightClass = 'highlighted-range';
+  // }
 
   // First put all nodes in an array (splits start and end nodes)
   var nodes = textNodesInRange(rangeObject);
@@ -61,7 +61,7 @@ function highlightRange(
 
   // Highlight each node
   var highlights = [];
-  for (nodeIdx in nodes) {
+  for (var nodeIdx in nodes) {
     highlights.push(highlightNode(nodes[nodeIdx], highlightCallback));
   }
 
