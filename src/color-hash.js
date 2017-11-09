@@ -151,4 +151,4 @@ ColorHash.prototype.hex = function(str) {
   return RGB2HEX(rgb);
 };
 
-// module.exports = ColorHash;
+export { ColorHash };

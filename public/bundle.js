@@ -1,5 +1,1091 @@
-(function () {
-'use strict';
+(function (global, factory) {
+	typeof exports === 'object' && typeof module !== 'undefined' ? factory() :
+	typeof define === 'function' && define.amd ? define(factory) :
+	(factory());
+}(this, (function () { 'use strict';
+
+/*
+ * <https://github.com/Treora/dom-highlight-range>
+ * 
+ * 
+ * Except for parts incorporated from copyrighted works, all code is released in the public domain, free from copyright restrictions.
+ * 
+ * Contains code copied from TextPositionAnchor[1] by Randall Leeds, published under the following licence:
+ * """
+ * Copyright (c) 2015 Randall Leeds
+ * 
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ * 
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ * 
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ * """
+ * 
+ * [1]: https://github.com/tilgovi/dom-anchor-text-position/blob/d110756ff00702f642daae570752be9595fc2a52/TextPositionAnchor.js
+ */
+
+// Wrap each text node in a given DOM Range with a <span class=[highLightClass]>.
+// Breaks start and/or end node if needed.
+// Returns a function that cleans up the created highlight (not a perfect undo: split text nodes are not merged again).
+//
+// Parameters:
+// - rangeObject: a Range whose start and end containers are text nodes.
+// - highlightClass: the CSS class the text pieces in the range should get, defaults to 'highlighted-range'.
+function highlightRange(
+  rangeObject,
+  highlightCallback = () => document.createElement('span')
+) {
+  // Ignore range if empty.
+  if (rangeObject.collapsed) {
+    return;
+  }
+
+  if (typeof highlightClass == 'undefined') {
+    highlightClass = 'highlighted-range';
+  }
+
+  // First put all nodes in an array (splits start and end nodes)
+  var nodes = textNodesInRange(rangeObject);
+
+  // Remember range details to restore it later.
+  var startContainer = rangeObject.startContainer;
+  var startOffset = rangeObject.startOffset;
+  var endContainer = rangeObject.endContainer;
+  var endOffset = rangeObject.endOffset;
+
+  // Highlight each node
+  var highlights = [];
+  for (nodeIdx in nodes) {
+    highlights.push(highlightNode(nodes[nodeIdx], highlightCallback));
+  }
+
+  // The rangeObject gets messed up by our DOM changes. Be kind and restore.
+  rangeObject.setStart(startContainer, startOffset);
+  rangeObject.setEnd(endContainer, endOffset);
+
+  // Return a function that cleans up the highlights.
+  function cleanupHighlights() {
+    // Remember range details to restore it later.
+    var startContainer = rangeObject.startContainer;
+    var startOffset = rangeObject.startOffset;
+    var endContainer = rangeObject.endContainer;
+    var endOffset = rangeObject.endOffset;
+
+    // Remove each of the created highlights.
+    for (var highlightIdx in highlights) {
+      removeHighlight(highlights[highlightIdx]);
+    }
+
+    // Be kind and restore the rangeObject again.
+    rangeObject.setStart(startContainer, startOffset);
+    rangeObject.setEnd(endContainer, endOffset);
+  }
+  return cleanupHighlights;
+}
+
+// Return an array of the text nodes in the range. Split the start and end nodes if required.
+function textNodesInRange(rangeObject) {
+  // Modify Range to make sure that the start and end nodes are text nodes.
+  setRangeToTextNodes(rangeObject);
+
+  var nodes = [];
+
+  // Ignore range if empty.
+  if (rangeObject.collapsed) {
+    return nodes;
+  }
+
+  // Include (part of) the start node if needed.
+  if (rangeObject.startOffset != rangeObject.startContainer.length) {
+    // If only part of the start node is in the range, split it.
+    if (rangeObject.startOffset != 0) {
+      // Split startContainer to turn the part after the startOffset into a new node.
+      var createdNode = rangeObject.startContainer.splitText(
+        rangeObject.startOffset
+      );
+
+      // If the end was in the same container, it will now be in the newly created node.
+      if (rangeObject.endContainer === rangeObject.startContainer) {
+        rangeObject.setEnd(
+          createdNode,
+          rangeObject.endOffset - rangeObject.startOffset
+        );
+      }
+
+      // Update the start node, which no longer has an offset.
+      rangeObject.setStart(createdNode, 0);
+    }
+  }
+
+  // Create an iterator to iterate through the nodes.
+  var root =
+    typeof rangeObject.commonAncestorContainer != 'undefined'
+      ? rangeObject.commonAncestorContainer
+      : document.body; // fall back to whole document for browser compatibility
+  var iter = document.createNodeIterator(root, NodeFilter.SHOW_TEXT);
+
+  // Find the start node (could we somehow skip this seemingly needless search?)
+  while (
+    iter.referenceNode !== rangeObject.startContainer &&
+    iter.referenceNode !== null
+  ) {
+    iter.nextNode();
+  }
+
+  // Add each node up to (but excluding) the end node.
+  while (
+    iter.referenceNode !== rangeObject.endContainer &&
+    iter.referenceNode !== null
+  ) {
+    nodes.push(iter.referenceNode);
+    iter.nextNode();
+  }
+
+  // Include (part of) the end node if needed.
+  if (rangeObject.endOffset != 0) {
+    // If it is only partly included, we need to split it up.
+    if (rangeObject.endOffset != rangeObject.endContainer.length) {
+      // Split the node, breaking off the part outside the range.
+      rangeObject.endContainer.splitText(rangeObject.endOffset);
+      // Note that the range object need not be updated.
+
+      //assert(rangeObject.endOffset == rangeObject.endContainer.length);
+    }
+
+    // Add the end node.
+    nodes.push(rangeObject.endContainer);
+  }
+
+  return nodes;
+}
+
+// Normalise the range to start and end in a text node.
+// Copyright (c) 2015 Randall Leeds
+function setRangeToTextNodes(rangeObject) {
+  function getFirstTextNode(node) {
+    if (node.nodeType === Node.TEXT_NODE) return node;
+    var document = node.ownerDocument;
+    var walker = document.createTreeWalker(
+      node,
+      NodeFilter.SHOW_TEXT,
+      null,
+      false
+    );
+    return walker.firstChild();
+  }
+
+  var startNode = rangeObject.startContainer;
+  var startOffset = rangeObject.startOffset;
+
+  // Drill down to a text node if the range starts at the container boundary.
+  if (startNode.nodeType !== Node.TEXT_NODE) {
+    if (startOffset === startNode.childNodes.length) {
+      startNode = startNode.childNodes[startOffset - 1];
+      startNode = getFirstTextNode(startNode);
+      startOffset = startNode.textContent.length;
+    } else {
+      startNode = startNode.childNodes[startOffset];
+      startNode = getFirstTextNode(startNode);
+      startOffset = 0;
+    }
+    rangeObject.setStart(startNode, startOffset);
+  }
+
+  var endNode = rangeObject.endContainer;
+  var endOffset = rangeObject.endOffset;
+
+  // Drill down to a text node if the range ends at the container boundary.
+  if (endNode.nodeType !== Node.TEXT_NODE) {
+    if (endOffset === endNode.childNodes.length) {
+      endNode = endNode.childNodes[endOffset - 1];
+      endNode = getFirstTextNode(endNode);
+      endOffset = endNode.textContent.length;
+    } else {
+      endNode = endNode.childNodes[endOffset];
+      endNode = getFirstTextNode(endNode);
+      endOffset = 0;
+    }
+    rangeObject.setEnd(endNode, endOffset);
+  }
+}
+
+// Replace [node] with <span class=[highlightClass]>[node]</span>
+function highlightNode(node, highlightCallback) {
+  // Create a highlight
+  var highlight = highlightCallback();
+
+  // Wrap it around the text node
+  node.parentNode.replaceChild(highlight, node);
+  highlight.appendChild(node);
+
+  return highlight;
+}
+
+// Remove a highlight <span> created with highlightNode.
+function removeHighlight(highlight) {
+  // Move its children (normally just one text node) into its parent.
+  while (highlight.firstChild) {
+    highlight.parentNode.insertBefore(highlight.firstChild, highlight);
+  }
+  // Remove the now empty node
+  highlight.remove();
+}
+
+// <https://github.com/zenozeng/color-hash>
+// MIT license
+
+/**
+ * BKDR Hash (modified version)
+ *
+ * @param {String} str string to hash
+ * @returns {Number}
+ */
+var BKDRHash = function(str) {
+  var seed = 131;
+  var seed2 = 137;
+  var hash = 0;
+  // make hash more sensitive for short string like 'a', 'b', 'c'
+  str += 'x';
+  // Note: Number.MAX_SAFE_INTEGER equals 9007199254740991
+  var MAX_SAFE_INTEGER = parseInt(9007199254740991 / seed2);
+  for (var i = 0; i < str.length; i++) {
+    if (hash > MAX_SAFE_INTEGER) {
+      hash = parseInt(hash / seed2);
+    }
+    hash = hash * seed + str.charCodeAt(i);
+  }
+  return hash;
+};
+
+/**
+ * Convert RGB Array to HEX
+ *
+ * @param {Array} RGBArray - [R, G, B]
+ * @returns {String} 6 digits hex starting with #
+ */
+var RGB2HEX = function(RGBArray) {
+  var hex = '#';
+  RGBArray.forEach(function(value) {
+    if (value < 16) {
+      hex += 0;
+    }
+    hex += value.toString(16);
+  });
+  return hex;
+};
+
+/**
+ * Convert HSL to RGB
+ *
+ * @see {@link http://zh.wikipedia.org/wiki/HSL和HSV色彩空间} for further information.
+ * @param {Number} H Hue ∈ [0, 360)
+ * @param {Number} S Saturation ∈ [0, 1]
+ * @param {Number} L Lightness ∈ [0, 1]
+ * @returns {Array} R, G, B ∈ [0, 255]
+ */
+var HSL2RGB = function(H, S, L) {
+  H /= 360;
+
+  var q = L < 0.5 ? L * (1 + S) : L + S - L * S;
+  var p = 2 * L - q;
+
+  return [H + 1 / 3, H, H - 1 / 3].map(function(color) {
+    if (color < 0) {
+      color++;
+    }
+    if (color > 1) {
+      color--;
+    }
+    if (color < 1 / 6) {
+      color = p + (q - p) * 6 * color;
+    } else if (color < 0.5) {
+      color = q;
+    } else if (color < 2 / 3) {
+      color = p + (q - p) * 6 * (2 / 3 - color);
+    } else {
+      color = p;
+    }
+    return Math.round(color * 255);
+  });
+};
+
+/**
+ * Color Hash Class
+ *
+ * @class
+ */
+var ColorHash = function(options) {
+  options = options || {};
+
+  var LS = [options.lightness, options.saturation].map(function(param) {
+    param = param || [0.35, 0.5, 0.65]; // note that 3 is a prime
+    return Object.prototype.toString.call(param) === '[object Array]'
+      ? param.concat()
+      : [param];
+  });
+
+  this.L = LS[0];
+  this.S = LS[1];
+
+  this.minH = options.minH;
+  this.maxH = options.maxH;
+  if (typeof this.minH === 'undefined' && typeof this.maxH !== 'undefined')
+    this.minH = 0;
+  if (typeof this.minH !== 'undefined' && typeof this.maxH === 'undefined')
+    this.maxH = 360;
+
+  this.hash = options.hash || BKDRHash;
+};
+
+/**
+ * Returns the hash in [h, s, l].
+ * Note that H ∈ [0, 360); S ∈ [0, 1]; L ∈ [0, 1];
+ *
+ * @param {String} str string to hash
+ * @returns {Array} [h, s, l]
+ */
+ColorHash.prototype.hsl = function(str) {
+  var H, S, L;
+  var hash = this.hash(str);
+
+  H = hash % 359; // note that 359 is a prime
+  if (typeof this.minH !== 'undefined' && typeof this.maxH !== 'undefined') {
+    H /= 1000;
+    H = H * (this.maxH - this.minH) + this.minH;
+  }
+  hash = parseInt(hash / 360);
+  S = this.S[hash % this.S.length];
+  hash = parseInt(hash / this.S.length);
+  L = this.L[hash % this.L.length];
+
+  return [H, S, L];
+};
+
+/**
+ * Returns the hash in [r, g, b].
+ * Note that R, G, B ∈ [0, 255]
+ *
+ * @param {String} str string to hash
+ * @returns {Array} [r, g, b]
+ */
+ColorHash.prototype.rgb = function(str) {
+  var hsl = this.hsl(str);
+  return HSL2RGB.apply(this, hsl);
+};
+
+/**
+ * Returns the hash in hex
+ *
+ * @param {String} str string to hash
+ * @returns {String} hex with #
+ */
+ColorHash.prototype.hex = function(str) {
+  var rgb = this.rgb(str);
+  return RGB2HEX(rgb);
+};
+
+// <https://jsfiddle.net/gabrieleromanato/qAGHT/>
+const Base64 = {
+  _keyStr: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=',
+
+  encode: function(input) {
+    var output = '';
+    var chr1, chr2, chr3, enc1, enc2, enc3, enc4;
+    var i = 0;
+
+    input = Base64._utf8_encode(input);
+
+    while (i < input.length) {
+      chr1 = input.charCodeAt(i++);
+      chr2 = input.charCodeAt(i++);
+      chr3 = input.charCodeAt(i++);
+
+      enc1 = chr1 >> 2;
+      enc2 = ((chr1 & 3) << 4) | (chr2 >> 4);
+      enc3 = ((chr2 & 15) << 2) | (chr3 >> 6);
+      enc4 = chr3 & 63;
+
+      if (isNaN(chr2)) {
+        enc3 = enc4 = 64;
+      } else if (isNaN(chr3)) {
+        enc4 = 64;
+      }
+
+      output =
+        output +
+        this._keyStr.charAt(enc1) +
+        this._keyStr.charAt(enc2) +
+        this._keyStr.charAt(enc3) +
+        this._keyStr.charAt(enc4);
+    }
+
+    return output;
+  },
+
+  decode: function(input) {
+    var output = '';
+    var chr1, chr2, chr3;
+    var enc1, enc2, enc3, enc4;
+    var i = 0;
+
+    input = input.replace(/[^A-Za-z0-9\+\/\=]/g, '');
+
+    while (i < input.length) {
+      enc1 = this._keyStr.indexOf(input.charAt(i++));
+      enc2 = this._keyStr.indexOf(input.charAt(i++));
+      enc3 = this._keyStr.indexOf(input.charAt(i++));
+      enc4 = this._keyStr.indexOf(input.charAt(i++));
+
+      chr1 = (enc1 << 2) | (enc2 >> 4);
+      chr2 = ((enc2 & 15) << 4) | (enc3 >> 2);
+      chr3 = ((enc3 & 3) << 6) | enc4;
+
+      output = output + String.fromCharCode(chr1);
+
+      if (enc3 != 64) {
+        output = output + String.fromCharCode(chr2);
+      }
+      if (enc4 != 64) {
+        output = output + String.fromCharCode(chr3);
+      }
+    }
+
+    output = Base64._utf8_decode(output);
+
+    return output;
+  },
+
+  _utf8_encode: function(string) {
+    string = string.replace(/\r\n/g, '\n');
+    var utftext = '';
+
+    for (var n = 0; n < string.length; n++) {
+      var c = string.charCodeAt(n);
+
+      if (c < 128) {
+        utftext += String.fromCharCode(c);
+      } else if (c > 127 && c < 2048) {
+        utftext += String.fromCharCode((c >> 6) | 192);
+        utftext += String.fromCharCode((c & 63) | 128);
+      } else {
+        utftext += String.fromCharCode((c >> 12) | 224);
+        utftext += String.fromCharCode(((c >> 6) & 63) | 128);
+        utftext += String.fromCharCode((c & 63) | 128);
+      }
+    }
+
+    return utftext;
+  },
+
+  _utf8_decode: function(utftext) {
+    var string = '';
+    var i = 0;
+    var c = (c1 = c2 = 0);
+
+    while (i < utftext.length) {
+      c = utftext.charCodeAt(i);
+
+      if (c < 128) {
+        string += String.fromCharCode(c);
+        i++;
+      } else if (c > 191 && c < 224) {
+        c2 = utftext.charCodeAt(i + 1);
+        string += String.fromCharCode(((c & 31) << 6) | (c2 & 63));
+        i += 2;
+      } else {
+        c2 = utftext.charCodeAt(i + 1);
+        c3 = utftext.charCodeAt(i + 2);
+        string += String.fromCharCode(
+          ((c & 15) << 12) | ((c2 & 63) << 6) | (c3 & 63)
+        );
+        i += 3;
+      }
+    }
+
+    return string;
+  },
+};
+
+/** Detect free variable `global` from Node.js. */
+var freeGlobal = typeof global == 'object' && global && global.Object === Object && global;
+
+/** Detect free variable `self`. */
+var freeSelf = typeof self == 'object' && self && self.Object === Object && self;
+
+/** Used as a reference to the global object. */
+var root = freeGlobal || freeSelf || Function('return this')();
+
+/** Built-in value references. */
+var Symbol = root.Symbol;
+
+/** Used for built-in method references. */
+var objectProto$1 = Object.prototype;
+
+/** Used to check objects for own properties. */
+var hasOwnProperty$1 = objectProto$1.hasOwnProperty;
+
+/**
+ * Used to resolve the
+ * [`toStringTag`](http://ecma-international.org/ecma-262/7.0/#sec-object.prototype.tostring)
+ * of values.
+ */
+var nativeObjectToString = objectProto$1.toString;
+
+/** Built-in value references. */
+var symToStringTag$1 = Symbol ? Symbol.toStringTag : undefined;
+
+/**
+ * A specialized version of `baseGetTag` which ignores `Symbol.toStringTag` values.
+ *
+ * @private
+ * @param {*} value The value to query.
+ * @returns {string} Returns the raw `toStringTag`.
+ */
+function getRawTag(value) {
+  var isOwn = hasOwnProperty$1.call(value, symToStringTag$1),
+      tag = value[symToStringTag$1];
+
+  try {
+    value[symToStringTag$1] = undefined;
+    var unmasked = true;
+  } catch (e) {}
+
+  var result = nativeObjectToString.call(value);
+  if (unmasked) {
+    if (isOwn) {
+      value[symToStringTag$1] = tag;
+    } else {
+      delete value[symToStringTag$1];
+    }
+  }
+  return result;
+}
+
+/** Used for built-in method references. */
+var objectProto$2 = Object.prototype;
+
+/**
+ * Used to resolve the
+ * [`toStringTag`](http://ecma-international.org/ecma-262/7.0/#sec-object.prototype.tostring)
+ * of values.
+ */
+var nativeObjectToString$1 = objectProto$2.toString;
+
+/**
+ * Converts `value` to a string using `Object.prototype.toString`.
+ *
+ * @private
+ * @param {*} value The value to convert.
+ * @returns {string} Returns the converted string.
+ */
+function objectToString(value) {
+  return nativeObjectToString$1.call(value);
+}
+
+/** `Object#toString` result references. */
+var nullTag = '[object Null]';
+var undefinedTag = '[object Undefined]';
+
+/** Built-in value references. */
+var symToStringTag = Symbol ? Symbol.toStringTag : undefined;
+
+/**
+ * The base implementation of `getTag` without fallbacks for buggy environments.
+ *
+ * @private
+ * @param {*} value The value to query.
+ * @returns {string} Returns the `toStringTag`.
+ */
+function baseGetTag(value) {
+  if (value == null) {
+    return value === undefined ? undefinedTag : nullTag;
+  }
+  return (symToStringTag && symToStringTag in Object(value))
+    ? getRawTag(value)
+    : objectToString(value);
+}
+
+/**
+ * Creates a unary function that invokes `func` with its argument transformed.
+ *
+ * @private
+ * @param {Function} func The function to wrap.
+ * @param {Function} transform The argument transform.
+ * @returns {Function} Returns the new function.
+ */
+function overArg(func, transform) {
+  return function(arg) {
+    return func(transform(arg));
+  };
+}
+
+/** Built-in value references. */
+var getPrototype = overArg(Object.getPrototypeOf, Object);
+
+/**
+ * Checks if `value` is object-like. A value is object-like if it's not `null`
+ * and has a `typeof` result of "object".
+ *
+ * @static
+ * @memberOf _
+ * @since 4.0.0
+ * @category Lang
+ * @param {*} value The value to check.
+ * @returns {boolean} Returns `true` if `value` is object-like, else `false`.
+ * @example
+ *
+ * _.isObjectLike({});
+ * // => true
+ *
+ * _.isObjectLike([1, 2, 3]);
+ * // => true
+ *
+ * _.isObjectLike(_.noop);
+ * // => false
+ *
+ * _.isObjectLike(null);
+ * // => false
+ */
+function isObjectLike(value) {
+  return value != null && typeof value == 'object';
+}
+
+/** `Object#toString` result references. */
+var objectTag = '[object Object]';
+
+/** Used for built-in method references. */
+var funcProto = Function.prototype;
+var objectProto = Object.prototype;
+
+/** Used to resolve the decompiled source of functions. */
+var funcToString = funcProto.toString;
+
+/** Used to check objects for own properties. */
+var hasOwnProperty = objectProto.hasOwnProperty;
+
+/** Used to infer the `Object` constructor. */
+var objectCtorString = funcToString.call(Object);
+
+/**
+ * Checks if `value` is a plain object, that is, an object created by the
+ * `Object` constructor or one with a `[[Prototype]]` of `null`.
+ *
+ * @static
+ * @memberOf _
+ * @since 0.8.0
+ * @category Lang
+ * @param {*} value The value to check.
+ * @returns {boolean} Returns `true` if `value` is a plain object, else `false`.
+ * @example
+ *
+ * function Foo() {
+ *   this.a = 1;
+ * }
+ *
+ * _.isPlainObject(new Foo);
+ * // => false
+ *
+ * _.isPlainObject([1, 2, 3]);
+ * // => false
+ *
+ * _.isPlainObject({ 'x': 0, 'y': 0 });
+ * // => true
+ *
+ * _.isPlainObject(Object.create(null));
+ * // => true
+ */
+function isPlainObject(value) {
+  if (!isObjectLike(value) || baseGetTag(value) != objectTag) {
+    return false;
+  }
+  var proto = getPrototype(value);
+  if (proto === null) {
+    return true;
+  }
+  var Ctor = hasOwnProperty.call(proto, 'constructor') && proto.constructor;
+  return typeof Ctor == 'function' && Ctor instanceof Ctor &&
+    funcToString.call(Ctor) == objectCtorString;
+}
+
+function symbolObservablePonyfill(root) {
+	var result;
+	var Symbol = root.Symbol;
+
+	if (typeof Symbol === 'function') {
+		if (Symbol.observable) {
+			result = Symbol.observable;
+		} else {
+			result = Symbol('observable');
+			Symbol.observable = result;
+		}
+	} else {
+		result = '@@observable';
+	}
+
+	return result;
+}
+
+/* global window */
+var root$2;
+
+if (typeof self !== 'undefined') {
+  root$2 = self;
+} else if (typeof window !== 'undefined') {
+  root$2 = window;
+} else if (typeof global !== 'undefined') {
+  root$2 = global;
+} else if (typeof module !== 'undefined') {
+  root$2 = module;
+} else {
+  root$2 = Function('return this')();
+}
+
+var result = symbolObservablePonyfill(root$2);
+
+/**
+ * These are private action types reserved by Redux.
+ * For any unknown actions, you must return the current state.
+ * If the current state is undefined, you must return the initial state.
+ * Do not reference these action types directly in your code.
+ */
+var ActionTypes = {
+  INIT: '@@redux/INIT'
+
+  /**
+   * Creates a Redux store that holds the state tree.
+   * The only way to change the data in the store is to call `dispatch()` on it.
+   *
+   * There should only be a single store in your app. To specify how different
+   * parts of the state tree respond to actions, you may combine several reducers
+   * into a single reducer function by using `combineReducers`.
+   *
+   * @param {Function} reducer A function that returns the next state tree, given
+   * the current state tree and the action to handle.
+   *
+   * @param {any} [preloadedState] The initial state. You may optionally specify it
+   * to hydrate the state from the server in universal apps, or to restore a
+   * previously serialized user session.
+   * If you use `combineReducers` to produce the root reducer function, this must be
+   * an object with the same shape as `combineReducers` keys.
+   *
+   * @param {Function} [enhancer] The store enhancer. You may optionally specify it
+   * to enhance the store with third-party capabilities such as middleware,
+   * time travel, persistence, etc. The only store enhancer that ships with Redux
+   * is `applyMiddleware()`.
+   *
+   * @returns {Store} A Redux store that lets you read the state, dispatch actions
+   * and subscribe to changes.
+   */
+};function createStore(reducer, preloadedState, enhancer) {
+  var _ref2;
+
+  if (typeof preloadedState === 'function' && typeof enhancer === 'undefined') {
+    enhancer = preloadedState;
+    preloadedState = undefined;
+  }
+
+  if (typeof enhancer !== 'undefined') {
+    if (typeof enhancer !== 'function') {
+      throw new Error('Expected the enhancer to be a function.');
+    }
+
+    return enhancer(createStore)(reducer, preloadedState);
+  }
+
+  if (typeof reducer !== 'function') {
+    throw new Error('Expected the reducer to be a function.');
+  }
+
+  var currentReducer = reducer;
+  var currentState = preloadedState;
+  var currentListeners = [];
+  var nextListeners = currentListeners;
+  var isDispatching = false;
+
+  function ensureCanMutateNextListeners() {
+    if (nextListeners === currentListeners) {
+      nextListeners = currentListeners.slice();
+    }
+  }
+
+  /**
+   * Reads the state tree managed by the store.
+   *
+   * @returns {any} The current state tree of your application.
+   */
+  function getState() {
+    return currentState;
+  }
+
+  /**
+   * Adds a change listener. It will be called any time an action is dispatched,
+   * and some part of the state tree may potentially have changed. You may then
+   * call `getState()` to read the current state tree inside the callback.
+   *
+   * You may call `dispatch()` from a change listener, with the following
+   * caveats:
+   *
+   * 1. The subscriptions are snapshotted just before every `dispatch()` call.
+   * If you subscribe or unsubscribe while the listeners are being invoked, this
+   * will not have any effect on the `dispatch()` that is currently in progress.
+   * However, the next `dispatch()` call, whether nested or not, will use a more
+   * recent snapshot of the subscription list.
+   *
+   * 2. The listener should not expect to see all state changes, as the state
+   * might have been updated multiple times during a nested `dispatch()` before
+   * the listener is called. It is, however, guaranteed that all subscribers
+   * registered before the `dispatch()` started will be called with the latest
+   * state by the time it exits.
+   *
+   * @param {Function} listener A callback to be invoked on every dispatch.
+   * @returns {Function} A function to remove this change listener.
+   */
+  function subscribe(listener) {
+    if (typeof listener !== 'function') {
+      throw new Error('Expected listener to be a function.');
+    }
+
+    var isSubscribed = true;
+
+    ensureCanMutateNextListeners();
+    nextListeners.push(listener);
+
+    return function unsubscribe() {
+      if (!isSubscribed) {
+        return;
+      }
+
+      isSubscribed = false;
+
+      ensureCanMutateNextListeners();
+      var index = nextListeners.indexOf(listener);
+      nextListeners.splice(index, 1);
+    };
+  }
+
+  /**
+   * Dispatches an action. It is the only way to trigger a state change.
+   *
+   * The `reducer` function, used to create the store, will be called with the
+   * current state tree and the given `action`. Its return value will
+   * be considered the **next** state of the tree, and the change listeners
+   * will be notified.
+   *
+   * The base implementation only supports plain object actions. If you want to
+   * dispatch a Promise, an Observable, a thunk, or something else, you need to
+   * wrap your store creating function into the corresponding middleware. For
+   * example, see the documentation for the `redux-thunk` package. Even the
+   * middleware will eventually dispatch plain object actions using this method.
+   *
+   * @param {Object} action A plain object representing “what changed”. It is
+   * a good idea to keep actions serializable so you can record and replay user
+   * sessions, or use the time travelling `redux-devtools`. An action must have
+   * a `type` property which may not be `undefined`. It is a good idea to use
+   * string constants for action types.
+   *
+   * @returns {Object} For convenience, the same action object you dispatched.
+   *
+   * Note that, if you use a custom middleware, it may wrap `dispatch()` to
+   * return something else (for example, a Promise you can await).
+   */
+  function dispatch(action) {
+    if (!isPlainObject(action)) {
+      throw new Error('Actions must be plain objects. ' + 'Use custom middleware for async actions.');
+    }
+
+    if (typeof action.type === 'undefined') {
+      throw new Error('Actions may not have an undefined "type" property. ' + 'Have you misspelled a constant?');
+    }
+
+    if (isDispatching) {
+      throw new Error('Reducers may not dispatch actions.');
+    }
+
+    try {
+      isDispatching = true;
+      currentState = currentReducer(currentState, action);
+    } finally {
+      isDispatching = false;
+    }
+
+    var listeners = currentListeners = nextListeners;
+    for (var i = 0; i < listeners.length; i++) {
+      var listener = listeners[i];
+      listener();
+    }
+
+    return action;
+  }
+
+  /**
+   * Replaces the reducer currently used by the store to calculate the state.
+   *
+   * You might need this if your app implements code splitting and you want to
+   * load some of the reducers dynamically. You might also need this if you
+   * implement a hot reloading mechanism for Redux.
+   *
+   * @param {Function} nextReducer The reducer for the store to use instead.
+   * @returns {void}
+   */
+  function replaceReducer(nextReducer) {
+    if (typeof nextReducer !== 'function') {
+      throw new Error('Expected the nextReducer to be a function.');
+    }
+
+    currentReducer = nextReducer;
+    dispatch({ type: ActionTypes.INIT });
+  }
+
+  /**
+   * Interoperability point for observable/reactive libraries.
+   * @returns {observable} A minimal observable of state changes.
+   * For more information, see the observable proposal:
+   * https://github.com/tc39/proposal-observable
+   */
+  function observable() {
+    var _ref;
+
+    var outerSubscribe = subscribe;
+    return _ref = {
+      /**
+       * The minimal observable subscription method.
+       * @param {Object} observer Any object that can be used as an observer.
+       * The observer object should have a `next` method.
+       * @returns {subscription} An object with an `unsubscribe` method that can
+       * be used to unsubscribe the observable from the store, and prevent further
+       * emission of values from the observable.
+       */
+      subscribe: function subscribe(observer) {
+        if (typeof observer !== 'object') {
+          throw new TypeError('Expected the observer to be an object.');
+        }
+
+        function observeState() {
+          if (observer.next) {
+            observer.next(getState());
+          }
+        }
+
+        observeState();
+        var unsubscribe = outerSubscribe(observeState);
+        return { unsubscribe: unsubscribe };
+      }
+    }, _ref[$$observable] = function () {
+      return this;
+    }, _ref;
+  }
+
+  // When a store is created, an "INIT" action is dispatched so that every
+  // reducer returns their initial state. This effectively populates
+  // the initial state tree.
+  dispatch({ type: ActionTypes.INIT });
+
+  return _ref2 = {
+    dispatch: dispatch,
+    subscribe: subscribe,
+    getState: getState,
+    replaceReducer: replaceReducer
+  }, _ref2[$$observable] = observable, _ref2;
+}
+
+/**
+ * Prints a warning in the console if it exists.
+ *
+ * @param {String} message The warning message.
+ * @returns {void}
+ */
+
+/**
+ * Composes single-argument functions from right to left. The rightmost
+ * function can take multiple arguments as it provides the signature for
+ * the resulting composite function.
+ *
+ * @param {...Function} funcs The functions to compose.
+ * @returns {Function} A function obtained by composing the argument functions
+ * from right to left. For example, compose(f, g, h) is identical to doing
+ * (...args) => f(g(h(...args))).
+ */
+
+function compose() {
+  for (var _len = arguments.length, funcs = Array(_len), _key = 0; _key < _len; _key++) {
+    funcs[_key] = arguments[_key];
+  }
+
+  if (funcs.length === 0) {
+    return function (arg) {
+      return arg;
+    };
+  }
+
+  if (funcs.length === 1) {
+    return funcs[0];
+  }
+
+  return funcs.reduce(function (a, b) {
+    return function () {
+      return a(b.apply(undefined, arguments));
+    };
+  });
+}
+
+var _extends = Object.assign || function (target) { for (var i = 1; i < arguments.length; i++) { var source = arguments[i]; for (var key in source) { if (Object.prototype.hasOwnProperty.call(source, key)) { target[key] = source[key]; } } } return target; };
+
+/**
+ * Creates a store enhancer that applies middleware to the dispatch method
+ * of the Redux store. This is handy for a variety of tasks, such as expressing
+ * asynchronous actions in a concise manner, or logging every action payload.
+ *
+ * See `redux-thunk` package as an example of the Redux middleware.
+ *
+ * Because middleware is potentially asynchronous, this should be the first
+ * store enhancer in the composition chain.
+ *
+ * Note that each middleware will be given the `dispatch` and `getState` functions
+ * as named arguments.
+ *
+ * @param {...Function} middlewares The middleware chain to be applied.
+ * @returns {Function} A store enhancer applying the middleware.
+ */
+function applyMiddleware() {
+  for (var _len = arguments.length, middlewares = Array(_len), _key = 0; _key < _len; _key++) {
+    middlewares[_key] = arguments[_key];
+  }
+
+  return function (createStore) {
+    return function (reducer, preloadedState, enhancer) {
+      var store = createStore(reducer, preloadedState, enhancer);
+      var _dispatch = store.dispatch;
+      var chain = [];
+
+      var middlewareAPI = {
+        getState: store.getState,
+        dispatch: function dispatch(action) {
+          return _dispatch(action);
+        }
+      };
+      chain = middlewares.map(function (middleware) {
+        return middleware(middlewareAPI);
+      });
+      _dispatch = compose.apply(undefined, chain)(store.dispatch);
+
+      return _extends({}, store, {
+        dispatch: _dispatch
+      });
+    };
+  };
+}
 
 const INITIAL_STATE = {
   ui: {
@@ -363,9 +1449,9 @@ function uuidv4() {
   );
 }
 
-const store = Redux.createStore(
+const store = createStore(
   reducer,
-  Redux.applyMiddleware(store => next => action => {
+  applyMiddleware(store => next => action => {
     console.log('Dispatching', action);
     const result = next(action);
     console.log('Next state', store.getState());
@@ -824,5 +1910,5 @@ function childTextNodeOrSelf(node) {
   return undefined;
 }
 
-}());
+})));
 //# sourceMappingURL=bundle.js.map

@@ -119,3 +119,5 @@ const Base64 = {
     return string;
   },
 };
+
+export { Base64 };

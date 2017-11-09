@@ -1,3 +1,8 @@
+import { highlightRange } from './highlight-range.js';
+import { ColorHash } from './color-hash.js';
+import { Base64 } from './base64.js';
+import { createStore, applyMiddleware } from 'redux';
+
 const INITIAL_STATE = {
   ui: {
     isRendering: false,
@@ -362,9 +367,9 @@ function uuidv4() {
   );
 }
 
-const store = Redux.createStore(
+const store = createStore(
   reducer,
-  Redux.applyMiddleware(store => next => action => {
+  applyMiddleware(store => next => action => {
     console.log('Dispatching', action);
     const result = next(action);
     console.log('Next state', store.getState());
