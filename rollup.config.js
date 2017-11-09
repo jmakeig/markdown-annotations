@@ -7,7 +7,7 @@ import commonjs from 'rollup-plugin-commonjs';
 const production = !process.env.ROLLUP_WATCH;
 
 export default {
-  input: 'src/main.js',
+  input: 'src/annotate.js',
   output: {
     file: 'public/bundle.js',
     format: 'iife',
@@ -15,9 +15,8 @@ export default {
     sourcemap: true,
   },
   plugins: [
-    resolve(), // tells Rollup how to find date-fns in node_modules
-    commonjs(), // converts date-fns to ES modules
+    resolve(), // tells Rollup how to find imports in node_modules
+    commonjs(), // converts require() to ES modules
     // production && uglify() // minify, but only in production
-    builtins(),
   ],
 };

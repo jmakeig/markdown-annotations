@@ -4,6 +4,7 @@
   "description": "Annotate Markdown documents locally in your browser",
   "main": "src/annotate.js",
   "scripts": {
+    "build": "rollup -c",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
