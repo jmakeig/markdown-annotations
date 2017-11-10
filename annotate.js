@@ -138,6 +138,10 @@ function reducer(state, action) {
       const tmp9 = Object.assign({}, state);
       tmp9.model = Object.assign({}, state.model);
       tmp9.model.content = action.content;
+      tmp9.model.annotations = decorateAnnotations(
+        action.annotations,
+        state.ui.user
+      );
       tmp9.model.href = action.href;
       return tmp9;
     case CHANGE_SELECTION:
@@ -323,9 +327,7 @@ function render() {
   // of `clearUnsaved` to `onlyPersisted`?
   if (state.model.content && state.model.content.length > 0) {
     download.href = `data:text/markdown;charset=utf-8;base64,${Base64.encode(
-      state.model.content +
-        '\n\n' +
-        serializeAnnotations(state.model.annotations)
+      serializeAnnotatedMarkdown(state.model.content, state.model.annotations)
     )}`;
     download.download = decodeURIComponent(state.model.href.split('/').pop());
     download.style.display = 'unset';
@@ -337,13 +339,49 @@ function render() {
   console.timeEnd('render');
 }
 
+/**
+ * Converse of `serializeAnnotatedMarkdown()`.
+ * 
+ * @param {string} rawMarkdown - a string of Markdown with an optional 
+ *                               block of annotations serialized as JSON
+ * @return {Object} - `{ content: string, annotations: Array<Annotation*> }`
+ */
+function parseAnnotatedMarkdown(rawMarkdown) {
+  if (!rawMarkdown) return;
+  // const NAMESPACE = 'http://marklogic.com/annotations'.replace(/\//g, '\\/');
+  const matcher = /([\s\S]+)<!--- http:\/\/marklogic.com\/annotations\n\n([\s\S]+)\n\n--->([\s\S]*)/;
+  const matches = rawMarkdown.match(matcher);
+  if (null === matches) return { content: rawMarkdown, annotations: [] };
+  if (4 !== matches.length) {
+    throw new Error(matches.length);
+  }
+  return {
+    content: matches[1] + matches[3],
+    annotations: JSON.parse(matches[2]),
+  };
+}
+
+/**
+ * 
+ * @param {string} content 
+ * @param {Array<Annotation*>} annotations 
+ * @return {string}
+ */
+function serializeAnnotatedMarkdown(content, annotations = []) {
+  const serializedAnnotations = serializeAnnotations(annotations);
+  return (
+    content +
+    ('' === serializedAnnotations ? '' : '\n\n' + serializedAnnotations)
+  );
+}
+serializeAnnotatedMarkdown.NAMESPACE = 'http://marklogic.com/annotations';
+
 function serializeAnnotations(annotations) {
   if (!annotations || 0 === annotations.length) {
     return '';
   }
-  const NAMESPACE = 'http://marklogic.com/annotations';
   const annotationsJSON = JSON.stringify(annotations, null, 2);
-  return `<!--- ${NAMESPACE}\n\n${annotationsJSON}\n\n--->`;
+  return `<!--- ${serializeAnnotatedMarkdown.NAMESPACE}\n\n${annotationsJSON}\n\n--->`;
 }
 
 function restoreSelection(range) {
@@ -430,11 +468,12 @@ document.addEventListener('DOMContentLoaded', evt => {
       const file = evt.target.files[0];
       const reader = new FileReader();
       reader.addEventListener('load', evt => {
-        store.dispatch({
-          type: SET_CONTENT_RECEIPT,
-          href: file.name,
-          content: reader.result,
-        });
+        store.dispatch(
+          Object.assign(
+            { type: SET_CONTENT_RECEIPT, href: file.name },
+            parseAnnotatedMarkdown(reader.result)
+          )
+        );
       });
       reader.addEventListener('progress', evt => {
         // TODO: Progress
@@ -442,6 +481,7 @@ document.addEventListener('DOMContentLoaded', evt => {
         //   type: SET_CONTENT_PROGRESS,
         //   progress: evt.lengthComputable ? evt.loaded / evt.total : true,
         // });
+        // console.log(evt.lengthComputable ? evt.loaded / evt.total : true);
       });
       reader.addEventListener('error', evt => {
         store.dispatch({

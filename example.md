@@ -118,3 +118,58 @@ Glossier cloud bread tacos, twee jean shorts vape whatever literally locavore wo
 Taiyaki raclette hexagon, tumblr put a bird on it microdosing deep v 8-bit ethical banjo paleo next level. Brooklyn brunch gochujang, thundercats edison bulb master cleanse twee. Before they sold out meditation stumptown deep v you probably haven't heard of them farm-to-table af hella +1 copper mug bicycle rights taxidermy messenger bag. Cronut echo park quinoa banh mi semiotics keytar. Irony tilde brunch fixie. Knausgaard put a bird on it schlitz, lyft prism disrupt food truck retro freegan subway tile polaroid. Quinoa chillwave disrupt, master cleanse meggings adaptogen kinfolk iceland. Everyday carry chartreuse vape prism lo-fi. Microdosing taxidermy sartorial squid selfies, bitters kinfolk.
 
 Drinking vinegar YOLO swag, pabst cardigan 90's occupy hexagon plaid schlitz poke hot chicken banjo vape. Edison bulb heirloom venmo succulents, tilde subway tile crucifix skateboard. Vape YOLO activated charcoal craft beer ennui seitan distillery. Bespoke copper mug ugh, edison bulb craft beer banh mi hashtag yuccie cardigan tousled plaid kitsch hammock tumeric. Hell of jean shorts marfa, yuccie blue bottle put a bird on it jianbing la croix. Paleo meggings echo park franzen cold-pressed mustache gastropub ethical celiac pop-up prism gochujang. Salvia keffiyeh chillwave taxidermy. Ethical pitchfork tilde cliche polaroid beard. Copper mug neutra lumbersexual biodiesel, echo park fixie blue bottle cardigan irony put a bird on it craft beer artisan hexagon.
+
+<!--- http://marklogic.com/annotations
+
+[
+  {
+    "id": "3a90388c-5219-495b-8fd2-74c9ec9abcf9",
+    "timestamp": "2017-11-09T22:53:34.971Z",
+    "user": "dsmalls",
+    "comment": "Nop! Nausgaard is not right.",
+    "range": {
+      "start": {
+        "line": 12,
+        "column": 3
+      },
+      "end": {
+        "line": 12,
+        "column": 34
+      }
+    }
+  },
+  {
+    "id": "a2a55ee6-9260-4aaa-bd13-dae8f5141745",
+    "timestamp": "2017-11-09T22:53:51.679Z",
+    "user": "jmakeig",
+    "comment": "Or consider being truly in authentic.",
+    "range": {
+      "start": {
+        "line": 23,
+        "column": 7
+      },
+      "end": {
+        "line": 23,
+        "column": 25
+      }
+    }
+  },
+  {
+    "id": "e727841c-94f4-442c-9c92-84f03f2dcd89",
+    "timestamp": "2017-11-09T22:54:13.487Z",
+    "user": "dsthubbins",
+    "comment": "Do you mean “figuratively”?",
+    "range": {
+      "start": {
+        "line": 27,
+        "column": 0
+      },
+      "end": {
+        "line": 27,
+        "column": 9
+      }
+    }
+  }
+]
+
+--->
