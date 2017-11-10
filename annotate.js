@@ -500,7 +500,6 @@ document.addEventListener('DOMContentLoaded', evt => {
   });
 
   document.addEventListener('click', evt => {
-    console.log('evt.target.classList', evt.target.classList);
     if (evt.target && evt.target.matches('#SaveAnnotation')) {
       store.dispatch({
         type: SAVE_ANNOTATION_INTENT,
