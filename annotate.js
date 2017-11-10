@@ -363,8 +363,9 @@ function parseAnnotatedMarkdown(rawMarkdown) {
 
 /**
  * 
- * @param {string} content 
- * @param {Array<Annotation*>} annotations 
+ * 
+ * @param {string} content - `model.content`
+ * @param {Array<Annotation*>} annotations - `model.annotations`
  * @return {string}
  */
 function serializeAnnotatedMarkdown(content, annotations = []) {
@@ -376,6 +377,12 @@ function serializeAnnotatedMarkdown(content, annotations = []) {
 }
 serializeAnnotatedMarkdown.NAMESPACE = 'http://marklogic.com/annotations';
 
+/**
+ * Serialize annotations as JSON in a Markdown comment.
+ * 
+ * @param {Array<Annotation*>} annotations 
+ * @return {string} - Markdown comment wrapping serialized JSON
+ */
 function serializeAnnotations(annotations) {
   if (!annotations || 0 === annotations.length) {
     return '';
