@@ -62,7 +62,9 @@ function highlightRange(rangeObject, highlightTemplate) {
     var highlightCallback = highlightTemplate || defaultHighlight;
     if ('string' === typeof highlightTemplate) {
       highlightCallback = function _highlightTemplateClassName() {
-        return defaultHighlight(highlightTemplate);
+        var span = document.createElement('span');
+        span.classList.add(highlightTemplate);
+        return span;
       };
     }
     if (highlightTemplate instanceof HTMLElement) {
@@ -70,8 +72,8 @@ function highlightRange(rangeObject, highlightTemplate) {
         return highlightTemplate.cloneNode();
       };
     }
-    if ('function' !== typeof highlightTemplate) {
-      throw new TypeError('highlightTemplate must be a function: ' + typeof highlightTemplate);
+    if ('function' !== typeof highlightCallback) {
+      throw new TypeError('highlightTemplate must be a string, HTMLElement, or function: ' + typeof highlightTemplate);
     }
 
     // First put all nodes in an array (splits start and end nodes)
@@ -86,7 +88,7 @@ function highlightRange(rangeObject, highlightTemplate) {
     // Highlight each node
     var highlights = [];
     for (var nodeIdx in nodes) {
-        highlights.push(highlightNode(nodes[nodeIdx], highlightTemplate));
+        highlights.push(highlightNode(nodes[nodeIdx], highlightCallback));
     }
 
     // The rangeObject gets messed up by our DOM changes. Be kind and restore.
@@ -247,6 +249,12 @@ function removeHighlight(highlight) {
     }
     // Remove the now empty node
     highlight.remove();
+}
+
+function defaultHighlight(node) {
+    var span = document.createElement('span');
+    span.classList.add('highlighted-range');
+    return span;
 }
 
 return highlightRange;
