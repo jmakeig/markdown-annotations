@@ -16,6 +16,24 @@ INITIAL_STATE.model.annotations = decorateAnnotations(
   INITIAL_STATE.ui.user
 );
 
+const {
+  div,
+  h1,
+  h2,
+  h3,
+  a,
+  tr,
+  td,
+  button,
+  span,
+  p,
+  select,
+  textarea,
+  input,
+  checkbox,
+  radio,
+} = DOM;
+
 /**
  * Renders Markdown string as HTML table rows. Does not touch the live DOM. 
  * 
