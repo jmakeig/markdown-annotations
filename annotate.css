@@ -94,6 +94,6 @@ table.markdown {
 .annotation.active {
   background: rgba(255, 255, 0, 0.5) !important; /* override the inline style */
 }
-.annotation.mine:hover {
-  cursor: pointer;
+.annotation:hover {
+  cursor: default;
 }

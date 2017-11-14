@@ -528,7 +528,7 @@ document.addEventListener('DOMContentLoaded', evt => {
         commentEl.value.length
       );
     }
-    if (evt.target.matches('.annotation.mine')) {
+    if (evt.target.matches('.annotation')) {
       const annotationEl = evt.target;
       store.dispatch({
         type: EDIT_ANNOTATION,
