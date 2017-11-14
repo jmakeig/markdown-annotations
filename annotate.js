@@ -349,7 +349,7 @@ function render() {
 function parseAnnotatedMarkdown(rawMarkdown) {
   if (!rawMarkdown) return;
   // const NAMESPACE = 'http://marklogic.com/annotations'.replace(/\//g, '\\/');
-  const matcher = /([\s\S]+)<!--- http:\/\/marklogic.com\/annotations\n\n([\s\S]+)\n\n--->([\s\S]*)/;
+  const matcher = /([\s\S]+)\n\n<!--- http:\/\/marklogic.com\/annotations\n\n([\s\S]+)\n\n--->([\s\S]*)/;
   const matches = rawMarkdown.match(matcher);
   if (null === matches) return { content: rawMarkdown, annotations: [] };
   if (4 !== matches.length) {
