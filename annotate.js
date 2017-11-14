@@ -102,8 +102,8 @@ function decorateAnnotations(annotations = [], user) {
     if (!user) return this;
     return this.filter(a => user === a.user);
   };
-  array.findByID = function(id) {
-    return this.find(a => id === a.id);
+  array.findByID = function(id, user) {
+    return this.find(a => id === a.id && (!user || user === a.user));
   };
   array.upsert = function(annotation) {
     if (!annotation) throw new ReferenceError(`Missing annotation`);
@@ -304,7 +304,7 @@ function render() {
     document.querySelector('tbody')
   );
   console.timeEnd('renderMarkdown');
-  renderAnnotations(state.model.annotations);
+  renderAnnotationHighlights(state.model.annotations);
 
   document.querySelector('#Comment').value = state.ui.activeAnnotationID
     ? state.model.annotations.findByID(state.ui.activeAnnotationID).comment ||
@@ -324,6 +324,13 @@ function render() {
     selAnn.style.left = `-100px`;
   }
 
+  replaceChildren(
+    renderAnnotationDetail(
+      getActiveAnnotation(state),
+      state.ui.activeAnnotationID
+    ),
+    document.querySelector('#Comment').parentNode
+  );
   document.querySelector('#Comment').disabled = !state.ui.activeAnnotationID;
 
   const active = state.model.annotations.findByID(state.ui.activeAnnotationID);
@@ -355,6 +362,21 @@ function render() {
 
   state.ui.isRendering = false;
   console.timeEnd('render');
+}
+
+function getActiveAnnotation(state) {
+  return state.model.annotations.findByID(state.ui.activeAnnotationID);
+}
+
+function renderAnnotationDetail(annotation, activeAnnotationID) {
+  // <textarea id="Comment"></textarea>
+  const id = {
+    id: 'Comment',
+  };
+  // FIXME: Need to do the whole form together
+  if (!annotation) return div('', [], id);
+  const comment = textarea(annotation.comment, [], id);
+  return comment;
 }
 
 /**
@@ -429,11 +451,11 @@ function restoreSelection(range) {
  * @param {Array<Annotation>} annotations 
  * @return undefined
  */
-function renderAnnotations(annotations) {
+function renderAnnotationHighlights(annotations) {
   const state = store.getState();
   // Highlight annotations. Requires that DOM is already committed above
   for (const annotation of annotations) {
-    renderAnnotation(
+    renderAnnotationHighlight(
       annotation,
       state.model.annotations.mine().some(a => annotation.id === a.id),
       state.ui.activeAnnotationID === annotation.id
@@ -441,7 +463,11 @@ function renderAnnotations(annotations) {
   }
 }
 
-function renderAnnotation(annotation, isMine = false, isActive = false) {
+function renderAnnotationHighlight(
+  annotation,
+  isMine = false,
+  isActive = false
+) {
   if (!annotation) return;
   const r = rangeFromOffsets(
     document.querySelector(`#L${annotation.range.start.line}>td.content`),
@@ -450,7 +476,7 @@ function renderAnnotation(annotation, isMine = false, isActive = false) {
     annotation.range.end.column
   );
   highlightRange(r, () => {
-    const span = document.createElement('span');
+    const span = document.createElement('mark');
     span.classList.add('annotation');
     span.dataset.annotationId = annotation.id;
     if (isMine) {
