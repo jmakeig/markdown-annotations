@@ -92,6 +92,7 @@ const CHANGE_COMMENT = 'CHANGE_COMMENT';
 const SAVE_ANNOTATION_INTENT = 'SAVE_ANNOTATION_INTENT';
 const SAVE_ANNOTATION_RECEIPT = 'SAVE_ANNOTATION_RECEIPT';
 const SELECT_ANNOTATION = 'SELECT_ANNOTATION';
+const EDIT_ANNOTATION = 'EDIT_ANNOTATION';
 const DELETE_ANNOTATION_INTENT = 'DELETE_ANNOTATION_INTENT';
 const DELETE_ANNOTATION_RECEIPT = 'DELETE_ANNOTATION_RECEIPT';
 const CANCEL_EDIT_ANNOTATION_RECEIPT = 'CANCEL_EDIT_ANNOTATION_RECEIPT';
@@ -99,11 +100,11 @@ const CANCEL_EDIT_ANNOTATION_RECEIPT = 'CANCEL_EDIT_ANNOTATION_RECEIPT';
 function decorateAnnotations(annotations = [], user) {
   const array = [...annotations];
   array.mine = function() {
-    if (!user) return this;
-    return this.filter(a => user === a.user);
+    if (!user) return decorateAnnotations([]);
+    return decorateAnnotations(this.filter(a => user === a.user));
   };
-  array.findByID = function(id, user) {
-    return this.find(a => id === a.id && (!user || user === a.user));
+  array.findByID = function(id, u) {
+    return this.find(a => id === a.id && (!u || u === a.user));
   };
   array.isMine = function(id) {
     return this.some(a => id === a.id && user === a.user);
@@ -218,13 +219,18 @@ function reducer(state, action) {
       );
       delete tmp4.model.annotations.findByID(state.ui.activeAnnotationID)
         .isDirty;
-      tmp4.ui = { isRendering: state.ui.isRendering, user: state.ui.user };
       return tmp4;
     case SELECT_ANNOTATION:
       const tmp5 = Object.assign({}, state);
       tmp5.ui = Object.assign({}, state.ui);
       tmp5.ui.activeAnnotationID = action.id;
       return tmp5;
+    case EDIT_ANNOTATION:
+      const tmp10 = Object.assign({}, state);
+      tmp10.ui = Object.assign({}, state.ui);
+      // FIXME: Ignores action.annotation
+      tmp10.ui.isEditing = action.isEditing;
+      return tmp10;
     // case DELETE_ANNOTATION_INTENT:
     case DELETE_ANNOTATION_RECEIPT:
       const tmp6 = Object.assign({}, state);
@@ -234,6 +240,7 @@ function reducer(state, action) {
       );
       tmp6.ui = Object.assign({}, state.ui);
       delete tmp6.ui.activeAnnotationID;
+      tmp6.ui.isEditing = false;
       return tmp6;
     case CANCEL_EDIT_ANNOTATION_RECEIPT:
       const tmp8 = Object.assign({}, state);
@@ -244,6 +251,7 @@ function reducer(state, action) {
       );
       tmp8.ui = Object.assign({}, state.ui);
       delete tmp8.ui.activeAnnotationID;
+      delete tmp8.ui.isEditing;
       return tmp8;
     default:
       return INITIAL_STATE;
@@ -306,11 +314,7 @@ function render() {
   }
 
   replaceChildren(
-    renderAnnotationDetail(
-      getActiveAnnotation(state),
-      state.ui.activeAnnotationID,
-      state.ui.user
-    ),
+    renderAnnotationDetail(getActiveAnnotation(state), state.ui),
     document.querySelector('#AnnotationDetail')
   );
 
@@ -336,7 +340,7 @@ function getActiveAnnotation(state) {
   return state.model.annotations.findByID(state.ui.activeAnnotationID);
 }
 
-function renderAnnotationDetail(annotation, activeAnnotationID, currentUser) {
+function renderAnnotationDetail(annotation, ui) {
   // <div>
   //   <textarea id="Comment"></textarea>
   // </div>
@@ -361,19 +365,18 @@ function renderAnnotationDetail(annotation, activeAnnotationID, currentUser) {
   // document.querySelector('#CancelEditAnnotation').disabled = !active;
 
   if (annotation) {
-    const el = currentUser === annotation.user ? textarea : p;
+    const el = ui.user === annotation.user && ui.isEditing ? textarea : p;
     const comment = el(annotation.comment, [], { id: 'Comment' });
 
     const buttons = div([
-      button('Edit', [], {
-        id: 'EditAnnotation',
-      }),
-      button('Save', [], {
-        id: 'SaveAnnotation',
-      }),
-      button('Cancel', [], {
-        id: 'CancelEditAnnotation',
-      }),
+      button('Edit', [], { id: 'EditAnnotation' }, { disabled: ui.isEditing }),
+      button('Save', [], { id: 'SaveAnnotation' }, { disabled: !ui.isEditing }),
+      button(
+        'Cancel',
+        [],
+        { id: 'CancelEditAnnotation' },
+        { disabled: !ui.isEditing }
+      ),
     ]);
     return div([
       button('Delete', [], {
@@ -383,7 +386,7 @@ function renderAnnotationDetail(annotation, activeAnnotationID, currentUser) {
       buttons,
     ]);
   }
-  return p('Nope!');
+  return undefined;
 }
 
 /**
@@ -557,6 +560,16 @@ document.addEventListener('DOMContentLoaded', evt => {
   });
 
   document.addEventListener('click', evt => {
+    const state = store.getState();
+    if (evt.target && evt.target.matches('#EditAnnotation')) {
+      store.dispatch({
+        type: EDIT_ANNOTATION,
+        annotation: state.model.annotations.findByID(
+          state.ui.activeAnnotationID
+        ),
+        isEditing: true,
+      });
+    }
     if (evt.target && evt.target.matches('#SaveAnnotation')) {
       store.dispatch({
         type: SAVE_ANNOTATION_INTENT,
@@ -564,18 +577,25 @@ document.addEventListener('DOMContentLoaded', evt => {
       });
       store.dispatch({
         type: SAVE_ANNOTATION_RECEIPT,
+        // FIXME: This is where fetch() would resolve with the persisted annotation
+      });
+      store.dispatch({
+        type: EDIT_ANNOTATION,
+        // FIXME: Should I pass in the active annotation?
+        isEditing: false,
       });
     }
     if (evt.target && evt.target.matches('#DeleteAnnotation')) {
-      store.dispatch({
-        type: DELETE_ANNOTATION_RECEIPT,
-      });
+      if (state.model.annotations.isMine(state.ui.activeAnnotationID)) {
+        store.dispatch({
+          type: DELETE_ANNOTATION_RECEIPT,
+        });
+      }
     }
     if (evt.target && evt.target.matches('#CancelEditAnnotation')) {
       store.dispatch({ type: CANCEL_EDIT_ANNOTATION_RECEIPT });
     }
     if (evt.target && evt.target.matches('#SelectAnnotation>button')) {
-      const state = store.getState();
       store.dispatch({
         type: NEW_ANNOTATION,
         annotation: {
@@ -595,6 +615,14 @@ document.addEventListener('DOMContentLoaded', evt => {
             },
           },
         },
+      });
+      // Immediately edit the new annotation
+      store.dispatch({
+        type: EDIT_ANNOTATION,
+        annotation: state.model.annotations.findByID(
+          state.ui.activeAnnotationID
+        ),
+        isEditing: true,
       });
       const commentEl = document.querySelector('#Comment');
       commentEl.focus();
