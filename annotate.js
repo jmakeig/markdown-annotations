@@ -91,7 +91,7 @@ const NEW_ANNOTATION = ' NEW_ANNOTATION';
 const CHANGE_COMMENT = 'CHANGE_COMMENT';
 const SAVE_ANNOTATION_INTENT = 'SAVE_ANNOTATION_INTENT';
 const SAVE_ANNOTATION_RECEIPT = 'SAVE_ANNOTATION_RECEIPT';
-const EDIT_ANNOTATION = 'EDIT_ANNOTATION';
+const SELECT_ANNOTATION = 'SELECT_ANNOTATION';
 const DELETE_ANNOTATION_INTENT = 'DELETE_ANNOTATION_INTENT';
 const DELETE_ANNOTATION_RECEIPT = 'DELETE_ANNOTATION_RECEIPT';
 const CANCEL_EDIT_ANNOTATION_RECEIPT = 'CANCEL_EDIT_ANNOTATION_RECEIPT';
@@ -237,7 +237,7 @@ function reducer(state, action) {
         .isDirty;
       tmp4.ui = { isRendering: state.ui.isRendering, user: state.ui.user };
       return tmp4;
-    case EDIT_ANNOTATION:
+    case SELECT_ANNOTATION:
       const tmp5 = Object.assign({}, state);
       tmp5.ui = Object.assign({}, state.ui);
       tmp5.ui.activeAnnotationID = action.id;
@@ -377,29 +377,28 @@ function renderAnnotationDetail(annotation, activeAnnotationID, currentUser) {
   // }
   // document.querySelector('#CancelEditAnnotation').disabled = !active;
 
-  console.log(
-    'renderAnnotationDetail',
-    annotation,
-    activeAnnotationID,
-    currentUser
-  );
-
   if (annotation) {
     const el = currentUser === annotation.user ? textarea : p;
     const comment = el(annotation.comment, [], { id: 'Comment' });
 
     const buttons = div([
+      button('Edit', [], {
+        id: 'EditAnnotation',
+      }),
       button('Save', [], {
         id: 'SaveAnnotation',
-      }),
-      button('Delete', [], {
-        id: 'DeleteAnnotation',
       }),
       button('Cancel', [], {
         id: 'CancelEditAnnotation',
       }),
     ]);
-    return div([div(comment), buttons]);
+    return div([
+      button('Delete', [], {
+        id: 'DeleteAnnotation',
+      }),
+      div(comment),
+      buttons,
+    ]);
   }
   return p('Nope!');
 }
@@ -606,7 +605,7 @@ document.addEventListener('DOMContentLoaded', evt => {
     if (evt.target.matches('.annotation')) {
       const annotationEl = evt.target;
       store.dispatch({
-        type: EDIT_ANNOTATION,
+        type: SELECT_ANNOTATION,
         id: annotationEl.dataset.annotationId,
       });
       const commentEl = document.querySelector('#Comment');
