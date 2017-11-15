@@ -178,33 +178,16 @@ function reducer(state, action) {
       delete tmp7.ui.position;
       return tmp7;
     case NEW_ANNOTATION:
-      const id = uuidv4();
       const tmp = Object.assign({}, state);
       tmp.ui = Object.assign({}, tmp.ui);
       delete tmp.ui.selection;
       delete tmp.ui.position;
-      tmp.ui.activeAnnotationID = id;
+      tmp.ui.activeAnnotationID = action.annotation.id;
       tmp.model.annotations = decorateAnnotations(
         state.model.annotations.clearUnsaved(),
         tmp.ui.user
       );
-      tmp.model.annotations = tmp.model.annotations.upsert({
-        isDirty: true,
-        id: id,
-        timestamp: null,
-        user: state.ui.user,
-        comment: '',
-        range: {
-          start: {
-            line: state.ui.selection.start.line,
-            column: state.ui.selection.start.column,
-          },
-          end: {
-            line: state.ui.selection.end.line,
-            column: state.ui.selection.end.column,
-          },
-        },
-      });
+      tmp.model.annotations = tmp.model.annotations.upsert(action.annotation);
       return tmp;
     case SAVE_ANNOTATION_INTENT:
       const tmp3 = Object.assign({}, state);
@@ -592,8 +575,26 @@ document.addEventListener('DOMContentLoaded', evt => {
       store.dispatch({ type: CANCEL_EDIT_ANNOTATION_RECEIPT });
     }
     if (evt.target && evt.target.matches('#SelectAnnotation>button')) {
+      const state = store.getState();
       store.dispatch({
         type: NEW_ANNOTATION,
+        annotation: {
+          isDirty: true,
+          id: uuidv4(),
+          timestamp: null,
+          user: state.ui.user,
+          comment: '',
+          range: {
+            start: {
+              line: state.ui.selection.start.line,
+              column: state.ui.selection.start.column,
+            },
+            end: {
+              line: state.ui.selection.end.line,
+              column: state.ui.selection.end.column,
+            },
+          },
+        },
       });
       const commentEl = document.querySelector('#Comment');
       commentEl.focus();
