@@ -14,7 +14,7 @@ var DOM = (function() {
 
   // TODO: Should `locale` be a function rather than a string, so the
   // caller could specify her own formatter?
-  function _el(localname = 'div', classList, attrs, contents, locale) {
+  function _el(localname = 'div', classList, attrs, contents, style) {
     if ('select' === localname) {
       /* contents = [{ <value>: <label> }] */
       let value;
@@ -61,7 +61,8 @@ var DOM = (function() {
       elem.textContent = contents;
     } else if ('number' === typeof contents) {
       // console.warn('Using hard-coded locale.');
-      elem.textContent = contents.toLocaleString(locale || DEFAULT_LOCALE); // FIXME: Get locale from model/store
+      // elem.textContent = contents.toLocaleString(locale || DEFAULT_LOCALE); // FIXME: Get locale from model/store
+      elem.textContent = contents;
     }
 
     if (classList) {
@@ -75,6 +76,12 @@ var DOM = (function() {
     if (attrs) {
       for (let key in attrs) {
         elem.setAttribute(key, attrs[key]);
+      }
+    }
+    if (style) {
+      for (let item in style) {
+        elem.style[item] =
+          'function' === typeof style[item] ? style[item](elem) : style[item];
       }
     }
     return elem;
@@ -92,9 +99,9 @@ var DOM = (function() {
   function p       (t, c, a, l) {return _el('p',        c, a, t, l);} // prettier-ignore
   function select  (t, c, a, l) {return _el('select',   c, a, t, l);} // prettier-ignore
   function textarea(t, c, a, l) {return _el('textarea', c, a, t, l);} // prettier-ignore
-  function input   (t, c, a, l) {return _el('input',  c, Object.assign(a || {}, {type: 'text'}),     t, l);} // prettier-ignore
-  function checkbox(t, c, a, l) {return _el('input',  c, Object.assign(a || {}, {type: 'checkbox'}), t, l);} // prettier-ignore
-  function radio   (t, c, a, l) {return _el('input',  c, Object.assign(a || {}, {type: 'radio'}),    t, l);} // prettier-ignore
+  function input   (t, c, a, l) {return _el('input',    c, Object.assign(a || {}, {type: 'text'}),     t, l);} // prettier-ignore
+  function checkbox(t, c, a, l) {return _el('input',    c, Object.assign(a || {}, {type: 'checkbox'}), t, l);} // prettier-ignore
+  function radio   (t, c, a, l) {return _el('input',    c, Object.assign(a || {}, {type: 'radio'}),    t, l);} // prettier-ignore
 
   /**
  * Remove all child nodes of the input element.
