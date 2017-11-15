@@ -105,6 +105,9 @@ function decorateAnnotations(annotations = [], user) {
   array.findByID = function(id, user) {
     return this.find(a => id === a.id && (!user || user === a.user));
   };
+  array.isMine = function(id) {
+    return this.some(a => id === a.id && user === a.user);
+  };
   array.upsert = function(annotation) {
     if (!annotation) throw new ReferenceError(`Missing annotation`);
     if (!annotation.id) throw new ReferenceError(`Missing annotation.id`);
@@ -306,11 +309,6 @@ function render() {
   console.timeEnd('renderMarkdown');
   renderAnnotationHighlights(state.model.annotations);
 
-  document.querySelector('#Comment').value = state.ui.activeAnnotationID
-    ? state.model.annotations.findByID(state.ui.activeAnnotationID).comment ||
-      ''
-    : '';
-
   const selAnn = document.querySelector('#SelectAnnotation');
   if (state.ui.position) {
     selAnn.style.display = 'unset';
@@ -327,24 +325,11 @@ function render() {
   replaceChildren(
     renderAnnotationDetail(
       getActiveAnnotation(state),
-      state.ui.activeAnnotationID
+      state.ui.activeAnnotationID,
+      state.ui.user
     ),
-    document.querySelector('#Comment').parentNode
+    document.querySelector('#AnnotationDetail')
   );
-  document.querySelector('#Comment').disabled = !state.ui.activeAnnotationID;
-
-  const active = state.model.annotations.findByID(state.ui.activeAnnotationID);
-  document.querySelector('#SaveAnnotation').disabled =
-    !active || document.querySelector('#Comment').value.length === 0;
-  document.querySelector('#DeleteAnnotation').disabled = !active;
-
-  // FIXME: This is ugly and brittle
-  if (!active || !active.timestamp) {
-    document.querySelector('#DeleteAnnotation').style.display = 'none';
-  } else {
-    document.querySelector('#DeleteAnnotation').style.display = 'unset';
-  }
-  document.querySelector('#CancelEditAnnotation').disabled = !active;
 
   const download = document.querySelector('#Download');
   // FIXME: The `toJSON` call is weird.
@@ -368,15 +353,55 @@ function getActiveAnnotation(state) {
   return state.model.annotations.findByID(state.ui.activeAnnotationID);
 }
 
-function renderAnnotationDetail(annotation, activeAnnotationID) {
-  // <textarea id="Comment"></textarea>
-  const id = {
-    id: 'Comment',
-  };
-  // FIXME: Need to do the whole form together
-  if (!annotation) return div('', [], id);
-  const comment = textarea(annotation.comment, [], id);
-  return comment;
+function renderAnnotationDetail(annotation, activeAnnotationID, currentUser) {
+  // <div>
+  //   <textarea id="Comment"></textarea>
+  // </div>
+  // <div>
+  //   <button id="SaveAnnotation">Save</button>
+  //   <button id="DeleteAnnotation">Delete</button>
+  //   <button id="CancelEditAnnotation">Cancel</button>
+  // </div>
+
+  // document.querySelector('#Comment').disabled = !state.ui.activeAnnotationID;
+
+  // const active = state.model.annotations.findByID(state.ui.activeAnnotationID);
+  // document.querySelector('#SaveAnnotation').disabled = !active || document.querySelector('#Comment').value.length === 0;
+  // document.querySelector('#DeleteAnnotation').disabled = !active;
+
+  // // FIXME: This is ugly and brittle
+  // if (!active || !active.timestamp) {
+  //   document.querySelector('#DeleteAnnotation').style.display = 'none';
+  // } else {
+  //   document.querySelector('#DeleteAnnotation').style.display = 'unset';
+  // }
+  // document.querySelector('#CancelEditAnnotation').disabled = !active;
+
+  console.log(
+    'renderAnnotationDetail',
+    annotation,
+    activeAnnotationID,
+    currentUser
+  );
+
+  if (annotation) {
+    const el = currentUser === annotation.user ? textarea : p;
+    const comment = el(annotation.comment, [], { id: 'Comment' });
+
+    const buttons = div([
+      button('Save', [], {
+        id: 'SaveAnnotation',
+      }),
+      button('Delete', [], {
+        id: 'DeleteAnnotation',
+      }),
+      button('Cancel', [], {
+        id: 'CancelEditAnnotation',
+      }),
+    ]);
+    return div([div(comment), buttons]);
+  }
+  return p('Nope!');
 }
 
 /**
@@ -497,15 +522,21 @@ function renderAnnotationHighlight(
  * It’s generally advisable to use a `DocumentFragment` for the
  * the replacement.
  * 
- * @param {Node|DocumentFragment} newChild 
+ * @param {Node|DocumentFragment|NodeList|Array<Node>} newChild 
  * @param {Node} oldNode 
  * @returns {Node}  - The new parent wrapper
  */
 function replaceChildren(newChild, oldNode) {
   if (!oldNode) return;
-  const tmpParent = document.createElement(oldNode.tagName);
+  const tmpParent = oldNode.cloneNode();
   if (newChild) {
-    tmpParent.appendChild(newChild);
+    if (newChild instanceof Node) {
+      tmpParent.appendChild(newChild);
+    } else {
+      Array.prototype.forEach.call(newChild, child =>
+        tmpParent.appendChild(child)
+      );
+    }
   }
   oldNode.parentNode.replaceChild(tmpParent, oldNode);
   return tmpParent;
@@ -579,11 +610,11 @@ document.addEventListener('DOMContentLoaded', evt => {
         id: annotationEl.dataset.annotationId,
       });
       const commentEl = document.querySelector('#Comment');
-      commentEl.focus();
-      commentEl.setSelectionRange(
-        commentEl.value.length,
-        commentEl.value.length
-      );
+      // commentEl.focus();
+      // commentEl.setSelectionRange(
+      //   commentEl.value.length,
+      //   commentEl.value.length
+      // );
     }
   });
 
