@@ -341,50 +341,40 @@ function getActiveAnnotation(state) {
 }
 
 function renderAnnotationDetail(annotation, ui) {
-  // <div>
-  //   <textarea id="Comment"></textarea>
-  // </div>
-  // <div>
-  //   <button id="SaveAnnotation">Save</button>
-  //   <button id="DeleteAnnotation">Delete</button>
-  //   <button id="CancelEditAnnotation">Cancel</button>
-  // </div>
-
-  // document.querySelector('#Comment').disabled = !state.ui.activeAnnotationID;
-
-  // const active = state.model.annotations.findByID(state.ui.activeAnnotationID);
-  // document.querySelector('#SaveAnnotation').disabled = !active || document.querySelector('#Comment').value.length === 0;
-  // document.querySelector('#DeleteAnnotation').disabled = !active;
-
-  // // FIXME: This is ugly and brittle
-  // if (!active || !active.timestamp) {
-  //   document.querySelector('#DeleteAnnotation').style.display = 'none';
-  // } else {
-  //   document.querySelector('#DeleteAnnotation').style.display = 'unset';
-  // }
-  // document.querySelector('#CancelEditAnnotation').disabled = !active;
-
   if (annotation) {
     const el = ui.user === annotation.user && ui.isEditing ? textarea : p;
     const comment = el(annotation.comment, [], { id: 'Comment' });
 
-    const buttons = div([
-      button('Edit', [], { id: 'EditAnnotation' }, { disabled: ui.isEditing }),
-      button('Save', [], { id: 'SaveAnnotation' }, { disabled: !ui.isEditing }),
-      button(
-        'Cancel',
-        [],
-        { id: 'CancelEditAnnotation' },
-        { disabled: !ui.isEditing }
-      ),
-    ]);
-    return div([
-      button('Delete', [], {
-        id: 'DeleteAnnotation',
-      }),
-      div(comment),
-      buttons,
-    ]);
+    const buttons = [];
+    if (ui.user === annotation.user) {
+      if (ui.isEditing) {
+        buttons.push(
+          button('Save', [], {
+            id: 'SaveAnnotation',
+            disabled: !annotation.isDirty,
+            title: 'Persist the current annotation',
+          }),
+          button('Cancel', [], {
+            id: 'CancelEditAnnotation',
+            title: 'Cancel edits',
+          })
+        );
+      } else {
+        buttons.push(
+          button('Edit', [], {
+            id: 'EditAnnotation',
+            title: 'Edit the current annotation',
+          })
+        );
+      }
+      buttons.push(
+        button('Delete', [], {
+          id: 'DeleteAnnotation',
+          title: 'Delete the current annotation',
+        })
+      );
+    }
+    return div([div(comment), div(buttons)]);
   }
   return undefined;
 }
@@ -587,13 +577,17 @@ document.addEventListener('DOMContentLoaded', evt => {
     }
     if (evt.target && evt.target.matches('#DeleteAnnotation')) {
       if (state.model.annotations.isMine(state.ui.activeAnnotationID)) {
-        store.dispatch({
-          type: DELETE_ANNOTATION_RECEIPT,
-        });
+        if (confirm('Are you sure you want to delete?')) {
+          store.dispatch({
+            type: DELETE_ANNOTATION_RECEIPT,
+          });
+        }
       }
     }
     if (evt.target && evt.target.matches('#CancelEditAnnotation')) {
-      store.dispatch({ type: CANCEL_EDIT_ANNOTATION_RECEIPT });
+      if ((state.ui.isDirty && confirm('Are you sure?')) || !state.ui.isDirty) {
+        store.dispatch({ type: EDIT_ANNOTATION, isEditing: false });
+      }
     }
     if (evt.target && evt.target.matches('#SelectAnnotation>button')) {
       store.dispatch({
