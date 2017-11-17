@@ -123,6 +123,22 @@ Drinking vinegar YOLO swag, pabst cardigan 90's occupy hexagon plaid schlitz pok
 
 [
   {
+    "id": "66eb9082-2a6d-4c88-b89c-a93b9a74e24e",
+    "timestamp": "2017-11-17T07:13:29.341Z",
+    "user": "jmakeig",
+    "comment": "Things",
+    "range": {
+      "start": {
+        "line": 7,
+        "column": 4
+      },
+      "end": {
+        "line": 7,
+        "column": 10
+      }
+    }
+  },
+  {
     "id": "3a90388c-5219-495b-8fd2-74c9ec9abcf9",
     "timestamp": "2017-11-09T22:53:34.971Z",
     "user": "dsmalls",
@@ -135,22 +151,6 @@ Drinking vinegar YOLO swag, pabst cardigan 90's occupy hexagon plaid schlitz pok
       "end": {
         "line": 12,
         "column": 34
-      }
-    }
-  },
-  {
-    "id": "a2a55ee6-9260-4aaa-bd13-dae8f5141745",
-    "timestamp": "2017-11-09T22:53:51.679Z",
-    "user": "jmakeig",
-    "comment": "Or consider being truly in authentic.",
-    "range": {
-      "start": {
-        "line": 23,
-        "column": 7
-      },
-      "end": {
-        "line": 23,
-        "column": 25
       }
     }
   },
