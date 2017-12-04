@@ -1,0 +1,94 @@
+import { createStore, applyMiddleware } from 'redux';
+import thunk from 'redux-thunk';
+import { onComponentDidMount } from './component.js';
+import { replaceChildren } from './dom-helper.js';
+import { reducer } from './reducer.js';
+import { login } from './actions.js';
+import { annotationByID } from './selectors.js';
+import { default as _Document } from './document.js';
+import { default as _AnnotationDetail } from './annotation-detail.js';
+import { default as _Selection } from './selection.js';
+import { default as _User } from './user.js';
+import { default as AnnotationHighlights } from './annotation-highlight.js';
+
+const logger = store => next => action => {
+  console.log('Dispatching', action);
+  const result = next(action);
+  console.log('Next state', store.getState());
+  return result;
+};
+const store = createStore(reducer, applyMiddleware(thunk, logger));
+
+document.addEventListener('DOMContentLoaded', evt => {
+  const Document = renderInto(document.querySelector('#Content'), _Document);
+
+  const AnnotationDetail = renderInto(
+    document.querySelector('#AnnotationDetail'),
+    _AnnotationDetail
+  );
+
+  const Selection = renderInto(
+    document.querySelector('#SelectAnnotation'),
+    _Selection
+  );
+  const User = renderInto(document.querySelector('#User'), _User);
+
+  store.subscribe(render);
+  const dispatcher = store.dispatch.bind(store);
+  store.dispatch(login('jmakeig'));
+
+  /**
+   * Gets its delegated renderers via closure. This has to be done at load-time
+   * to correctly bind to DOM elements.
+   */
+  function render(/**/) {
+    const state = store.getState();
+    console.time('render');
+    Document(state.model, state.ui, dispatcher);
+    User(state.ui.user);
+    AnnotationHighlights(state.model.annotations, dispatcher);
+    AnnotationDetail(
+      annotationByID(state, state.ui.activeAnnotationID),
+      state.ui.isEditing,
+      state.ui.user,
+      dispatcher // https://github.com/reactjs/redux/blob/628928e3108df9725f07689e3785b5a2a226baa8/src/bindActionCreators.js#L26
+    );
+    Selection(
+      state.ui.position,
+      state.ui.selection,
+      state.ui.user,
+      dispatcher,
+      () => store.getState().ui.selection
+    );
+
+    console.timeEnd('render');
+  }
+});
+
+/**
+ *
+ * @param {Node} parent
+ * @param {function} renderer
+ * @return {function} - a function with the same signature as `renderer`
+ */
+function renderInto(parent, renderer) {
+  if (!(parent instanceof HTMLElement)) throw new ReferenceError();
+  if ('function' !== typeof renderer) throw new TypeError();
+
+  /**
+   * Holds a reference to a parent `Node` into which to render the
+   * `Node` returned by the `renderer` function.
+   */
+  let ref = parent;
+  return function(...args) {
+    const tree = renderer(...args);
+    ref = replaceChildren(ref, tree);
+    if (tree[onComponentDidMount]) {
+      tree[onComponentDidMount]();
+      // FIXME: Does this eliminate the possibility of a memory
+      //        leak with DOM expando properties?
+      delete tree[onComponentDidMount];
+    }
+    return ref;
+  };
+}

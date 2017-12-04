@@ -6,7 +6,12 @@ body {
 pre {
   margin: 0;
 }
-table.markdown {
+h1 {
+  margin: 0;
+
+  line-height: 1.1;
+}
+#Content table {
   max-width: 8.5in;
 
   border-spacing: 0;
@@ -46,13 +51,7 @@ table.markdown {
   content: attr(data-line) '.';
 }
 
-#SelectAnnotation {
-  position: absolute;
-  top: -10em;
-  left: -10em;
-
-  display: none;
-
+#SelectAnnotation > div {
   padding: 0.25em;
 
   border: solid 0.5px #ccc;
@@ -63,37 +62,14 @@ table.markdown {
 }
 
 
+.user-color {
+  display: inline-block;
 
-.tools {
-  position: fixed;
-  top: 0;
-  right: 0;
-  bottom: 0;
+  width: 1em;
+  height: 1em;
+  margin-right: 0.25em;
 
-  overflow: scroll;
+  border-radius: 1em;
 
-  box-sizing: border-box;
-  width: 33%;
-  min-width: 3.5in;
-  padding: 1rem;
-
-  background: #ccc;
-}
-
-.tools textarea {
-  width: 100%;
-  height: 15em;
-
-  font-size: 12pt;
-  line-height: 1.45;
-}
-
-.annotation {
-  /* background: rgba(255, 255, 0, 0.5); */
-}
-.annotation.active {
-  background: rgba(255, 255, 0, 0.5) !important; /* override the inline style */
-}
-.annotation.mine:hover {
-  cursor: pointer;
+  vertical-align: baseline;
 }

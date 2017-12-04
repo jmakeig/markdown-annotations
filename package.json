@@ -1,0 +1,29 @@
+{
+  "name": "markdown-annotations",
+  "version": "0.1.0",
+  "description": "",
+  "main": "main.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "rollup -c",
+    "watch": "rollup -c --watch"
+  },
+  "author": "Justin Makeig <jmpublic+github@makeig.com> (https://github.com/jmakeig)",
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "babel-core": "^6.26.0",
+    "babel-plugin-external-helpers": "^6.22.0",
+    "babel-plugin-transform-object-rest-spread": "^6.26.0",
+    "rollup": "^0.52.0",
+    "rollup-plugin-babel": "^3.0.2",
+    "rollup-plugin-commonjs": "^8.2.6",
+    "rollup-plugin-node-resolve": "^3.0.0",
+    "rollup-plugin-replace": "^2.0.0"
+  },
+  "dependencies": {
+    "color-hash": "^1.0.3",
+    "dom-highlight-range": "git+ssh://git@github.com/jmakeig/dom-highlight-range.git#57cc9c1",
+    "redux": "^3.7.2",
+    "redux-thunk": "^2.2.0"
+  }
+}
