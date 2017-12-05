@@ -32,7 +32,8 @@ export default function render(
   };
 
   if (isActive) {
-    const commentEl = textarea(annotation.comment || '', {
+    const comm = { className: 'annotation-comment' };
+    const commentEl = textarea(comm, annotation.comment || '', {
       oninput: evt => console.log('textarea#input'),
     });
 
@@ -41,8 +42,9 @@ export default function render(
       User(annotation.user),
       isEditing
         ? commentEl
-        : div(annotation.comment, { id: 'AnnotationComment' }),
+        : div(comm, annotation.comment, { id: 'AnnotationComment' }),
       div(formatTimestamp(annotation.timestamp), {
+        className: 'annotation-timestamp',
         dataset: { timestamp: annotation.timestamp },
       }),
       renderEditAffordance(annotation, isEditing, user, {

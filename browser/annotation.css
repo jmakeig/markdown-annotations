@@ -53,6 +53,7 @@ main {
   position: relative;
 
   box-sizing: border-box;
+  min-width: 20em;
   margin-left: 1.5em;
   padding: 0.5em;
   padding-left: 1em;
@@ -61,8 +62,29 @@ main {
 }
 #Annotations .annotation-detail {
   position: absolute;
+  right: 0.75em;
+  left: 1em;
 
-  min-width: 20em;
+  box-sizing: border-box;
+}
+#Annotations .annotation-detail textarea {
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0.5em 0;
+  margin-right: 0.5em;
+  padding: 0.25em;
+
+  font-family: inherit;
+  font-size: inherit;
+}
+#Annotations .annotation-detail .annotation-timestamp {
+  margin: 0.25em 0;
+
+  color: #999;
+  font-size: 85%;
+}
+#Annotations .annotation-detail .annotation-comment {
+  margin: 0.5em 0;
 }
 #Content table {
   max-width: 8.5in;
@@ -113,16 +135,17 @@ main {
 
   background: white;
 }
-
-
+mark {
+  cursor: pointer;
+}
 .user-color {
   display: inline-block;
 
   width: 1em;
   height: 1em;
-  margin-right: 0.25em;
+  margin-right: 0.5em;
 
   border-radius: 1em;
 
-  vertical-align: baseline;
+  vertical-align: middle;
 }

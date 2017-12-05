@@ -119,6 +119,7 @@ Taiyaki raclette hexagon, tumblr put a bird on it microdosing deep v 8-bit ethic
 
 Drinking vinegar YOLO swag, pabst cardigan 90's occupy hexagon plaid schlitz poke hot chicken banjo vape. Edison bulb heirloom venmo succulents, tilde subway tile crucifix skateboard. Vape YOLO activated charcoal craft beer ennui seitan distillery. Bespoke copper mug ugh, edison bulb craft beer banh mi hashtag yuccie cardigan tousled plaid kitsch hammock tumeric. Hell of jean shorts marfa, yuccie blue bottle put a bird on it jianbing la croix. Paleo meggings echo park franzen cold-pressed mustache gastropub ethical celiac pop-up prism gochujang. Salvia keffiyeh chillwave taxidermy. Ethical pitchfork tilde cliche polaroid beard. Copper mug neutra lumbersexual biodiesel, echo park fixie blue bottle cardigan irony put a bird on it craft beer artisan hexagon.
 
+
 <!--- http://marklogic.com/annotations
 
 [
@@ -139,6 +140,22 @@ Drinking vinegar YOLO swag, pabst cardigan 90's occupy hexagon plaid schlitz pok
     }
   },
   {
+    "id": "c6748f75-14b9-47d4-a33a-47f19217d80c",
+    "timestamp": "2017-12-05T19:51:22.028Z",
+    "user": "jmakeig",
+    "comment": "Vertical distribution should happen here.",
+    "range": {
+      "start": {
+        "line": 12,
+        "column": 0
+      },
+      "end": {
+        "line": 12,
+        "column": 2
+      }
+    }
+  },
+  {
     "id": "3a90388c-5219-495b-8fd2-74c9ec9abcf9",
     "timestamp": "2017-11-09T22:53:34.971Z",
     "user": "dsmalls",
@@ -151,6 +168,22 @@ Drinking vinegar YOLO swag, pabst cardigan 90's occupy hexagon plaid schlitz pok
       "end": {
         "line": 12,
         "column": 34
+      }
+    }
+  },
+  {
+    "id": "5ba410af-9957-4fd4-b179-ec0c43689b27",
+    "timestamp": "2017-12-05T20:20:16.246Z",
+    "user": "jmakeig",
+    "comment": "another",
+    "range": {
+      "start": {
+        "line": 12,
+        "column": 17
+      },
+      "end": {
+        "line": 12,
+        "column": 24
       }
     }
   },
