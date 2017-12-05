@@ -20,18 +20,10 @@ const logger = store => next => action => {
 const store = createStore(reducer, applyMiddleware(thunk, logger));
 
 document.addEventListener('DOMContentLoaded', evt => {
-  const Document = renderInto(document.querySelector('#Content'), _Document);
-
-  const AnnotationDetail = renderInto(
-    document.querySelector('#AnnotationDetail'),
-    _AnnotationDetail
-  );
-
-  const Selection = renderInto(
-    document.querySelector('#SelectAnnotation'),
-    _Selection
-  );
-  const User = renderInto(document.querySelector('#User'), _User);
+  const Document = renderInto(_Document, '#Content');
+  const AnnotationDetail = renderInto(_AnnotationDetail, '#AnnotationDetail');
+  const Selection = renderInto(_Selection, '#SelectAnnotation');
+  const User = renderInto(_User, '#User');
 
   store.subscribe(render);
   const dispatcher = store.dispatch.bind(store);
@@ -67,13 +59,14 @@ document.addEventListener('DOMContentLoaded', evt => {
 
 /**
  *
- * @param {Node} parent
  * @param {function} renderer
+ * @param {HTMLElement|string} [parent = document.body]
  * @return {function} - a function with the same signature as `renderer`
  */
-function renderInto(parent, renderer) {
-  if (!(parent instanceof HTMLElement)) throw new ReferenceError();
+function renderInto(renderer, parent = document.body) {
   if ('function' !== typeof renderer) throw new TypeError();
+  if ('string' === typeof parent) parent = document.querySelector(parent);
+  if (!(parent instanceof HTMLElement)) throw new ReferenceError();
 
   /**
    * Holds a reference to a parent `Node` into which to render the
