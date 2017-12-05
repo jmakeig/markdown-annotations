@@ -8,6 +8,6 @@ export default function render(model, ui, dispatcher) {
       model.href,
       Download(model.content, model.annotations, model.href, model.mime)
     ),
-    User(ui.user)
+    User(ui.user, true)
   );
 }

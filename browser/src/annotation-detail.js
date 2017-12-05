@@ -5,6 +5,7 @@ import {
   cancelEditActiveAnnotation,
   saveAnnotation,
 } from './actions.js';
+import { default as User } from './user.js';
 
 /**
  *
@@ -25,7 +26,7 @@ export default function render(annotation, isEditing = false, user, dispatch) {
     isEditing
       ? commentEl
       : div(annotation.comment, { id: 'AnnotationComment' }),
-    div(annotation.user),
+    User(annotation.user),
     div(formatTimestamp(annotation.timestamp), {
       dataset: { timestamp: annotation.timestamp },
     }),

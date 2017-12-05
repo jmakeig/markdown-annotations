@@ -1253,12 +1253,15 @@ ColorHash.prototype.hex = function(str) {
 
 var colorHash = ColorHash;
 
-function render$1(user) {
+function render$1(user, withLogout = false) {
   if (!user) return empty();
   const style = {
     backgroundColor: `rgba(${new colorHash().rgb(user).join(', ')}, 0.5)`
   };
-  return div(span({ className: 'user-color' }, { style }), span(user), button('Logout', { id: 'Logout', onclick: evt => console.log('logout') }));
+  return div({ className: 'user' }, span({ className: 'user-color' }, { style }), span(user), withLogout ? button('Logout', {
+    id: 'Logout',
+    onclick: evt => console.log('logout')
+  }) : empty());
 }
 
 // <https://jsfiddle.net/gabrieleromanato/qAGHT/>
@@ -1329,7 +1332,7 @@ function render$2(content, annotations, fileName, mime) {
 }
 
 function render(model, ui, dispatcher) {
-  return toFragment(h1(model.href, render$2(model.content, model.annotations, model.href, model.mime)), render$1(ui.user));
+  return toFragment(h1(model.href, render$2(model.content, model.annotations, model.href, model.mime)), render$1(ui.user, true));
 }
 
 function lineProps(line) {
@@ -1432,7 +1435,7 @@ function render$4(annotation, isEditing = false, user, dispatch) {
     oninput: evt => console.log('textarea#input')
   });
 
-  return div(isEditing ? commentEl : div(annotation.comment, { id: 'AnnotationComment' }), div(annotation.user), div(formatTimestamp(annotation.timestamp), {
+  return div(isEditing ? commentEl : div(annotation.comment, { id: 'AnnotationComment' }), render$1(annotation.user), div(formatTimestamp(annotation.timestamp), {
     dataset: { timestamp: annotation.timestamp }
   }), renderEditAffordance(annotation, isEditing, user, {
     dispatch,
