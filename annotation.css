@@ -1,0 +1,75 @@
+body {
+  font-family: 'Helvetica Neue', Helvetica, sans-serif;
+  font-size: 10pt;
+  line-height: 1.55;
+}
+pre {
+  margin: 0;
+}
+h1 {
+  margin: 0;
+
+  line-height: 1.1;
+}
+#Content table {
+  max-width: 8.5in;
+
+  border-spacing: 0;
+}
+.line {
+  font-family: 'SF Mono', 'Inconsolata', monospace;
+}
+.line td {
+  padding: 0.1em 0.25em;
+  padding-left: 0;
+
+  border-bottom: solid 0.5px #eee;
+
+  vertical-align: top;
+  white-space: pre-wrap;
+}
+.line td.content {
+  border-right: solid 4px transparent;
+}
+.line.has-annotation td.content {
+  border-right: solid 4px rgba(255, 255, 0, 0.5);
+}
+.line-number {
+  min-width: 3em;
+  padding-right: 0.5em !important;
+
+  color: #aaa;
+  text-align: right;
+}
+.heading {
+  font-weight: bold;
+}
+.quote {
+  font-style: italic;
+}
+.line-number:before {
+  content: attr(data-line) '.';
+}
+
+#SelectAnnotation > div {
+  padding: 0.25em;
+
+  border: solid 0.5px #ccc;
+  border-radius: 0.5em;
+  box-shadow: 5px 5px 10px 0 rgba(0,0,0,0.25);
+
+  background: white;
+}
+
+
+.user-color {
+  display: inline-block;
+
+  width: 1em;
+  height: 1em;
+  margin-right: 0.25em;
+
+  border-radius: 1em;
+
+  vertical-align: baseline;
+}
