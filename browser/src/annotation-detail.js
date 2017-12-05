@@ -26,7 +26,9 @@ export default function render(annotation, isEditing = false, user, dispatch) {
       ? commentEl
       : div(annotation.comment, { id: 'AnnotationComment' }),
     div(annotation.user),
-    div(annotation.timestamp),
+    div(formatTimestamp(annotation.timestamp), {
+      dataset: { timestamp: annotation.timestamp },
+    }),
     renderEditAffordance(annotation, isEditing, user, {
       dispatch,
       getComment: () => commentEl.value,
@@ -37,6 +39,12 @@ export default function render(annotation, isEditing = false, user, dispatch) {
       },
     }
   );
+}
+
+function formatTimestamp(timestamp) {
+  if (!timestamp) return timestamp;
+  if ('string' === typeof timestamp) timestamp = new Date(timestamp);
+  return timestamp.toLocaleString();
 }
 
 // function isCallable(f) {

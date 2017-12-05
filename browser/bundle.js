@@ -1432,7 +1432,9 @@ function render$4(annotation, isEditing = false, user, dispatch) {
     oninput: evt => console.log('textarea#input')
   });
 
-  return div(isEditing ? commentEl : div(annotation.comment, { id: 'AnnotationComment' }), div(annotation.user), div(annotation.timestamp), renderEditAffordance(annotation, isEditing, user, {
+  return div(isEditing ? commentEl : div(annotation.comment, { id: 'AnnotationComment' }), div(annotation.user), div(formatTimestamp(annotation.timestamp), {
+    dataset: { timestamp: annotation.timestamp }
+  }), renderEditAffordance(annotation, isEditing, user, {
     dispatch,
     getComment: () => commentEl.value
   }), {
@@ -1440,6 +1442,12 @@ function render$4(annotation, isEditing = false, user, dispatch) {
       commentEl.focus();
     }
   });
+}
+
+function formatTimestamp(timestamp) {
+  if (!timestamp) return timestamp;
+  if ('string' === typeof timestamp) timestamp = new Date(timestamp);
+  return timestamp.toLocaleString();
 }
 
 // function isCallable(f) {
