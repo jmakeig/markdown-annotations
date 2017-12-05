@@ -10,6 +10,7 @@ pre {
 }
 header {
   position: fixed;
+  z-index: 100;
   top: 0;
   left: 0;
 
@@ -48,13 +49,20 @@ main {
 
   flex: initial;
 }
-#AnnotationDetail {
+#Annotations {
+  position: relative;
+
   box-sizing: border-box;
   margin-left: 1.5em;
   padding: 0.5em;
   padding-left: 1em;
 
   border-left: solid 1px #ccc;
+}
+#Annotations .annotation-detail {
+  position: absolute;
+
+  min-width: 20em;
 }
 #Content table {
   max-width: 8.5in;

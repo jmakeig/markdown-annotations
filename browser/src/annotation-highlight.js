@@ -11,26 +11,31 @@ import { rangeFromOffsets } from './selection.js';
  *
  * @param {Array<Annotation>} annotations
  * @param {function} dispatch
- * @return undefined
+ * @return {Array<{id:Node}>} - An array highlight nodes, keyed on annotation id
  */
-export default function render(annotations, dispatch) {
+export default function render(annotations, relativeY = 0, dispatch) {
   // Highlight annotations. Requires that DOM is already committed above
-  for (const annotation of annotations) {
-    renderAnnotationHighlight(
-      annotation,
-      // state.model.annotations.mine().some(a => annotation.id === a.id),
-      // state.ui.activeAnnotationID === annotation.id
-      false,
-      false,
-      dispatch
-    );
-  }
+  return annotations.reduce((markers, annotation) => {
+    return {
+      ...markers,
+      [annotation.id]: renderAnnotationHighlight(
+        annotation,
+        // state.model.annotations.mine().some(a => annotation.id === a.id),
+        // state.ui.activeAnnotationID === annotation.id
+        false,
+        false,
+        relativeY,
+        dispatch
+      ),
+    };
+  }, {});
 }
 
 function renderAnnotationHighlight(
   annotation,
   isMine = false,
   isActive = false,
+  relativeY = 0,
   dispatch
 ) {
   if (!annotation) return;
@@ -40,7 +45,11 @@ function renderAnnotationHighlight(
     document.querySelector(`#L${annotation.range.end.line}>td.content`),
     annotation.range.end.column
   );
+  let first;
   highlightRange(r, (node, index) => {
+    // FIXME: Fix this in highlight-range.js
+    index = parseInt(index, 10);
+
     const mark = document.createElement('mark');
     mark.classList.add('annotation');
     mark.dataset.annotationId = annotation.id;
@@ -56,6 +65,9 @@ function renderAnnotationHighlight(
     mark.onclick = evt => {
       dispatch(annotationSelect(evt.target.dataset.annotationId));
     };
+    if (0 === index) first = mark;
     return mark;
   });
+  // The offset from the container
+  return first.getBoundingClientRect().y - relativeY;
 }

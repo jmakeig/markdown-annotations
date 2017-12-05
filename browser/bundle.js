@@ -1420,281 +1420,6 @@ function parseAnnotatedMarkdown(rawMarkdown) {
   };
 }
 
-/**
- *
- * @param {Annotation} annotation
- * @param {boolean} isEditing
- * @param {string} user
- * @param {function} dispatch
- * @return {HTMLElement}
- */
-function render$4(annotation, isEditing = false, user, dispatch) {
-  if (!annotation) return empty();
-
-  const commentEl = textarea(annotation.comment || '', {
-    oninput: evt => console.log('textarea#input')
-  });
-
-  return div(isEditing ? commentEl : div(annotation.comment, { id: 'AnnotationComment' }), render$1(annotation.user), div(formatTimestamp(annotation.timestamp), {
-    dataset: { timestamp: annotation.timestamp }
-  }), renderEditAffordance(annotation, isEditing, user, {
-    dispatch,
-    getComment: () => commentEl.value
-  }), {
-    [onComponentDidMount]: () => {
-      commentEl.focus();
-    }
-  });
-}
-
-function formatTimestamp(timestamp) {
-  if (!timestamp) return timestamp;
-  if ('string' === typeof timestamp) timestamp = new Date(timestamp);
-  return timestamp.toLocaleString();
-}
-
-// function isCallable(f) {
-//   if (!f) return false;
-//   return 'function' === typeof f.call && 'function' === typeof f.apply;
-// }
-
-// function iif(bool, t, f) {
-//   if (bool) {
-//     return isCallable(t) ? t() : t;
-//   }
-//   return isCallable(f) ? f() : f;
-// }
-
-function renderEditAffordance(annotation, isEditing, user, { dispatch, getComment }) {
-  return div(annotation.user === user ? button('Edit', {
-    onclick: evt => dispatch(editActiveAnnotation())
-  }) : empty(), isEditing ? [button('Save', {
-    onclick: evt => dispatch(saveAnnotation(annotation.id, getComment()))
-  }), button('Cancel', {
-    onclick: evt => dispatch(cancelEditActiveAnnotation())
-  })] : empty(), { className: 'controls' });
-}
-
-let isInitialized = false;
-
-function render$5(position, selection, user, dispatch, getSelection) {
-  if (!isInitialized) {
-    initialize(dispatch, getSelection);
-    isInitialized = true;
-  }
-
-  const style = { position: 'absolute' };
-  if (position) {
-    style.display = 'unset';
-    style.top = `${position.y}px`;
-    style.left = `${position.x}px`;
-    restoreSelection(selection);
-  } else {
-    style.display = 'none';
-    style.top = `-100px`;
-    style.left = `-100px`;
-  }
-  const b = button('🖍', {
-    onclick: evt => dispatch(annotationCreate(user, getSelection()))
-  });
-  return div({ style, [onComponentDidMount]: () => b.focus() }, b);
-}
-
-function restoreSelection(range) {
-  if (!range) return;
-  const r = rangeFromOffsets(document.querySelector(`#L${range.start.line}>td.content`), range.start.column, document.querySelector(`#L${range.end.line}>td.content`), range.end.column);
-  const selection = window.getSelection();
-  selection.removeAllRanges();
-  selection.addRange(r);
-}
-
-function initialize(dispatch, getSelection) {
-  let isSelecting = false;
-
-  document.addEventListener('selectionchange', evt => {
-    isSelecting = !window.getSelection().isCollapsed;
-  });
-
-  document.addEventListener('mouseup', evt => {
-    // FIXME: UGLY!
-    if ('BUTTON' === evt.target.nodeName) {
-      evt.preventDefault();
-      return;
-    }
-    if (isSelecting) {
-      dispatch({
-        type: SELECTION_CHANGE,
-        selection: getRange(window.getSelection()),
-        position: { x: evt.pageX, y: evt.pageY }
-      });
-      isSelecting = false;
-    } else {
-      if (getSelection()) {
-        dispatch({ type: SELECTION_CANCEL });
-      }
-    }
-  });
-}
-
-/**
- * The number of characters from the start of the parent node
- * to the child node, flattening all intervening children,
- * plus the offset in the child node.
- *
- * @example <div>ab<a>cd<a>ef</a>f</a>gh</div>
- *          textOffsetFromNode(div, a[1], 1) // 5 = 'ab' + 'cd' + 1
- *
- * @param {Node} parent
- * @param {Node} child
- * @param {number} [childOffset = 0]
- */
-function textOffsetFromNode(parent, child, childOffset = 0) {
-  if (!parent) return;
-  if (!child) return offset;
-  // console.log('textOffsetFromNode', parent, child, childOffset);
-  const iter = document.createNodeIterator(parent, NodeFilter.SHOW_TEXT);
-
-  let node;
-  let offset = 0;
-  while (iter.nextNode()) {
-    node = iter.referenceNode;
-    if (node === child) {
-      return offset + childOffset;
-    }
-    if (Node.TEXT_NODE === node.nodeType) {
-      offset += node.textContent.length;
-    }
-  }
-  throw new Error(`Couldn’t find ${String(child)} as a child of ${String(parent)}`);
-}
-
-/**
- * Given a node, find its parent line number,
- * delegating to `getLine()`.
- *
- * @param {Node} node
- * @param {string} [matcher = 'tr.line']
- * @return {number}
- */
-function getLineNumber(node, matcher = 'tr.line') {
-  return parseInt(getLine(node, matcher).dataset.line, 10);
-}
-
-/**
- * Given a node, find its parent line.
- *
- * @param {Node} node
- * @param {string} [matcher = 'tr.line']
- */
-function getLine(node, matcher = 'tr.line') {
-  do {
-    if (node.matches && node.matches(matcher)) {
-      return node;
-    }
-  } while (node = node.parentNode);
-  return undefined;
-}
-
-/**
- * Given a `Selection`, determine the `Range`, where
- * `start` is always before `end`, regardless
- * from which direction the selection was made.
- *
- * @param {Selection} selection
- * @returns {Object} - `{ start: number, end: number };
- */
-function getRange(selection) {
-  if (!selection) return;
-  if (!(selection instanceof Selection)) throw new TypeError(String(selection.constructor.name));
-
-  const anchor = {
-    line: getLineNumber(selection.anchorNode),
-    column: textOffsetFromNode(getLine(selection.anchorNode), selection.anchorNode, selection.anchorOffset)
-  };
-  const focus = {
-    line: getLineNumber(selection.focusNode),
-    column: textOffsetFromNode(getLine(selection.focusNode), selection.focusNode, selection.focusOffset)
-  };
-  // console.log('getRange', anchor, focus);
-  if (anchor.line < focus.line || anchor.line === focus.line && anchor.column <= focus.column) {
-    return {
-      start: anchor,
-      end: focus
-    };
-  } else {
-    return {
-      start: focus,
-      end: anchor
-    };
-  }
-}
-
-/**
- *
- * @param {Node} parentStart
- * @param {number} start
- * @param {Node} parentEnd
- * @param {number} end
- * @return {Range}
- */
-function rangeFromOffsets(parentStart, start = 0, parentEnd = parentStart, end = 0) {
-  // console.log('rangeFromOffsets', parentStart, start, parentEnd, end);
-  const range = document.createRange();
-  const s = nodeFromTextOffset(parentStart, start);
-  const e = nodeFromTextOffset(parentEnd, end);
-  // console.log('rangeFromOffsets#nodeFromTextOffset', s, e);
-  range.setStart(childTextNodeOrSelf(s.node), s.offset);
-  range.setEnd(childTextNodeOrSelf(e.node), e.offset);
-
-  return range;
-}
-
-/**
- *
- * @param {Node} parent
- * @param {number} offset
- * @return {Object} - `{ node: Node, offset: number }`
- */
-function nodeFromTextOffset(parent, offset = 0) {
-  if (!parent) return;
-  // console.log('nodeFromTextOffset', parent, offset);
-
-  const iter = document.createNodeIterator(parent, NodeFilter.SHOW_TEXT);
-
-  let counter = -1;
-  let node;
-  let last;
-  // Find the start node (could we somehow skip this seemingly needless search?)
-  while (counter < offset && iter.nextNode()) {
-    node = iter.referenceNode;
-    if (node.nodeType === Node.TEXT_NODE) {
-      last = offset - counter - 1;
-      counter += node.textContent.length;
-    }
-  }
-  return { node: node, offset: last };
-}
-
-/**
- * Descendent-or-self until you get a `TextNode`
- *
- * @param {Node} node
- * @return {TextNode} - Or `undefined` if there are not text
- *                      children, e.g. `<br/>`
- */
-function childTextNodeOrSelf(node) {
-  if (!node) return;
-  if (!(node instanceof Node)) throw new TypeError(node.constructor.name);
-
-  if (Node.TEXT_NODE === node.nodeType) {
-    return node;
-  }
-  if (node.firstChild) {
-    return childTextNodeOrSelf(node.firstChild);
-  }
-  return undefined;
-}
-
 function createCommonjsModule(fn, module) {
 	return module = { exports: {} }, fn(module, module.exports), module.exports;
 }
@@ -1943,6 +1668,226 @@ return highlightRange;
 }
 });
 
+let isInitialized = false;
+
+function render$6(position, selection, user, dispatch, getSelection) {
+  if (!isInitialized) {
+    initialize(dispatch, getSelection);
+    isInitialized = true;
+  }
+
+  const style = { position: 'absolute' };
+  if (position) {
+    style.display = 'unset';
+    style.top = `${position.y}px`;
+    style.left = `${position.x}px`;
+    restoreSelection(selection);
+  } else {
+    style.display = 'none';
+    style.top = `-100px`;
+    style.left = `-100px`;
+  }
+  const b = button('🖍', {
+    onclick: evt => dispatch(annotationCreate(user, getSelection()))
+  });
+  return div({ style, [onComponentDidMount]: () => b.focus() }, b);
+}
+
+function restoreSelection(range) {
+  if (!range) return;
+  const r = rangeFromOffsets(document.querySelector(`#L${range.start.line}>td.content`), range.start.column, document.querySelector(`#L${range.end.line}>td.content`), range.end.column);
+  const selection = window.getSelection();
+  selection.removeAllRanges();
+  selection.addRange(r);
+}
+
+function initialize(dispatch, getSelection) {
+  let isSelecting = false;
+
+  document.addEventListener('selectionchange', evt => {
+    isSelecting = !window.getSelection().isCollapsed;
+  });
+
+  document.addEventListener('mouseup', evt => {
+    // FIXME: UGLY!
+    if ('BUTTON' === evt.target.nodeName) {
+      evt.preventDefault();
+      return;
+    }
+    if (isSelecting) {
+      dispatch({
+        type: SELECTION_CHANGE,
+        selection: getRange(window.getSelection()),
+        position: { x: evt.pageX, y: evt.pageY }
+      });
+      isSelecting = false;
+    } else {
+      if (getSelection()) {
+        dispatch({ type: SELECTION_CANCEL });
+      }
+    }
+  });
+}
+
+/**
+ * The number of characters from the start of the parent node
+ * to the child node, flattening all intervening children,
+ * plus the offset in the child node.
+ *
+ * @example <div>ab<a>cd<a>ef</a>f</a>gh</div>
+ *          textOffsetFromNode(div, a[1], 1) // 5 = 'ab' + 'cd' + 1
+ *
+ * @param {Node} parent
+ * @param {Node} child
+ * @param {number} [childOffset = 0]
+ */
+function textOffsetFromNode(parent, child, childOffset = 0) {
+  if (!parent) return;
+  if (!child) return offset;
+  // console.log('textOffsetFromNode', parent, child, childOffset);
+  const iter = document.createNodeIterator(parent, NodeFilter.SHOW_TEXT);
+
+  let node;
+  let offset = 0;
+  while (iter.nextNode()) {
+    node = iter.referenceNode;
+    if (node === child) {
+      return offset + childOffset;
+    }
+    if (Node.TEXT_NODE === node.nodeType) {
+      offset += node.textContent.length;
+    }
+  }
+  throw new Error(`Couldn’t find ${String(child)} as a child of ${String(parent)}`);
+}
+
+/**
+ * Given a node, find its parent line number,
+ * delegating to `getLine()`.
+ *
+ * @param {Node} node
+ * @param {string} [matcher = 'tr.line']
+ * @return {number}
+ */
+function getLineNumber(node, matcher = 'tr.line') {
+  return parseInt(getLine(node, matcher).dataset.line, 10);
+}
+
+/**
+ * Given a node, find its parent line.
+ *
+ * @param {Node} node
+ * @param {string} [matcher = 'tr.line']
+ */
+function getLine(node, matcher = 'tr.line') {
+  do {
+    if (node.matches && node.matches(matcher)) {
+      return node;
+    }
+  } while (node = node.parentNode);
+  return undefined;
+}
+
+/**
+ * Given a `Selection`, determine the `Range`, where
+ * `start` is always before `end`, regardless
+ * from which direction the selection was made.
+ *
+ * @param {Selection} selection
+ * @returns {Object} - `{ start: number, end: number };
+ */
+function getRange(selection) {
+  if (!selection) return;
+  if (!(selection instanceof Selection)) throw new TypeError(String(selection.constructor.name));
+
+  const anchor = {
+    line: getLineNumber(selection.anchorNode),
+    column: textOffsetFromNode(getLine(selection.anchorNode), selection.anchorNode, selection.anchorOffset)
+  };
+  const focus = {
+    line: getLineNumber(selection.focusNode),
+    column: textOffsetFromNode(getLine(selection.focusNode), selection.focusNode, selection.focusOffset)
+  };
+  // console.log('getRange', anchor, focus);
+  if (anchor.line < focus.line || anchor.line === focus.line && anchor.column <= focus.column) {
+    return {
+      start: anchor,
+      end: focus
+    };
+  } else {
+    return {
+      start: focus,
+      end: anchor
+    };
+  }
+}
+
+/**
+ *
+ * @param {Node} parentStart
+ * @param {number} start
+ * @param {Node} parentEnd
+ * @param {number} end
+ * @return {Range}
+ */
+function rangeFromOffsets(parentStart, start = 0, parentEnd = parentStart, end = 0) {
+  // console.log('rangeFromOffsets', parentStart, start, parentEnd, end);
+  const range = document.createRange();
+  const s = nodeFromTextOffset(parentStart, start);
+  const e = nodeFromTextOffset(parentEnd, end);
+  // console.log('rangeFromOffsets#nodeFromTextOffset', s, e);
+  range.setStart(childTextNodeOrSelf(s.node), s.offset);
+  range.setEnd(childTextNodeOrSelf(e.node), e.offset);
+
+  return range;
+}
+
+/**
+ *
+ * @param {Node} parent
+ * @param {number} offset
+ * @return {Object} - `{ node: Node, offset: number }`
+ */
+function nodeFromTextOffset(parent, offset = 0) {
+  if (!parent) return;
+  // console.log('nodeFromTextOffset', parent, offset);
+
+  const iter = document.createNodeIterator(parent, NodeFilter.SHOW_TEXT);
+
+  let counter = -1;
+  let node;
+  let last;
+  // Find the start node (could we somehow skip this seemingly needless search?)
+  while (counter < offset && iter.nextNode()) {
+    node = iter.referenceNode;
+    if (node.nodeType === Node.TEXT_NODE) {
+      last = offset - counter - 1;
+      counter += node.textContent.length;
+    }
+  }
+  return { node: node, offset: last };
+}
+
+/**
+ * Descendent-or-self until you get a `TextNode`
+ *
+ * @param {Node} node
+ * @return {TextNode} - Or `undefined` if there are not text
+ *                      children, e.g. `<br/>`
+ */
+function childTextNodeOrSelf(node) {
+  if (!node) return;
+  if (!(node instanceof Node)) throw new TypeError(node.constructor.name);
+
+  if (Node.TEXT_NODE === node.nodeType) {
+    return node;
+  }
+  if (node.firstChild) {
+    return childTextNodeOrSelf(node.firstChild);
+  }
+  return undefined;
+}
+
 // TODO: Don’t depend on another component directly.
 //       Extract the common functions into a helper library.
 /**
@@ -1951,22 +1896,28 @@ return highlightRange;
  *
  * @param {Array<Annotation>} annotations
  * @param {function} dispatch
- * @return undefined
+ * @return {Array<{id:Node}>} - An array highlight nodes, keyed on annotation id
  */
-function render$6(annotations, dispatch) {
+function render$5(annotations, relativeY = 0, dispatch) {
   // Highlight annotations. Requires that DOM is already committed above
-  for (const annotation of annotations) {
-    renderAnnotationHighlight(annotation,
-    // state.model.annotations.mine().some(a => annotation.id === a.id),
-    // state.ui.activeAnnotationID === annotation.id
-    false, false, dispatch);
-  }
+  return annotations.reduce((markers, annotation) => {
+    return _extends$1({}, markers, {
+      [annotation.id]: renderAnnotationHighlight(annotation,
+      // state.model.annotations.mine().some(a => annotation.id === a.id),
+      // state.ui.activeAnnotationID === annotation.id
+      false, false, relativeY, dispatch)
+    });
+  }, {});
 }
 
-function renderAnnotationHighlight(annotation, isMine = false, isActive = false, dispatch) {
+function renderAnnotationHighlight(annotation, isMine = false, isActive = false, relativeY = 0, dispatch) {
   if (!annotation) return;
   const r = rangeFromOffsets(document.querySelector(`#L${annotation.range.start.line}>td.content`), annotation.range.start.column, document.querySelector(`#L${annotation.range.end.line}>td.content`), annotation.range.end.column);
+  let first;
   highlightRange_1(r, (node, index) => {
+    // FIXME: Fix this in highlight-range.js
+    index = parseInt(index, 10);
+
     const mark = document.createElement('mark');
     mark.classList.add('annotation');
     mark.dataset.annotationId = annotation.id;
@@ -1980,8 +1931,83 @@ function renderAnnotationHighlight(annotation, isMine = false, isActive = false,
     mark.onclick = evt => {
       dispatch(annotationSelect(evt.target.dataset.annotationId));
     };
+    if (0 === index) first = mark;
     return mark;
   });
+  // The offset from the container
+  return first.getBoundingClientRect().y - relativeY;
+}
+
+/**
+ *
+ * @param {Annotation} annotation
+ * @param {boolean} isEditing
+ * @param {string} user
+ * @param {function} dispatch
+ * @return {HTMLElement}
+ */
+function render$7(annotation, isActive = false, isEditing = false, user, markers, dispatch) {
+  if (!annotation) return empty();
+
+  const props = {
+    className: 'annotation-detail',
+    dataset: { annotationID: annotation.id },
+    style: { top: `${markers[annotation.id]}px` }
+  };
+
+  if (isActive) {
+    const commentEl = textarea(annotation.comment || '', {
+      oninput: evt => console.log('textarea#input')
+    });
+
+    return div(props, render$1(annotation.user), isEditing ? commentEl : div(annotation.comment, { id: 'AnnotationComment' }), div(formatTimestamp(annotation.timestamp), {
+      dataset: { timestamp: annotation.timestamp }
+    }), renderEditAffordance(annotation, isEditing, user, {
+      dispatch,
+      getComment: () => commentEl.value
+    }), {
+      [onComponentDidMount]: () => {
+        commentEl.focus();
+      }
+    });
+  } else {
+    return div(props, { classList: 'collapsed' }, render$1(annotation.user));
+  }
+}
+
+function formatTimestamp(timestamp) {
+  if (!timestamp) return timestamp;
+  if ('string' === typeof timestamp) timestamp = new Date(timestamp);
+  return timestamp.toLocaleString();
+}
+
+// function isCallable(f) {
+//   if (!f) return false;
+//   return 'function' === typeof f.call && 'function' === typeof f.apply;
+// }
+
+// function iif(bool, t, f) {
+//   if (bool) {
+//     return isCallable(t) ? t() : t;
+//   }
+//   return isCallable(f) ? f() : f;
+// }
+
+function renderEditAffordance(annotation, isEditing, user, { dispatch, getComment }) {
+  return div(annotation.user === user ? button('Edit', {
+    onclick: evt => dispatch(editActiveAnnotation())
+  }) : empty(), isEditing ? [button('Save', {
+    onclick: evt => dispatch(saveAnnotation(annotation.id, getComment()))
+  }), button('Cancel', {
+    onclick: evt => dispatch(cancelEditActiveAnnotation())
+  })] : empty(), { className: 'controls' });
+}
+
+function render$4(state, relativeY = 0, dispatcher) {
+  const annotationNodes = render$5(state.model.annotations, relativeY, dispatcher);
+  return toFragment(state.model.annotations.map(annotation => render$7(annotation, //annotationByID(state, state.ui.activeAnnotationID),
+  annotation.id === state.ui.activeAnnotationID, state.ui.isEditing, state.ui.user, annotationNodes, dispatcher // https://github.com/reactjs/redux/blob/628928e3108df9725f07689e3785b5a2a226baa8/src/bindActionCreators.js#L26
+  )));
 }
 
 const logger = store => next => action => {
@@ -1995,8 +2021,9 @@ const store = createStore(reducer, applyMiddleware(thunk, logger));
 document.addEventListener('DOMContentLoaded', evt => {
   const Header = renderInto(render, 'header');
   const Document = renderInto(render$3, '#Content');
-  const AnnotationDetail = renderInto(render$4, '#AnnotationDetail');
-  const Selection = renderInto(render$5, '#SelectAnnotation');
+  const Annotations = renderInto(render$4, '#Annotations');
+  // const AnnotationDetail = renderInto(_AnnotationDetail, '#AnnotationDetail');
+  const Selection = renderInto(render$6, '#SelectAnnotation');
 
   store.subscribe(render$$1);
   const dispatcher = store.dispatch.bind(store);
@@ -2011,9 +2038,8 @@ document.addEventListener('DOMContentLoaded', evt => {
     console.time('render');
     Header(state.model, state.ui, dispatcher);
     Document(state.model, state.ui, dispatcher);
-    render$6(state.model.annotations, dispatcher);
-    AnnotationDetail(annotationByID(state, state.ui.activeAnnotationID), state.ui.isEditing, state.ui.user, dispatcher // https://github.com/reactjs/redux/blob/628928e3108df9725f07689e3785b5a2a226baa8/src/bindActionCreators.js#L26
-    );
+    Annotations(state, document.querySelector('#Content').getBoundingClientRect().y, dispatcher);
+
     Selection(state.ui.position, state.ui.selection, state.ui.user, dispatcher, () => store.getState().ui.selection);
 
     console.timeEnd('render');
@@ -2039,7 +2065,7 @@ function renderInto(renderer, parent = document.body) {
   return function (...args) {
     const tree = renderer(...args);
     ref = replaceChildren(ref, tree);
-    if (tree[onComponentDidMount]) {
+    if (tree && tree[onComponentDidMount]) {
       tree[onComponentDidMount]();
       // FIXME: Does this eliminate the possibility of a memory
       //        leak with DOM expando properties?

@@ -4,12 +4,10 @@ import { onComponentDidMount } from './component.js';
 import { replaceChildren } from './dom-helper.js';
 import { reducer } from './reducer.js';
 import { login } from './actions.js';
-import { annotationByID } from './selectors.js';
 import { default as _Header } from './header.js';
 import { default as _Document } from './document.js';
-import { default as _AnnotationDetail } from './annotation-detail.js';
+import { default as _Annotations } from './annotations.js';
 import { default as _Selection } from './selection.js';
-import { default as AnnotationHighlights } from './annotation-highlight.js';
 
 const logger = store => next => action => {
   console.log('Dispatching', action);
@@ -22,7 +20,8 @@ const store = createStore(reducer, applyMiddleware(thunk, logger));
 document.addEventListener('DOMContentLoaded', evt => {
   const Header = renderInto(_Header, 'header');
   const Document = renderInto(_Document, '#Content');
-  const AnnotationDetail = renderInto(_AnnotationDetail, '#AnnotationDetail');
+  const Annotations = renderInto(_Annotations, '#Annotations');
+  // const AnnotationDetail = renderInto(_AnnotationDetail, '#AnnotationDetail');
   const Selection = renderInto(_Selection, '#SelectAnnotation');
 
   store.subscribe(render);
@@ -38,13 +37,12 @@ document.addEventListener('DOMContentLoaded', evt => {
     console.time('render');
     Header(state.model, state.ui, dispatcher);
     Document(state.model, state.ui, dispatcher);
-    AnnotationHighlights(state.model.annotations, dispatcher);
-    AnnotationDetail(
-      annotationByID(state, state.ui.activeAnnotationID),
-      state.ui.isEditing,
-      state.ui.user,
-      dispatcher // https://github.com/reactjs/redux/blob/628928e3108df9725f07689e3785b5a2a226baa8/src/bindActionCreators.js#L26
+    Annotations(
+      state,
+      document.querySelector('#Content').getBoundingClientRect().y,
+      dispatcher
     );
+
     Selection(
       state.ui.position,
       state.ui.selection,
@@ -76,7 +74,7 @@ function renderInto(renderer, parent = document.body) {
   return function(...args) {
     const tree = renderer(...args);
     ref = replaceChildren(ref, tree);
-    if (tree[onComponentDidMount]) {
+    if (tree && tree[onComponentDidMount]) {
       tree[onComponentDidMount]();
       // FIXME: Does this eliminate the possibility of a memory
       //        leak with DOM expando properties?

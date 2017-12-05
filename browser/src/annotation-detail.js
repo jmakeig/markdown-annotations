@@ -15,31 +15,49 @@ import { default as User } from './user.js';
  * @param {function} dispatch
  * @return {HTMLElement}
  */
-export default function render(annotation, isEditing = false, user, dispatch) {
+export default function render(
+  annotation,
+  isActive = false,
+  isEditing = false,
+  user,
+  markers,
+  dispatch
+) {
   if (!annotation) return empty();
 
-  const commentEl = textarea(annotation.comment || '', {
-    oninput: evt => console.log('textarea#input'),
-  });
+  const props = {
+    className: 'annotation-detail',
+    dataset: { annotationID: annotation.id },
+    style: { top: `${markers[annotation.id]}px` },
+  };
 
-  return div(
-    isEditing
-      ? commentEl
-      : div(annotation.comment, { id: 'AnnotationComment' }),
-    User(annotation.user),
-    div(formatTimestamp(annotation.timestamp), {
-      dataset: { timestamp: annotation.timestamp },
-    }),
-    renderEditAffordance(annotation, isEditing, user, {
-      dispatch,
-      getComment: () => commentEl.value,
-    }),
-    {
-      [onComponentDidMount]: () => {
-        commentEl.focus();
-      },
-    }
-  );
+  if (isActive) {
+    const commentEl = textarea(annotation.comment || '', {
+      oninput: evt => console.log('textarea#input'),
+    });
+
+    return div(
+      props,
+      User(annotation.user),
+      isEditing
+        ? commentEl
+        : div(annotation.comment, { id: 'AnnotationComment' }),
+      div(formatTimestamp(annotation.timestamp), {
+        dataset: { timestamp: annotation.timestamp },
+      }),
+      renderEditAffordance(annotation, isEditing, user, {
+        dispatch,
+        getComment: () => commentEl.value,
+      }),
+      {
+        [onComponentDidMount]: () => {
+          commentEl.focus();
+        },
+      }
+    );
+  } else {
+    return div(props, { classList: 'collapsed' }, User(annotation.user));
+  }
 }
 
 function formatTimestamp(timestamp) {
