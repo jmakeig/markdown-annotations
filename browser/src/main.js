@@ -5,10 +5,10 @@ import { replaceChildren } from './dom-helper.js';
 import { reducer } from './reducer.js';
 import { login } from './actions.js';
 import { annotationByID } from './selectors.js';
+import { default as _Header } from './header.js';
 import { default as _Document } from './document.js';
 import { default as _AnnotationDetail } from './annotation-detail.js';
 import { default as _Selection } from './selection.js';
-import { default as _User } from './user.js';
 import { default as AnnotationHighlights } from './annotation-highlight.js';
 
 const logger = store => next => action => {
@@ -20,10 +20,10 @@ const logger = store => next => action => {
 const store = createStore(reducer, applyMiddleware(thunk, logger));
 
 document.addEventListener('DOMContentLoaded', evt => {
+  const Header = renderInto(_Header, 'header');
   const Document = renderInto(_Document, '#Content');
   const AnnotationDetail = renderInto(_AnnotationDetail, '#AnnotationDetail');
   const Selection = renderInto(_Selection, '#SelectAnnotation');
-  const User = renderInto(_User, '#User');
 
   store.subscribe(render);
   const dispatcher = store.dispatch.bind(store);
@@ -36,8 +36,8 @@ document.addEventListener('DOMContentLoaded', evt => {
   function render(/**/) {
     const state = store.getState();
     console.time('render');
+    Header(state.model, state.ui, dispatcher);
     Document(state.model, state.ui, dispatcher);
-    User(state.ui.user);
     AnnotationHighlights(state.model.annotations, dispatcher);
     AnnotationDetail(
       annotationByID(state, state.ui.activeAnnotationID),

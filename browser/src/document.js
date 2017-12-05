@@ -1,16 +1,11 @@
-import { h1, file, toFragment } from './dom-helper.js';
+import { file } from './dom-helper.js';
 import { documentLoad } from './actions.js';
 import Markdown from './markdown.js';
-import Download from './download.js';
 
 export default function render(model, ui, dispatch) {
   if (model.content) {
     document.title = `Annotating ${model.href}`;
-    return toFragment(
-      h1(model.href),
-      Download(model.content, model.annotations, model.href, model.mime),
-      Markdown(model.content)
-    );
+    return Markdown(model.content);
   }
   // <input type="file" id="Upload" accept="text/markdown" />
   return file({

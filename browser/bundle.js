@@ -1112,47 +1112,153 @@ function documentLoad(state, action) {
   return shallowCopy(state, { model });
 }
 
-function lineProps(line) {
-  const props = {};
-
-  const listMatcher = /^(\s*)(\*|\-|\d+\.|>) /; // matches list items and quotes
-  const matches = line.match(listMatcher);
-  if (matches) {
-    const indent = matches[1].length + matches[2].length + 1;
-    props.style = _extends$1({}, props.style, {
-      paddingLeft: `${indent}ch`,
-      textIndent: `-${indent}ch`
-    });
-  }
-
-  const headingMatcher = /^#+ /;
-  if (line.match(headingMatcher)) {
-    // content.classList.add('heading');
-    props.classList = [...(props.classList || []), 'heading'];
-  }
-
-  const quoteMatcher = /^>+ /;
-  if (line.match(quoteMatcher)) {
-    // content.classList.add('quote');
-    props.classList = [...(props.classList || []), 'quote'];
-  }
-
-  return props;
-}
 /**
- * Renders Markdown string as HTML table rows. Does not touch the live DOM.
+ * BKDR Hash (modified version)
  *
- * @param {string} md  - Markdown
- * @returns {HTMLTableElement|DocumentFragment}
+ * @param {String} str string to hash
+ * @returns {Number}
  */
-function renderMarkdown(md) {
-  if (!md) return empty();
+var BKDRHash = function(str) {
+    var seed = 131;
+    var seed2 = 137;
+    var hash = 0;
+    // make hash more sensitive for short string like 'a', 'b', 'c'
+    str += 'x';
+    // Note: Number.MAX_SAFE_INTEGER equals 9007199254740991
+    var MAX_SAFE_INTEGER = parseInt(9007199254740991 / seed2);
+    for(var i = 0; i < str.length; i++) {
+        if(hash > MAX_SAFE_INTEGER) {
+            hash = parseInt(hash / seed2);
+        }
+        hash = hash * seed + str.charCodeAt(i);
+    }
+    return hash;
+};
 
-  return table(tbody(md.split(/\n/).map((line, index) => tr(td('', { className: 'line-number', dataset: { line: index + 1 } }), td('' === line ? '\n' : line, { className: 'content' }, lineProps(line)), {
-    id: `L${index + 1}`,
-    className: 'line',
-    dataset: { line: index + 1 }
-  }))));
+var bkdrHash = BKDRHash;
+
+/**
+ * Convert RGB Array to HEX
+ *
+ * @param {Array} RGBArray - [R, G, B]
+ * @returns {String} 6 digits hex starting with #
+ */
+var RGB2HEX = function(RGBArray) {
+    var hex = '#';
+    RGBArray.forEach(function(value) {
+        if (value < 16) {
+            hex += 0;
+        }
+        hex += value.toString(16);
+    });
+    return hex;
+};
+
+/**
+ * Convert HSL to RGB
+ *
+ * @see {@link http://zh.wikipedia.org/wiki/HSL和HSV色彩空间} for further information.
+ * @param {Number} H Hue ∈ [0, 360)
+ * @param {Number} S Saturation ∈ [0, 1]
+ * @param {Number} L Lightness ∈ [0, 1]
+ * @returns {Array} R, G, B ∈ [0, 255]
+ */
+var HSL2RGB = function(H, S, L) {
+    H /= 360;
+
+    var q = L < 0.5 ? L * (1 + S) : L + S - L * S;
+    var p = 2 * L - q;
+
+    return [H + 1/3, H, H - 1/3].map(function(color) {
+        if(color < 0) {
+            color++;
+        }
+        if(color > 1) {
+            color--;
+        }
+        if(color < 1/6) {
+            color = p + (q - p) * 6 * color;
+        } else if(color < 0.5) {
+            color = q;
+        } else if(color < 2/3) {
+            color = p + (q - p) * 6 * (2/3 - color);
+        } else {
+            color = p;
+        }
+        return Math.round(color * 255);
+    });
+};
+
+/**
+ * Color Hash Class
+ *
+ * @class
+ */
+var ColorHash = function(options) {
+    options = options || {};
+
+    var LS = [options.lightness, options.saturation].map(function(param) {
+        param = param || [0.35, 0.5, 0.65]; // note that 3 is a prime
+        return Object.prototype.toString.call(param) === '[object Array]' ? param.concat() : [param];
+    });
+
+    this.L = LS[0];
+    this.S = LS[1];
+
+    this.hash = options.hash || bkdrHash;
+};
+
+/**
+ * Returns the hash in [h, s, l].
+ * Note that H ∈ [0, 360); S ∈ [0, 1]; L ∈ [0, 1];
+ *
+ * @param {String} str string to hash
+ * @returns {Array} [h, s, l]
+ */
+ColorHash.prototype.hsl = function(str) {
+    var H, S, L;
+    var hash = this.hash(str);
+
+    H = hash % 359; // note that 359 is a prime
+    hash = parseInt(hash / 360);
+    S = this.S[hash % this.S.length];
+    hash = parseInt(hash / this.S.length);
+    L = this.L[hash % this.L.length];
+
+    return [H, S, L];
+};
+
+/**
+ * Returns the hash in [r, g, b].
+ * Note that R, G, B ∈ [0, 255]
+ *
+ * @param {String} str string to hash
+ * @returns {Array} [r, g, b]
+ */
+ColorHash.prototype.rgb = function(str) {
+    var hsl = this.hsl(str);
+    return HSL2RGB.apply(this, hsl);
+};
+
+/**
+ * Returns the hash in hex
+ *
+ * @param {String} str string to hash
+ * @returns {String} hex with #
+ */
+ColorHash.prototype.hex = function(str) {
+    var rgb = this.rgb(str);
+    return RGB2HEX(rgb);
+};
+
+var colorHash = ColorHash;
+
+function render$1(user) {
+  if (!user) return empty();
+  const style = {
+    backgroundColor: `rgba(${new colorHash().rgb(user).join(', ')}, 0.5)`
+  };
+  return div(span({ className: 'user-color' }, { style }), span(user), button('Logout', { id: 'Logout', onclick: evt => console.log('logout') }));
 }
 
 // <https://jsfiddle.net/gabrieleromanato/qAGHT/>
@@ -1211,7 +1317,7 @@ function _utf8_encode(string) {
   return utftext;
 }
 
-function render$1(content, annotations, fileName, mime) {
+function render$2(content, annotations, fileName, mime) {
   if (content && content.length > 0) {
     const href = `data:${mime};charset=utf-8;base64,${encode(serializeAnnotatedMarkdown(content, annotations))}`;
     return a('Download', {
@@ -1222,10 +1328,57 @@ function render$1(content, annotations, fileName, mime) {
   return empty();
 }
 
-function render(model, ui, dispatch) {
+function render(model, ui, dispatcher) {
+  return toFragment(h1(model.href, render$2(model.content, model.annotations, model.href, model.mime)), render$1(ui.user));
+}
+
+function lineProps(line) {
+  const props = {};
+
+  const listMatcher = /^(\s*)(\*|\-|\d+\.|>) /; // matches list items and quotes
+  const matches = line.match(listMatcher);
+  if (matches) {
+    const indent = matches[1].length + matches[2].length + 1;
+    props.style = _extends$1({}, props.style, {
+      paddingLeft: `${indent}ch`,
+      textIndent: `-${indent}ch`
+    });
+  }
+
+  const headingMatcher = /^#+ /;
+  if (line.match(headingMatcher)) {
+    // content.classList.add('heading');
+    props.classList = [...(props.classList || []), 'heading'];
+  }
+
+  const quoteMatcher = /^>+ /;
+  if (line.match(quoteMatcher)) {
+    // content.classList.add('quote');
+    props.classList = [...(props.classList || []), 'quote'];
+  }
+
+  return props;
+}
+/**
+ * Renders Markdown string as HTML table rows. Does not touch the live DOM.
+ *
+ * @param {string} md  - Markdown
+ * @returns {HTMLTableElement|DocumentFragment}
+ */
+function renderMarkdown(md) {
+  if (!md) return empty();
+
+  return table(tbody(md.split(/\n/).map((line, index) => tr(td('', { className: 'line-number', dataset: { line: index + 1 } }), td('' === line ? '\n' : line, { className: 'content' }, lineProps(line)), {
+    id: `L${index + 1}`,
+    className: 'line',
+    dataset: { line: index + 1 }
+  }))));
+}
+
+function render$3(model, ui, dispatch) {
   if (model.content) {
     document.title = `Annotating ${model.href}`;
-    return toFragment(h1(model.href), render$1(model.content, model.annotations, model.href, model.mime), renderMarkdown(model.content));
+    return renderMarkdown(model.content);
   }
   // <input type="file" id="Upload" accept="text/markdown" />
   return file({
@@ -1272,7 +1425,7 @@ function parseAnnotatedMarkdown(rawMarkdown) {
  * @param {function} dispatch
  * @return {HTMLElement}
  */
-function render$2(annotation, isEditing = false, user, dispatch) {
+function render$4(annotation, isEditing = false, user, dispatch) {
   if (!annotation) return empty();
 
   const commentEl = textarea(annotation.comment || '', {
@@ -1313,7 +1466,7 @@ function renderEditAffordance(annotation, isEditing, user, { dispatch, getCommen
 
 let isInitialized = false;
 
-function render$3(position, selection, user, dispatch, getSelection) {
+function render$5(position, selection, user, dispatch, getSelection) {
   if (!isInitialized) {
     initialize(dispatch, getSelection);
     isInitialized = true;
@@ -1529,155 +1682,6 @@ function childTextNodeOrSelf(node) {
     return childTextNodeOrSelf(node.firstChild);
   }
   return undefined;
-}
-
-/**
- * BKDR Hash (modified version)
- *
- * @param {String} str string to hash
- * @returns {Number}
- */
-var BKDRHash = function(str) {
-    var seed = 131;
-    var seed2 = 137;
-    var hash = 0;
-    // make hash more sensitive for short string like 'a', 'b', 'c'
-    str += 'x';
-    // Note: Number.MAX_SAFE_INTEGER equals 9007199254740991
-    var MAX_SAFE_INTEGER = parseInt(9007199254740991 / seed2);
-    for(var i = 0; i < str.length; i++) {
-        if(hash > MAX_SAFE_INTEGER) {
-            hash = parseInt(hash / seed2);
-        }
-        hash = hash * seed + str.charCodeAt(i);
-    }
-    return hash;
-};
-
-var bkdrHash = BKDRHash;
-
-/**
- * Convert RGB Array to HEX
- *
- * @param {Array} RGBArray - [R, G, B]
- * @returns {String} 6 digits hex starting with #
- */
-var RGB2HEX = function(RGBArray) {
-    var hex = '#';
-    RGBArray.forEach(function(value) {
-        if (value < 16) {
-            hex += 0;
-        }
-        hex += value.toString(16);
-    });
-    return hex;
-};
-
-/**
- * Convert HSL to RGB
- *
- * @see {@link http://zh.wikipedia.org/wiki/HSL和HSV色彩空间} for further information.
- * @param {Number} H Hue ∈ [0, 360)
- * @param {Number} S Saturation ∈ [0, 1]
- * @param {Number} L Lightness ∈ [0, 1]
- * @returns {Array} R, G, B ∈ [0, 255]
- */
-var HSL2RGB = function(H, S, L) {
-    H /= 360;
-
-    var q = L < 0.5 ? L * (1 + S) : L + S - L * S;
-    var p = 2 * L - q;
-
-    return [H + 1/3, H, H - 1/3].map(function(color) {
-        if(color < 0) {
-            color++;
-        }
-        if(color > 1) {
-            color--;
-        }
-        if(color < 1/6) {
-            color = p + (q - p) * 6 * color;
-        } else if(color < 0.5) {
-            color = q;
-        } else if(color < 2/3) {
-            color = p + (q - p) * 6 * (2/3 - color);
-        } else {
-            color = p;
-        }
-        return Math.round(color * 255);
-    });
-};
-
-/**
- * Color Hash Class
- *
- * @class
- */
-var ColorHash = function(options) {
-    options = options || {};
-
-    var LS = [options.lightness, options.saturation].map(function(param) {
-        param = param || [0.35, 0.5, 0.65]; // note that 3 is a prime
-        return Object.prototype.toString.call(param) === '[object Array]' ? param.concat() : [param];
-    });
-
-    this.L = LS[0];
-    this.S = LS[1];
-
-    this.hash = options.hash || bkdrHash;
-};
-
-/**
- * Returns the hash in [h, s, l].
- * Note that H ∈ [0, 360); S ∈ [0, 1]; L ∈ [0, 1];
- *
- * @param {String} str string to hash
- * @returns {Array} [h, s, l]
- */
-ColorHash.prototype.hsl = function(str) {
-    var H, S, L;
-    var hash = this.hash(str);
-
-    H = hash % 359; // note that 359 is a prime
-    hash = parseInt(hash / 360);
-    S = this.S[hash % this.S.length];
-    hash = parseInt(hash / this.S.length);
-    L = this.L[hash % this.L.length];
-
-    return [H, S, L];
-};
-
-/**
- * Returns the hash in [r, g, b].
- * Note that R, G, B ∈ [0, 255]
- *
- * @param {String} str string to hash
- * @returns {Array} [r, g, b]
- */
-ColorHash.prototype.rgb = function(str) {
-    var hsl = this.hsl(str);
-    return HSL2RGB.apply(this, hsl);
-};
-
-/**
- * Returns the hash in hex
- *
- * @param {String} str string to hash
- * @returns {String} hex with #
- */
-ColorHash.prototype.hex = function(str) {
-    var rgb = this.rgb(str);
-    return RGB2HEX(rgb);
-};
-
-var colorHash = ColorHash;
-
-function render$4(user) {
-  if (!user) return empty();
-  const style = {
-    backgroundColor: `rgba(${new colorHash().rgb(user).join(', ')}, 0.5)`
-  };
-  return div(span({ className: 'user-color' }, { style }), span(user), button('Logout', { id: 'Logout', onclick: evt => console.log('logout') }));
 }
 
 function createCommonjsModule(fn, module) {
@@ -1938,7 +1942,7 @@ return highlightRange;
  * @param {function} dispatch
  * @return undefined
  */
-function render$5(annotations, dispatch) {
+function render$6(annotations, dispatch) {
   // Highlight annotations. Requires that DOM is already committed above
   for (const annotation of annotations) {
     renderAnnotationHighlight(annotation,
@@ -1978,10 +1982,10 @@ const logger = store => next => action => {
 const store = createStore(reducer, applyMiddleware(thunk, logger));
 
 document.addEventListener('DOMContentLoaded', evt => {
-  const Document = renderInto(render, '#Content');
-  const AnnotationDetail = renderInto(render$2, '#AnnotationDetail');
-  const Selection = renderInto(render$3, '#SelectAnnotation');
-  const User = renderInto(render$4, '#User');
+  const Header = renderInto(render, 'header');
+  const Document = renderInto(render$3, '#Content');
+  const AnnotationDetail = renderInto(render$4, '#AnnotationDetail');
+  const Selection = renderInto(render$5, '#SelectAnnotation');
 
   store.subscribe(render$$1);
   const dispatcher = store.dispatch.bind(store);
@@ -1994,9 +1998,9 @@ document.addEventListener('DOMContentLoaded', evt => {
   function render$$1() /**/{
     const state = store.getState();
     console.time('render');
+    Header(state.model, state.ui, dispatcher);
     Document(state.model, state.ui, dispatcher);
-    User(state.ui.user);
-    render$5(state.model.annotations, dispatcher);
+    render$6(state.model.annotations, dispatcher);
     AnnotationDetail(annotationByID(state, state.ui.activeAnnotationID), state.ui.isEditing, state.ui.user, dispatcher // https://github.com/reactjs/redux/blob/628928e3108df9725f07689e3785b5a2a226baa8/src/bindActionCreators.js#L26
     );
     Selection(state.ui.position, state.ui.selection, state.ui.user, dispatcher, () => store.getState().ui.selection);
