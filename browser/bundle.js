@@ -787,6 +787,9 @@ const textarea = (...rest) => _el('textarea', ...rest);
 
 const file = (...rest) => _el('input', { type: 'file' }, ...rest);
 
+const br = (...rest) => _el('br', ...rest);
+
+
 /**
  * Replaces the entire contents of `oldNode` with `newChild`.
  * It’s generally advisable to use a `DocumentFragment` for the
@@ -1959,14 +1962,14 @@ function render$7(annotation, isActive = false, isEditing = false, user, markers
       }
     }
   };
-
+  const comm = { className: 'annotation-comment' };
+  const commentText = div(comm, toFormattedNodes(trim(annotation.comment)));
   if (isActive) {
-    const comm = { className: 'annotation-comment' };
     const commentEl = textarea(comm, annotation.comment || '', {
       oninput: evt => console.log('textarea#input')
     });
 
-    return div(props, render$1(annotation.user), div({ className: 'annotation-editor' }, isEditing ? commentEl : div(comm, annotation.comment, { id: 'AnnotationComment' }), div(formatTimestamp(annotation.timestamp), {
+    return div(props, render$1(annotation.user), div({ className: 'annotation-editor' }, isEditing ? commentEl : commentText, div(formatTimestamp(annotation.timestamp), {
       className: 'annotation-timestamp',
       dataset: { timestamp: annotation.timestamp }
     }), renderEditAffordance(annotation, isEditing, user, {
@@ -1978,8 +1981,33 @@ function render$7(annotation, isActive = false, isEditing = false, user, markers
       }
     });
   } else {
-    return div(props, { classList: 'collapsed' }, render$1(annotation.user));
+    return div(props, { classList: 'collapsed' }, render$1(annotation.user), commentText);
   }
+}
+
+function removeLast(arr) {
+  if (Array.isArray(arr)) {
+    const a$$1 = Array.from(arr);
+    a$$1.splice(-1, 1);
+    return a$$1;
+  }
+  return arr;
+}
+
+function toFormattedNodes(str) {
+  if ('string' === typeof str) {
+    return removeLast(str.split(/\n/).reduce((acc, item, index) => [...acc, item, br()], []));
+  }
+  return str;
+}
+
+function trim(str, length = 100, trailer = '…') {
+  if ('string' === typeof str) {
+    if (str.length > length) {
+      return str.substr(0, length) + trailer;
+    }
+  }
+  return str;
 }
 
 function formatTimestamp(timestamp) {

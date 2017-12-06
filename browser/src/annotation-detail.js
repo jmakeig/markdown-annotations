@@ -1,4 +1,4 @@
-import { div, button, textarea, toFragment, empty } from './dom-helper.js';
+import { div, button, textarea, br, toFragment, empty } from './dom-helper.js';
 import { onComponentDidMount } from './component.js';
 import {
   editActiveAnnotation,
@@ -37,9 +37,9 @@ export default function render(
       }
     },
   };
-
+  const comm = { className: 'annotation-comment' };
+  const commentText = div(comm, toFormattedNodes(trim(annotation.comment)));
   if (isActive) {
-    const comm = { className: 'annotation-comment' };
     const commentEl = textarea(comm, annotation.comment || '', {
       oninput: evt => console.log('textarea#input'),
     });
@@ -49,9 +49,7 @@ export default function render(
       User(annotation.user),
       div(
         { className: 'annotation-editor' },
-        isEditing
-          ? commentEl
-          : div(comm, annotation.comment, { id: 'AnnotationComment' }),
+        isEditing ? commentEl : commentText,
         div(formatTimestamp(annotation.timestamp), {
           className: 'annotation-timestamp',
           dataset: { timestamp: annotation.timestamp },
@@ -68,8 +66,40 @@ export default function render(
       }
     );
   } else {
-    return div(props, { classList: 'collapsed' }, User(annotation.user));
+    return div(
+      props,
+      { classList: 'collapsed' },
+      User(annotation.user),
+      commentText
+    );
   }
+}
+
+function removeLast(arr) {
+  if (Array.isArray(arr)) {
+    const a = Array.from(arr);
+    a.splice(-1, 1);
+    return a;
+  }
+  return arr;
+}
+
+function toFormattedNodes(str) {
+  if ('string' === typeof str) {
+    return removeLast(
+      str.split(/\n/).reduce((acc, item, index) => [...acc, item, br()], [])
+    );
+  }
+  return str;
+}
+
+function trim(str, length = 100, trailer = '…') {
+  if ('string' === typeof str) {
+    if (str.length > length) {
+      return str.substr(0, length) + trailer;
+    }
+  }
+  return str;
 }
 
 function formatTimestamp(timestamp) {
