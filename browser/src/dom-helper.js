@@ -167,6 +167,9 @@ export const select = (...rest) => _el('select', ...rest);
 export const option = (...rest) => _el('option', ...rest);
 export const file = (...rest) => _el('input', { type: 'file' }, ...rest);
 
+export const br = (...rest) => _el('br', ...rest);
+export const hr = (...rest) => _el('hr', ...rest);
+
 /**
  * Replaces the entire contents of `oldNode` with `newChild`.
  * It’s generally advisable to use a `DocumentFragment` for the
