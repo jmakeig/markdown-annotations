@@ -787,6 +787,9 @@ const textarea = (...rest) => _el('textarea', ...rest);
 
 const file = (...rest) => _el('input', { type: 'file' }, ...rest);
 
+const br = (...rest) => _el('br', ...rest);
+
+
 /**
  * Replaces the entire contents of `oldNode` with `newChild`.
  * It’s generally advisable to use a `DocumentFragment` for the
@@ -1112,425 +1115,6 @@ function documentLoad(state, action) {
   return shallowCopy(state, { model });
 }
 
-function lineProps(line) {
-  const props = {};
-
-  const listMatcher = /^(\s*)(\*|\-|\d+\.|>) /; // matches list items and quotes
-  const matches = line.match(listMatcher);
-  if (matches) {
-    const indent = matches[1].length + matches[2].length + 1;
-    props.style = _extends$1({}, props.style, {
-      paddingLeft: `${indent}ch`,
-      textIndent: `-${indent}ch`
-    });
-  }
-
-  const headingMatcher = /^#+ /;
-  if (line.match(headingMatcher)) {
-    // content.classList.add('heading');
-    props.classList = [...(props.classList || []), 'heading'];
-  }
-
-  const quoteMatcher = /^>+ /;
-  if (line.match(quoteMatcher)) {
-    // content.classList.add('quote');
-    props.classList = [...(props.classList || []), 'quote'];
-  }
-
-  return props;
-}
-/**
- * Renders Markdown string as HTML table rows. Does not touch the live DOM.
- *
- * @param {string} md  - Markdown
- * @returns {HTMLTableElement|DocumentFragment}
- */
-function renderMarkdown(md) {
-  if (!md) return empty();
-
-  return table(tbody(md.split(/\n/).map((line, index) => tr(td('', { className: 'line-number', dataset: { line: index + 1 } }), td('' === line ? '\n' : line, { className: 'content' }, lineProps(line)), {
-    id: `L${index + 1}`,
-    className: 'line',
-    dataset: { line: index + 1 }
-  }))));
-}
-
-// <https://jsfiddle.net/gabrieleromanato/qAGHT/>
-const _keyStr = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
-
-function encode(input) {
-  var output = '';
-  var chr1, chr2, chr3, enc1, enc2, enc3, enc4;
-  var i = 0;
-
-  input = _utf8_encode(input);
-
-  while (i < input.length) {
-    chr1 = input.charCodeAt(i++);
-    chr2 = input.charCodeAt(i++);
-    chr3 = input.charCodeAt(i++);
-
-    enc1 = chr1 >> 2;
-    enc2 = (chr1 & 3) << 4 | chr2 >> 4;
-    enc3 = (chr2 & 15) << 2 | chr3 >> 6;
-    enc4 = chr3 & 63;
-
-    if (isNaN(chr2)) {
-      enc3 = enc4 = 64;
-    } else if (isNaN(chr3)) {
-      enc4 = 64;
-    }
-
-    output = output + _keyStr.charAt(enc1) + _keyStr.charAt(enc2) + _keyStr.charAt(enc3) + _keyStr.charAt(enc4);
-  }
-
-  return output;
-}
-
-
-
-function _utf8_encode(string) {
-  string = string.replace(/\r\n/g, '\n');
-  var utftext = '';
-
-  for (var n = 0; n < string.length; n++) {
-    var c = string.charCodeAt(n);
-
-    if (c < 128) {
-      utftext += String.fromCharCode(c);
-    } else if (c > 127 && c < 2048) {
-      utftext += String.fromCharCode(c >> 6 | 192);
-      utftext += String.fromCharCode(c & 63 | 128);
-    } else {
-      utftext += String.fromCharCode(c >> 12 | 224);
-      utftext += String.fromCharCode(c >> 6 & 63 | 128);
-      utftext += String.fromCharCode(c & 63 | 128);
-    }
-  }
-
-  return utftext;
-}
-
-function render$1(content, annotations, fileName, mime) {
-  if (content && content.length > 0) {
-    const href = `data:${mime};charset=utf-8;base64,${encode(serializeAnnotatedMarkdown(content, annotations))}`;
-    return a('Download', {
-      href,
-      download: decodeURIComponent(fileName.split('/').pop())
-    });
-  }
-  return empty();
-}
-
-function render(model, ui, dispatch) {
-  if (model.content) {
-    document.title = `Annotating ${model.href}`;
-    return toFragment(h1(model.href), render$1(model.content, model.annotations, model.href, model.mime), renderMarkdown(model.content));
-  }
-  // <input type="file" id="Upload" accept="text/markdown" />
-  return file({
-    id: 'Upload',
-    accept: 'text/markdown',
-    onchange: evt => {
-      const file$$1 = evt.target.files[0];
-      const reader = new FileReader();
-      reader.addEventListener('load', () => {
-        dispatch(documentLoad$1(parseAnnotatedMarkdown(reader.result), file$$1.name));
-      });
-      reader.readAsText(file$$1);
-    }
-  });
-}
-
-/**
- * Converse of `serializeAnnotatedMarkdown()`.
- *
- * @param {string} rawMarkdown - a string of Markdown with an optional
- *                               block of annotations serialized as JSON
- * @return {Object} - `{ content: string, annotations: Array<Annotation*> }`
- */
-function parseAnnotatedMarkdown(rawMarkdown) {
-  if (!rawMarkdown) return;
-  // const NAMESPACE = 'http://marklogic.com/annotations'.replace(/\//g, '\\/');
-  const matcher = /([\s\S]+)\n\n<!--- http:\/\/marklogic.com\/annotations\n\n([\s\S]+)\n\n--->([\s\S]*)/;
-  const matches = rawMarkdown.match(matcher);
-  if (null === matches) return { content: rawMarkdown, annotations: [] };
-  if (4 !== matches.length) {
-    throw new Error(matches.length);
-  }
-  return {
-    content: matches[1] + matches[3],
-    annotations: JSON.parse(matches[2])
-  };
-}
-
-/**
- *
- * @param {Annotation} annotation
- * @param {boolean} isEditing
- * @param {string} user
- * @param {function} dispatch
- * @return {HTMLElement}
- */
-function render$2(annotation, isEditing = false, user, dispatch) {
-  if (!annotation) return empty();
-
-  const commentEl = textarea(annotation.comment || '', {
-    oninput: evt => console.log('textarea#input')
-  });
-
-  return div(isEditing ? commentEl : div(annotation.comment, { id: 'AnnotationComment' }), div(annotation.user), div(annotation.timestamp), renderEditAffordance(annotation, isEditing, user, {
-    dispatch,
-    getComment: () => commentEl.value
-  }), {
-    [onComponentDidMount]: () => {
-      commentEl.focus();
-    }
-  });
-}
-
-// function isCallable(f) {
-//   if (!f) return false;
-//   return 'function' === typeof f.call && 'function' === typeof f.apply;
-// }
-
-// function iif(bool, t, f) {
-//   if (bool) {
-//     return isCallable(t) ? t() : t;
-//   }
-//   return isCallable(f) ? f() : f;
-// }
-
-function renderEditAffordance(annotation, isEditing, user, { dispatch, getComment }) {
-  return div(annotation.user === user ? button('Edit', {
-    onclick: evt => dispatch(editActiveAnnotation())
-  }) : empty(), isEditing ? [button('Save', {
-    onclick: evt => dispatch(saveAnnotation(annotation.id, getComment()))
-  }), button('Cancel', {
-    onclick: evt => dispatch(cancelEditActiveAnnotation())
-  })] : empty(), { className: 'controls' });
-}
-
-let isInitialized = false;
-
-function render$3(position, selection, user, dispatch, getSelection) {
-  if (!isInitialized) {
-    initialize(dispatch, getSelection);
-    isInitialized = true;
-  }
-
-  const style = { position: 'absolute' };
-  if (position) {
-    style.display = 'unset';
-    style.top = `${position.y}px`;
-    style.left = `${position.x}px`;
-    restoreSelection(selection);
-  } else {
-    style.display = 'none';
-    style.top = `-100px`;
-    style.left = `-100px`;
-  }
-  const b = button('🖍', {
-    onclick: evt => dispatch(annotationCreate(user, getSelection()))
-  });
-  return div({ style, [onComponentDidMount]: () => b.focus() }, b);
-}
-
-function restoreSelection(range) {
-  if (!range) return;
-  const r = rangeFromOffsets(document.querySelector(`#L${range.start.line}>td.content`), range.start.column, document.querySelector(`#L${range.end.line}>td.content`), range.end.column);
-  const selection = window.getSelection();
-  selection.removeAllRanges();
-  selection.addRange(r);
-}
-
-function initialize(dispatch, getSelection) {
-  let isSelecting = false;
-
-  document.addEventListener('selectionchange', evt => {
-    isSelecting = !window.getSelection().isCollapsed;
-  });
-
-  document.addEventListener('mouseup', evt => {
-    // FIXME: UGLY!
-    if ('BUTTON' === evt.target.nodeName) {
-      evt.preventDefault();
-      return;
-    }
-    if (isSelecting) {
-      dispatch({
-        type: SELECTION_CHANGE,
-        selection: getRange(window.getSelection()),
-        position: { x: evt.pageX, y: evt.pageY }
-      });
-      isSelecting = false;
-    } else {
-      if (getSelection()) {
-        dispatch({ type: SELECTION_CANCEL });
-      }
-    }
-  });
-}
-
-/**
- * The number of characters from the start of the parent node
- * to the child node, flattening all intervening children,
- * plus the offset in the child node.
- *
- * @example <div>ab<a>cd<a>ef</a>f</a>gh</div>
- *          textOffsetFromNode(div, a[1], 1) // 5 = 'ab' + 'cd' + 1
- *
- * @param {Node} parent
- * @param {Node} child
- * @param {number} [childOffset = 0]
- */
-function textOffsetFromNode(parent, child, childOffset = 0) {
-  if (!parent) return;
-  if (!child) return offset;
-  // console.log('textOffsetFromNode', parent, child, childOffset);
-  const iter = document.createNodeIterator(parent, NodeFilter.SHOW_TEXT);
-
-  let node;
-  let offset = 0;
-  while (iter.nextNode()) {
-    node = iter.referenceNode;
-    if (node === child) {
-      return offset + childOffset;
-    }
-    if (Node.TEXT_NODE === node.nodeType) {
-      offset += node.textContent.length;
-    }
-  }
-  throw new Error(`Couldn’t find ${String(child)} as a child of ${String(parent)}`);
-}
-
-/**
- * Given a node, find its parent line number,
- * delegating to `getLine()`.
- *
- * @param {Node} node
- * @param {string} [matcher = 'tr.line']
- * @return {number}
- */
-function getLineNumber(node, matcher = 'tr.line') {
-  return parseInt(getLine(node, matcher).dataset.line, 10);
-}
-
-/**
- * Given a node, find its parent line.
- *
- * @param {Node} node
- * @param {string} [matcher = 'tr.line']
- */
-function getLine(node, matcher = 'tr.line') {
-  do {
-    if (node.matches && node.matches(matcher)) {
-      return node;
-    }
-  } while (node = node.parentNode);
-  return undefined;
-}
-
-/**
- * Given a `Selection`, determine the `Range`, where
- * `start` is always before `end`, regardless
- * from which direction the selection was made.
- *
- * @param {Selection} selection
- * @returns {Object} - `{ start: number, end: number };
- */
-function getRange(selection) {
-  if (!selection) return;
-  if (!(selection instanceof Selection)) throw new TypeError(String(selection.constructor.name));
-
-  const anchor = {
-    line: getLineNumber(selection.anchorNode),
-    column: textOffsetFromNode(getLine(selection.anchorNode), selection.anchorNode, selection.anchorOffset)
-  };
-  const focus = {
-    line: getLineNumber(selection.focusNode),
-    column: textOffsetFromNode(getLine(selection.focusNode), selection.focusNode, selection.focusOffset)
-  };
-  // console.log('getRange', anchor, focus);
-  if (anchor.line < focus.line || anchor.line === focus.line && anchor.column <= focus.column) {
-    return {
-      start: anchor,
-      end: focus
-    };
-  } else {
-    return {
-      start: focus,
-      end: anchor
-    };
-  }
-}
-
-/**
- *
- * @param {Node} parentStart
- * @param {number} start
- * @param {Node} parentEnd
- * @param {number} end
- * @return {Range}
- */
-function rangeFromOffsets(parentStart, start = 0, parentEnd = parentStart, end = 0) {
-  // console.log('rangeFromOffsets', parentStart, start, parentEnd, end);
-  const range = document.createRange();
-  const s = nodeFromTextOffset(parentStart, start);
-  const e = nodeFromTextOffset(parentEnd, end);
-  // console.log('rangeFromOffsets#nodeFromTextOffset', s, e);
-  range.setStart(childTextNodeOrSelf(s.node), s.offset);
-  range.setEnd(childTextNodeOrSelf(e.node), e.offset);
-
-  return range;
-}
-
-/**
- *
- * @param {Node} parent
- * @param {number} offset
- * @return {Object} - `{ node: Node, offset: number }`
- */
-function nodeFromTextOffset(parent, offset = 0) {
-  if (!parent) return;
-  // console.log('nodeFromTextOffset', parent, offset);
-
-  const iter = document.createNodeIterator(parent, NodeFilter.SHOW_TEXT);
-
-  let counter = -1;
-  let node;
-  let last;
-  // Find the start node (could we somehow skip this seemingly needless search?)
-  while (counter < offset && iter.nextNode()) {
-    node = iter.referenceNode;
-    if (node.nodeType === Node.TEXT_NODE) {
-      last = offset - counter - 1;
-      counter += node.textContent.length;
-    }
-  }
-  return { node: node, offset: last };
-}
-
-/**
- * Descendent-or-self until you get a `TextNode`
- *
- * @param {Node} node
- * @return {TextNode} - Or `undefined` if there are not text
- *                      children, e.g. `<br/>`
- */
-function childTextNodeOrSelf(node) {
-  if (!node) return;
-  if (!(node instanceof Node)) throw new TypeError(node.constructor.name);
-
-  if (Node.TEXT_NODE === node.nodeType) {
-    return node;
-  }
-  if (node.firstChild) {
-    return childTextNodeOrSelf(node.firstChild);
-  }
-  return undefined;
-}
-
 /**
  * BKDR Hash (modified version)
  *
@@ -1672,12 +1256,171 @@ ColorHash.prototype.hex = function(str) {
 
 var colorHash = ColorHash;
 
-function render$4(user) {
+function render$1(user, withLogout = false) {
   if (!user) return empty();
   const style = {
     backgroundColor: `rgba(${new colorHash().rgb(user).join(', ')}, 0.5)`
   };
-  return div(span({ className: 'user-color' }, { style }), span(user), button('Logout', { id: 'Logout', onclick: evt => console.log('logout') }));
+  return div({ className: 'user' }, span({ className: 'user-color' }, { style }), span(user), withLogout ? button('Logout', {
+    id: 'Logout',
+    onclick: evt => console.log('logout')
+  }) : empty());
+}
+
+// <https://jsfiddle.net/gabrieleromanato/qAGHT/>
+const _keyStr = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+
+function encode(input) {
+  var output = '';
+  var chr1, chr2, chr3, enc1, enc2, enc3, enc4;
+  var i = 0;
+
+  input = _utf8_encode(input);
+
+  while (i < input.length) {
+    chr1 = input.charCodeAt(i++);
+    chr2 = input.charCodeAt(i++);
+    chr3 = input.charCodeAt(i++);
+
+    enc1 = chr1 >> 2;
+    enc2 = (chr1 & 3) << 4 | chr2 >> 4;
+    enc3 = (chr2 & 15) << 2 | chr3 >> 6;
+    enc4 = chr3 & 63;
+
+    if (isNaN(chr2)) {
+      enc3 = enc4 = 64;
+    } else if (isNaN(chr3)) {
+      enc4 = 64;
+    }
+
+    output = output + _keyStr.charAt(enc1) + _keyStr.charAt(enc2) + _keyStr.charAt(enc3) + _keyStr.charAt(enc4);
+  }
+
+  return output;
+}
+
+
+
+function _utf8_encode(string) {
+  string = string.replace(/\r\n/g, '\n');
+  var utftext = '';
+
+  for (var n = 0; n < string.length; n++) {
+    var c = string.charCodeAt(n);
+
+    if (c < 128) {
+      utftext += String.fromCharCode(c);
+    } else if (c > 127 && c < 2048) {
+      utftext += String.fromCharCode(c >> 6 | 192);
+      utftext += String.fromCharCode(c & 63 | 128);
+    } else {
+      utftext += String.fromCharCode(c >> 12 | 224);
+      utftext += String.fromCharCode(c >> 6 & 63 | 128);
+      utftext += String.fromCharCode(c & 63 | 128);
+    }
+  }
+
+  return utftext;
+}
+
+function render$2(content, annotations, fileName, mime) {
+  if (content && content.length > 0) {
+    const href = `data:${mime};charset=utf-8;base64,${encode(serializeAnnotatedMarkdown(content, annotations))}`;
+    return a('Download', {
+      href,
+      download: decodeURIComponent(fileName.split('/').pop())
+    });
+  }
+  return empty();
+}
+
+function render(model, ui, dispatcher) {
+  return toFragment(h1(model.href, render$2(model.content, model.annotations, model.href, model.mime)), render$1(ui.user, true));
+}
+
+function lineProps(line) {
+  const props = {};
+
+  const listMatcher = /^(\s*)(\*|\-|\d+\.|>) /; // matches list items and quotes
+  const matches = line.match(listMatcher);
+  if (matches) {
+    const indent = matches[1].length + matches[2].length + 1;
+    props.style = _extends$1({}, props.style, {
+      paddingLeft: `${indent}ch`,
+      textIndent: `-${indent}ch`
+    });
+  }
+
+  const headingMatcher = /^#+ /;
+  if (line.match(headingMatcher)) {
+    // content.classList.add('heading');
+    props.classList = [...(props.classList || []), 'heading'];
+  }
+
+  const quoteMatcher = /^>+ /;
+  if (line.match(quoteMatcher)) {
+    // content.classList.add('quote');
+    props.classList = [...(props.classList || []), 'quote'];
+  }
+
+  return props;
+}
+/**
+ * Renders Markdown string as HTML table rows. Does not touch the live DOM.
+ *
+ * @param {string} md  - Markdown
+ * @returns {HTMLTableElement|DocumentFragment}
+ */
+function renderMarkdown(md) {
+  if (!md) return empty();
+
+  return table(tbody(md.split(/\n/).map((line, index) => tr(td('', { className: 'line-number', dataset: { line: index + 1 } }), td('' === line ? '\n' : line, { className: 'content' }, lineProps(line)), {
+    id: `L${index + 1}`,
+    className: 'line',
+    dataset: { line: index + 1 }
+  }))));
+}
+
+function render$3(model, ui, dispatch) {
+  if (model.content) {
+    document.title = `Annotating ${model.href}`;
+    return renderMarkdown(model.content);
+  }
+  // <input type="file" id="Upload" accept="text/markdown" />
+  return file({
+    id: 'Upload',
+    accept: 'text/markdown',
+    onchange: evt => {
+      const file$$1 = evt.target.files[0];
+      const reader = new FileReader();
+      reader.addEventListener('load', () => {
+        dispatch(documentLoad$1(parseAnnotatedMarkdown(reader.result), file$$1.name));
+      });
+      reader.readAsText(file$$1);
+    }
+  });
+}
+
+/**
+ * Converse of `serializeAnnotatedMarkdown()`.
+ *
+ * @param {string} rawMarkdown - a string of Markdown with an optional
+ *                               block of annotations serialized as JSON
+ * @return {Object} - `{ content: string, annotations: Array<Annotation*> }`
+ */
+function parseAnnotatedMarkdown(rawMarkdown) {
+  if (!rawMarkdown) return;
+  // const NAMESPACE = 'http://marklogic.com/annotations'.replace(/\//g, '\\/');
+  const matcher = /([\s\S]+)\n\n<!--- http:\/\/marklogic.com\/annotations\n\n([\s\S]+)\n\n--->([\s\S]*)/;
+  const matches = rawMarkdown.match(matcher);
+  if (null === matches) return { content: rawMarkdown, annotations: [] };
+  if (4 !== matches.length) {
+    throw new Error(matches.length);
+  }
+  return {
+    content: matches[1] + matches[3],
+    annotations: JSON.parse(matches[2])
+  };
 }
 
 function createCommonjsModule(fn, module) {
@@ -1928,6 +1671,226 @@ return highlightRange;
 }
 });
 
+let isInitialized = false;
+
+function render$6(position, selection, user, dispatch, getSelection) {
+  if (!isInitialized) {
+    initialize(dispatch, getSelection);
+    isInitialized = true;
+  }
+
+  const style = { position: 'absolute' };
+  if (position) {
+    style.display = 'unset';
+    style.top = `${position.y}px`;
+    style.left = `${position.x}px`;
+    restoreSelection(selection);
+  } else {
+    style.display = 'none';
+    style.top = `-100px`;
+    style.left = `-100px`;
+  }
+  const b = button('🖍', {
+    onclick: evt => dispatch(annotationCreate(user, getSelection()))
+  });
+  return div({ style, [onComponentDidMount]: () => b.focus() }, b);
+}
+
+function restoreSelection(range) {
+  if (!range) return;
+  const r = rangeFromOffsets(document.querySelector(`#L${range.start.line}>td.content`), range.start.column, document.querySelector(`#L${range.end.line}>td.content`), range.end.column);
+  const selection = window.getSelection();
+  selection.removeAllRanges();
+  selection.addRange(r);
+}
+
+function initialize(dispatch, getSelection) {
+  let isSelecting = false;
+
+  document.addEventListener('selectionchange', evt => {
+    isSelecting = !window.getSelection().isCollapsed;
+  });
+
+  document.addEventListener('mouseup', evt => {
+    // FIXME: UGLY!
+    if ('BUTTON' === evt.target.nodeName) {
+      evt.preventDefault();
+      return;
+    }
+    if (isSelecting) {
+      dispatch({
+        type: SELECTION_CHANGE,
+        selection: getRange(window.getSelection()),
+        position: { x: evt.pageX, y: evt.pageY }
+      });
+      isSelecting = false;
+    } else {
+      if (getSelection()) {
+        dispatch({ type: SELECTION_CANCEL });
+      }
+    }
+  });
+}
+
+/**
+ * The number of characters from the start of the parent node
+ * to the child node, flattening all intervening children,
+ * plus the offset in the child node.
+ *
+ * @example <div>ab<a>cd<a>ef</a>f</a>gh</div>
+ *          textOffsetFromNode(div, a[1], 1) // 5 = 'ab' + 'cd' + 1
+ *
+ * @param {Node} parent
+ * @param {Node} child
+ * @param {number} [childOffset = 0]
+ */
+function textOffsetFromNode(parent, child, childOffset = 0) {
+  if (!parent) return;
+  if (!child) return offset;
+  // console.log('textOffsetFromNode', parent, child, childOffset);
+  const iter = document.createNodeIterator(parent, NodeFilter.SHOW_TEXT);
+
+  let node;
+  let offset = 0;
+  while (iter.nextNode()) {
+    node = iter.referenceNode;
+    if (node === child) {
+      return offset + childOffset;
+    }
+    if (Node.TEXT_NODE === node.nodeType) {
+      offset += node.textContent.length;
+    }
+  }
+  throw new Error(`Couldn’t find ${String(child)} as a child of ${String(parent)}`);
+}
+
+/**
+ * Given a node, find its parent line number,
+ * delegating to `getLine()`.
+ *
+ * @param {Node} node
+ * @param {string} [matcher = 'tr.line']
+ * @return {number}
+ */
+function getLineNumber(node, matcher = 'tr.line') {
+  return parseInt(getLine(node, matcher).dataset.line, 10);
+}
+
+/**
+ * Given a node, find its parent line.
+ *
+ * @param {Node} node
+ * @param {string} [matcher = 'tr.line']
+ */
+function getLine(node, matcher = 'tr.line') {
+  do {
+    if (node.matches && node.matches(matcher)) {
+      return node;
+    }
+  } while (node = node.parentNode);
+  return undefined;
+}
+
+/**
+ * Given a `Selection`, determine the `Range`, where
+ * `start` is always before `end`, regardless
+ * from which direction the selection was made.
+ *
+ * @param {Selection} selection
+ * @returns {Object} - `{ start: number, end: number };
+ */
+function getRange(selection) {
+  if (!selection) return;
+  if (!(selection instanceof Selection)) throw new TypeError(String(selection.constructor.name));
+
+  const anchor = {
+    line: getLineNumber(selection.anchorNode),
+    column: textOffsetFromNode(getLine(selection.anchorNode), selection.anchorNode, selection.anchorOffset)
+  };
+  const focus = {
+    line: getLineNumber(selection.focusNode),
+    column: textOffsetFromNode(getLine(selection.focusNode), selection.focusNode, selection.focusOffset)
+  };
+  // console.log('getRange', anchor, focus);
+  if (anchor.line < focus.line || anchor.line === focus.line && anchor.column <= focus.column) {
+    return {
+      start: anchor,
+      end: focus
+    };
+  } else {
+    return {
+      start: focus,
+      end: anchor
+    };
+  }
+}
+
+/**
+ *
+ * @param {Node} parentStart
+ * @param {number} start
+ * @param {Node} parentEnd
+ * @param {number} end
+ * @return {Range}
+ */
+function rangeFromOffsets(parentStart, start = 0, parentEnd = parentStart, end = 0) {
+  // console.log('rangeFromOffsets', parentStart, start, parentEnd, end);
+  const range = document.createRange();
+  const s = nodeFromTextOffset(parentStart, start);
+  const e = nodeFromTextOffset(parentEnd, end);
+  // console.log('rangeFromOffsets#nodeFromTextOffset', s, e);
+  range.setStart(childTextNodeOrSelf(s.node), s.offset);
+  range.setEnd(childTextNodeOrSelf(e.node), e.offset);
+
+  return range;
+}
+
+/**
+ *
+ * @param {Node} parent
+ * @param {number} offset
+ * @return {Object} - `{ node: Node, offset: number }`
+ */
+function nodeFromTextOffset(parent, offset = 0) {
+  if (!parent) return;
+  // console.log('nodeFromTextOffset', parent, offset);
+
+  const iter = document.createNodeIterator(parent, NodeFilter.SHOW_TEXT);
+
+  let counter = -1;
+  let node;
+  let last;
+  // Find the start node (could we somehow skip this seemingly needless search?)
+  while (counter < offset && iter.nextNode()) {
+    node = iter.referenceNode;
+    if (node.nodeType === Node.TEXT_NODE) {
+      last = offset - counter - 1;
+      counter += node.textContent.length;
+    }
+  }
+  return { node: node, offset: last };
+}
+
+/**
+ * Descendent-or-self until you get a `TextNode`
+ *
+ * @param {Node} node
+ * @return {TextNode} - Or `undefined` if there are not text
+ *                      children, e.g. `<br/>`
+ */
+function childTextNodeOrSelf(node) {
+  if (!node) return;
+  if (!(node instanceof Node)) throw new TypeError(node.constructor.name);
+
+  if (Node.TEXT_NODE === node.nodeType) {
+    return node;
+  }
+  if (node.firstChild) {
+    return childTextNodeOrSelf(node.firstChild);
+  }
+  return undefined;
+}
+
 // TODO: Don’t depend on another component directly.
 //       Extract the common functions into a helper library.
 /**
@@ -1936,24 +1899,29 @@ return highlightRange;
  *
  * @param {Array<Annotation>} annotations
  * @param {function} dispatch
- * @return undefined
+ * @return {Array<{id:Node}>} - An array highlight nodes, keyed on annotation id
  */
-function render$5(annotations, dispatch) {
+function render$5(annotations, relativeY = 0, ui, dispatch) {
   // Highlight annotations. Requires that DOM is already committed above
-  for (const annotation of annotations) {
-    renderAnnotationHighlight(annotation,
-    // state.model.annotations.mine().some(a => annotation.id === a.id),
-    // state.ui.activeAnnotationID === annotation.id
-    false, false, dispatch);
-  }
+  return annotations.reduce((markers, annotation) => {
+    return _extends$1({}, markers, {
+      [annotation.id]: renderAnnotationHighlight(annotation,
+      // state.model.annotations.mine().some(a => annotation.id === a.id),
+      false, ui.activeAnnotationID === annotation.id, relativeY, dispatch)
+    });
+  }, {});
 }
 
-function renderAnnotationHighlight(annotation, isMine = false, isActive = false, dispatch) {
+function renderAnnotationHighlight(annotation, isMine = false, isActive = false, relativeY = 0, dispatch) {
   if (!annotation) return;
   const r = rangeFromOffsets(document.querySelector(`#L${annotation.range.start.line}>td.content`), annotation.range.start.column, document.querySelector(`#L${annotation.range.end.line}>td.content`), annotation.range.end.column);
+  let first;
   highlightRange_1(r, (node, index) => {
+    // FIXME: Fix this in highlight-range.js
+    index = parseInt(index, 10);
+
     const mark = document.createElement('mark');
-    mark.classList.add('annotation');
+    mark.classList.add('annotation-highlight');
     mark.dataset.annotationId = annotation.id;
     if (isMine) {
       mark.classList.add('mine');
@@ -1965,9 +1933,182 @@ function renderAnnotationHighlight(annotation, isMine = false, isActive = false,
     mark.onclick = evt => {
       dispatch(annotationSelect(evt.target.dataset.annotationId));
     };
+    if (0 === index) first = mark;
     return mark;
   });
+  // The offset from the container
+  return first.getBoundingClientRect().y - relativeY;
 }
+
+/**
+ *
+ * @param {Annotation} annotation
+ * @param {boolean} isEditing
+ * @param {string} user
+ * @param {function} dispatch
+ * @return {HTMLElement}
+ */
+function render$7(annotation, isActive = false, isEditing = false, user, markers, dispatch) {
+  if (!annotation) return empty();
+
+  const props = {
+    classList: ['annotation-detail', isActive ? 'active' : undefined],
+    dataset: { annotationId: annotation.id },
+    style: { top: `${markers[annotation.id]}px` },
+    tabIndex: 0,
+    onclick: evt => {
+      if (!isActive) {
+        dispatch(annotationSelect(evt.currentTarget.dataset.annotationId));
+      }
+    }
+  };
+  const comm = { className: 'annotation-comment' };
+  const commentText = div(comm, toFormattedNodes(trim(annotation.comment)));
+  if (isActive) {
+    const commentEl = textarea(comm, annotation.comment || '', {
+      oninput: evt => console.log('textarea#input')
+    });
+
+    return div(props, div({ className: 'annotation-toolbar' }, render$1(annotation.user), EditAffordance(annotation, isEditing, user, {
+      dispatch,
+      getComment: () => commentEl.value
+    })), div({ className: 'annotation-editor' }, isEditing ? commentEl : commentText, div(formatTimestamp(annotation.timestamp), {
+      className: 'annotation-timestamp',
+      dataset: { timestamp: annotation.timestamp }
+    })), {
+      [onComponentDidMount]: () => {
+        commentEl.focus();
+      }
+    });
+  } else {
+    return div(props, { classList: 'collapsed' }, render$1(annotation.user), commentText);
+  }
+}
+
+function removeLast(arr) {
+  if (Array.isArray(arr)) {
+    const a$$1 = Array.from(arr);
+    a$$1.splice(-1, 1);
+    return a$$1;
+  }
+  return arr;
+}
+
+function toFormattedNodes(str) {
+  if ('string' === typeof str) {
+    return removeLast(str.split(/\n/).reduce((acc, item, index) => [...acc, item, br()], []));
+  }
+  return str;
+}
+
+function trim(str, length = 100, trailer = '…') {
+  if ('string' === typeof str) {
+    if (str.length > length) {
+      return str.substr(0, length) + trailer;
+    }
+  }
+  return str;
+}
+
+function formatTimestamp(timestamp) {
+  if (!timestamp) return timestamp;
+  if ('string' === typeof timestamp) timestamp = new Date(timestamp);
+  return timestamp.toLocaleString();
+}
+
+// function isCallable(f) {
+//   if (!f) return false;
+//   return 'function' === typeof f.call && 'function' === typeof f.apply;
+// }
+
+// function iif(bool, t, f) {
+//   if (bool) {
+//     return isCallable(t) ? t() : t;
+//   }
+//   return isCallable(f) ? f() : f;
+// }
+
+function EditAffordance(annotation, isEditing, user, { dispatch, getComment }) {
+  return div(annotation.user === user && !isEditing ? button('Edit', {
+    onclick: evt => {
+      dispatch(editActiveAnnotation());
+      // evt.stopPropagation();
+    }
+  }) : empty(), isEditing ? [button('Save', {
+    onclick: evt => dispatch(saveAnnotation(annotation.id, getComment()))
+  }), button('Cancel', {
+    onclick: evt => dispatch(cancelEditActiveAnnotation())
+  })] : empty(), { className: 'controls' });
+}
+
+function render$4(state, relativeY = 0, dispatcher) {
+  const annotationNodes = render$5(state.model.annotations, relativeY, state.ui, dispatcher);
+  const annotationEls = state.model.annotations.map(annotation => render$7(annotation, //annotationByID(state, state.ui.activeAnnotationID),
+  annotation.id === state.ui.activeAnnotationID, state.ui.isEditing, state.ui.user, annotationNodes, dispatcher // https://github.com/reactjs/redux/blob/628928e3108df9725f07689e3785b5a2a226baa8/src/bindActionCreators.js#L26
+  ));
+  return toFragment(annotationEls, {
+    [onComponentDidMount]: () => {
+      distributeVerically(annotationEls);
+    }
+  });
+}
+
+// <https://stackoverflow.com/a/23892252/563324>
+function getPosition(el) {
+  let x = 0,
+      y = 0;
+  while (el) {
+    x += el.offsetLeft - el.scrollLeft + el.clientLeft;
+    y += el.offsetTop - el.scrollTop + el.clientTop;
+    el = el.offsetParent;
+  }
+  return { x: x, y: y };
+}
+function getBottom(el) {
+  return getPosition(el).y + el.offsetHeight;
+}
+
+function distributeVerically(items, nudge = -8.5) {
+  Array.from(items).reduce((prevY, item, index) => {
+    const MAGIC = 44;
+    item.style.top = Math.max(prevY - MAGIC, parseInt(item.style.top, 10)) + nudge + 'px';
+    // console.log('distributeVerically', item, {
+    //   prevY,
+    //   currentStyleTop: parseInt(item.style.top, 10),
+    //   getBottom: getBottom(item),
+    // });
+    // return Math.max(parseInt(item.style.top, 10), getBottom(item)) + nudge;
+    return getBottom(item);
+  }, 0);
+}
+
+/*
+// <https://jsfiddle.net/qubo7ajo/3/>
+const items = distributeVerically(document.querySelectorAll('.item'));
+
+Array.from(document.querySelectorAll('.item')).forEach(item => {
+  const div = document.createElement('div');
+  div.textContent = String(item.style.top);
+  div.style.position = 'absolute';
+  div.style.top = '0';
+  div.style.right = '0';
+  div.style.background = 'red';
+  div.style.padding = '0.25em';
+  item.appendChild(div);
+});
+
+function distributeVerically(items) {
+  function getBottom(el) {
+    const y = el.getBoundingClientRect().y;
+    const h = el.getBoundingClientRect().height;
+    return y + h;
+  }
+  Array.from(items).reduce((prevY, item) => {
+    item.style.top = Math.max(prevY, parseInt(item.style.top, 10)) + 'px';
+    return getBottom(item);
+  }, 0);
+}
+*/
 
 const logger = store => next => action => {
   console.log('Dispatching', action);
@@ -1978,12 +2119,11 @@ const logger = store => next => action => {
 const store = createStore(reducer, applyMiddleware(thunk, logger));
 
 document.addEventListener('DOMContentLoaded', evt => {
-  const Document = renderInto(document.querySelector('#Content'), render);
-
-  const AnnotationDetail = renderInto(document.querySelector('#AnnotationDetail'), render$2);
-
-  const Selection = renderInto(document.querySelector('#SelectAnnotation'), render$3);
-  const User = renderInto(document.querySelector('#User'), render$4);
+  const Header = renderInto(render, 'header');
+  const Document = renderInto(render$3, '#Content');
+  const Annotations = renderInto(render$4, '#Annotations');
+  // const AnnotationDetail = renderInto(_AnnotationDetail, '#AnnotationDetail');
+  const Selection = renderInto(render$6, '#SelectAnnotation');
 
   store.subscribe(render$$1);
   const dispatcher = store.dispatch.bind(store);
@@ -1996,11 +2136,10 @@ document.addEventListener('DOMContentLoaded', evt => {
   function render$$1() /**/{
     const state = store.getState();
     console.time('render');
+    Header(state.model, state.ui, dispatcher);
     Document(state.model, state.ui, dispatcher);
-    User(state.ui.user);
-    render$5(state.model.annotations, dispatcher);
-    AnnotationDetail(annotationByID(state, state.ui.activeAnnotationID), state.ui.isEditing, state.ui.user, dispatcher // https://github.com/reactjs/redux/blob/628928e3108df9725f07689e3785b5a2a226baa8/src/bindActionCreators.js#L26
-    );
+    Annotations(state, document.querySelector('#Content').getBoundingClientRect().y, dispatcher);
+
     Selection(state.ui.position, state.ui.selection, state.ui.user, dispatcher, () => store.getState().ui.selection);
 
     console.timeEnd('render');
@@ -2009,13 +2148,14 @@ document.addEventListener('DOMContentLoaded', evt => {
 
 /**
  *
- * @param {Node} parent
  * @param {function} renderer
+ * @param {HTMLElement|string} [parent = document.body]
  * @return {function} - a function with the same signature as `renderer`
  */
-function renderInto(parent, renderer) {
-  if (!(parent instanceof HTMLElement)) throw new ReferenceError();
+function renderInto(renderer, parent = document.body) {
   if ('function' !== typeof renderer) throw new TypeError();
+  if ('string' === typeof parent) parent = document.querySelector(parent);
+  if (!(parent instanceof HTMLElement)) throw new ReferenceError();
 
   /**
    * Holds a reference to a parent `Node` into which to render the
@@ -2025,7 +2165,7 @@ function renderInto(parent, renderer) {
   return function (...args) {
     const tree = renderer(...args);
     ref = replaceChildren(ref, tree);
-    if (tree[onComponentDidMount]) {
+    if (tree && tree[onComponentDidMount]) {
       tree[onComponentDidMount]();
       // FIXME: Does this eliminate the possibility of a memory
       //        leak with DOM expando properties?

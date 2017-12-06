@@ -1,4 +1,11 @@
+html {
+  margin: 0;
+  padding: 0;
+}
 body {
+  margin: 3.5em 0 0 0; /* The vertical annotation layout depends on this */
+  padding: 0;
+
   font-family: 'Helvetica Neue', Helvetica, sans-serif;
   font-size: 10pt;
   line-height: 1.55;
@@ -6,11 +13,102 @@ body {
 pre {
   margin: 0;
 }
-h1 {
+header {
+  position: fixed;
+  z-index: 100;
+  top: 0;
+  left: 0;
+
+  display: flex;
+
+  box-sizing: border-box;
+  width: 100%;
+  padding: 0.5em;
+
+  color: #fff;
+
+  background-color: #333;
+
+  justify-content: space-between;
+}
+header h1 {
   margin: 0;
 
-  line-height: 1.1;
+  font-size: inherit;
 }
+header > h1 > a {
+  display: inline-block;
+
+  margin-left: 1em;
+
+  color: #ccc;
+  font-weight: normal;
+}
+main {
+  display: flex;
+
+  max-width: 11in;
+  margin: 0 auto;
+
+  align-items: stretch;
+}
+#Content {
+  max-width: 8.5in;
+
+  flex: initial;
+}
+#Annotations {
+  position: relative;
+
+  box-sizing: border-box;
+  min-width: 32em;
+  margin-left: 1.5em;
+  padding: 0.5em;
+  padding-left: 1em;
+
+  border-left: solid 1px #ccc;
+
+  background: #efefef;
+}
+#Annotations .annotation-detail {
+  position: absolute;
+  right: 0;
+  left: 0;
+
+  box-sizing: border-box;
+  padding: 0.5em 1em;
+}
+#Annotations .annotation-detail.active {
+  background: #dfdfdf;
+}
+
+#Annotations .annotation-detail .annotation-toolbar {
+  display: flex;
+
+  margin-bottom: 0.5em;
+
+  justify-content: space-between;
+}
+
+
+#Annotations .annotation-detail .annotation-comment {
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0.5em 0;
+}
+#Annotations .annotation-detail textarea {
+  min-height: 8em;
+  padding: 0.25em;
+
+  font-family: inherit;
+  font-size: inherit;
+}
+#Annotations .annotation-detail .annotation-timestamp {
+  color: #999;
+  font-size: 80%;
+  line-height: 1;
+}
+
 #Content table {
   max-width: 8.5in;
 
@@ -23,16 +121,11 @@ h1 {
   padding: 0.1em 0.25em;
   padding-left: 0;
 
-  border-bottom: solid 0.5px #eee;
-
   vertical-align: top;
   white-space: pre-wrap;
 }
 .line td.content {
   border-right: solid 4px transparent;
-}
-.line.has-annotation td.content {
-  border-right: solid 4px rgba(255, 255, 0, 0.5);
 }
 .line-number {
   min-width: 3em;
@@ -50,7 +143,9 @@ h1 {
 .line-number:before {
   content: attr(data-line) '.';
 }
-
+.annotation-highlight.active {
+  box-shadow: 5px 5px 10px 0 rgba(0,0,0,0.5);
+}
 #SelectAnnotation > div {
   padding: 0.25em;
 
@@ -60,16 +155,17 @@ h1 {
 
   background: white;
 }
-
-
+mark {
+  cursor: pointer;
+}
 .user-color {
   display: inline-block;
 
   width: 1em;
   height: 1em;
-  margin-right: 0.25em;
+  margin-right: 0.5em;
 
   border-radius: 1em;
 
-  vertical-align: baseline;
+  vertical-align: middle;
 }
