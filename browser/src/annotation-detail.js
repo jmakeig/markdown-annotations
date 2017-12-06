@@ -46,17 +46,20 @@ export default function render(
 
     return div(
       props,
-      User(annotation.user),
+      div(
+        { className: 'annotation-toolbar' },
+        User(annotation.user),
+        EditAffordance(annotation, isEditing, user, {
+          dispatch,
+          getComment: () => commentEl.value,
+        })
+      ),
       div(
         { className: 'annotation-editor' },
         isEditing ? commentEl : commentText,
         div(formatTimestamp(annotation.timestamp), {
           className: 'annotation-timestamp',
           dataset: { timestamp: annotation.timestamp },
-        }),
-        renderEditAffordance(annotation, isEditing, user, {
-          dispatch,
-          getComment: () => commentEl.value,
         })
       ),
       {
@@ -120,14 +123,9 @@ function formatTimestamp(timestamp) {
 //   return isCallable(f) ? f() : f;
 // }
 
-function renderEditAffordance(
-  annotation,
-  isEditing,
-  user,
-  { dispatch, getComment }
-) {
+function EditAffordance(annotation, isEditing, user, { dispatch, getComment }) {
   return div(
-    annotation.user === user
+    annotation.user === user && !isEditing
       ? button('Edit', {
           onclick: evt => {
             dispatch(editActiveAnnotation());

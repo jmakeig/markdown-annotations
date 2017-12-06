@@ -1969,12 +1969,12 @@ function render$7(annotation, isActive = false, isEditing = false, user, markers
       oninput: evt => console.log('textarea#input')
     });
 
-    return div(props, render$1(annotation.user), div({ className: 'annotation-editor' }, isEditing ? commentEl : commentText, div(formatTimestamp(annotation.timestamp), {
-      className: 'annotation-timestamp',
-      dataset: { timestamp: annotation.timestamp }
-    }), renderEditAffordance(annotation, isEditing, user, {
+    return div(props, div({ className: 'annotation-toolbar' }, render$1(annotation.user), EditAffordance(annotation, isEditing, user, {
       dispatch,
       getComment: () => commentEl.value
+    })), div({ className: 'annotation-editor' }, isEditing ? commentEl : commentText, div(formatTimestamp(annotation.timestamp), {
+      className: 'annotation-timestamp',
+      dataset: { timestamp: annotation.timestamp }
     })), {
       [onComponentDidMount]: () => {
         commentEl.focus();
@@ -2028,8 +2028,8 @@ function formatTimestamp(timestamp) {
 //   return isCallable(f) ? f() : f;
 // }
 
-function renderEditAffordance(annotation, isEditing, user, { dispatch, getComment }) {
-  return div(annotation.user === user ? button('Edit', {
+function EditAffordance(annotation, isEditing, user, { dispatch, getComment }) {
+  return div(annotation.user === user && !isEditing ? button('Edit', {
     onclick: evt => {
       dispatch(editActiveAnnotation());
       // evt.stopPropagation();
