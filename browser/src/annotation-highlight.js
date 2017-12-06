@@ -13,7 +13,7 @@ import { rangeFromOffsets } from './selection.js';
  * @param {function} dispatch
  * @return {Array<{id:Node}>} - An array highlight nodes, keyed on annotation id
  */
-export default function render(annotations, relativeY = 0, dispatch) {
+export default function render(annotations, relativeY = 0, ui, dispatch) {
   // Highlight annotations. Requires that DOM is already committed above
   return annotations.reduce((markers, annotation) => {
     return {
@@ -21,9 +21,8 @@ export default function render(annotations, relativeY = 0, dispatch) {
       [annotation.id]: renderAnnotationHighlight(
         annotation,
         // state.model.annotations.mine().some(a => annotation.id === a.id),
-        // state.ui.activeAnnotationID === annotation.id
         false,
-        false,
+        ui.activeAnnotationID === annotation.id,
         relativeY,
         dispatch
       ),
@@ -51,7 +50,7 @@ function renderAnnotationHighlight(
     index = parseInt(index, 10);
 
     const mark = document.createElement('mark');
-    mark.classList.add('annotation');
+    mark.classList.add('annotation-highlight');
     mark.dataset.annotationId = annotation.id;
     if (isMine) {
       mark.classList.add('mine');

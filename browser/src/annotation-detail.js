@@ -4,6 +4,7 @@ import {
   editActiveAnnotation,
   cancelEditActiveAnnotation,
   saveAnnotation,
+  annotationSelect,
 } from './actions.js';
 import { default as User } from './user.js';
 
@@ -26,9 +27,15 @@ export default function render(
   if (!annotation) return empty();
 
   const props = {
-    className: 'annotation-detail',
-    dataset: { annotationID: annotation.id },
+    classList: ['annotation-detail', isActive ? 'active' : undefined],
+    dataset: { annotationId: annotation.id },
     style: { top: `${markers[annotation.id]}px` },
+    tabIndex: 0,
+    onclick: evt => {
+      if (!isActive) {
+        dispatch(annotationSelect(evt.currentTarget.dataset.annotationId));
+      }
+    },
   };
 
   if (isActive) {
@@ -40,17 +47,20 @@ export default function render(
     return div(
       props,
       User(annotation.user),
-      isEditing
-        ? commentEl
-        : div(comm, annotation.comment, { id: 'AnnotationComment' }),
-      div(formatTimestamp(annotation.timestamp), {
-        className: 'annotation-timestamp',
-        dataset: { timestamp: annotation.timestamp },
-      }),
-      renderEditAffordance(annotation, isEditing, user, {
-        dispatch,
-        getComment: () => commentEl.value,
-      }),
+      div(
+        { className: 'annotation-editor' },
+        isEditing
+          ? commentEl
+          : div(comm, annotation.comment, { id: 'AnnotationComment' }),
+        div(formatTimestamp(annotation.timestamp), {
+          className: 'annotation-timestamp',
+          dataset: { timestamp: annotation.timestamp },
+        }),
+        renderEditAffordance(annotation, isEditing, user, {
+          dispatch,
+          getComment: () => commentEl.value,
+        })
+      ),
       {
         [onComponentDidMount]: () => {
           commentEl.focus();
@@ -89,7 +99,10 @@ function renderEditAffordance(
   return div(
     annotation.user === user
       ? button('Edit', {
-          onclick: evt => dispatch(editActiveAnnotation()),
+          onclick: evt => {
+            dispatch(editActiveAnnotation());
+            // evt.stopPropagation();
+          },
         })
       : empty(),
     isEditing

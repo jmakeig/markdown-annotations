@@ -8,6 +8,7 @@ export default function render(state, relativeY = 0, dispatcher) {
   const annotationNodes = AnnotationHighlights(
     state.model.annotations,
     relativeY,
+    state.ui,
     dispatcher
   );
   const annotationEls = state.model.annotations.map(annotation =>
@@ -42,17 +43,18 @@ function getBottom(el) {
   return getPosition(el).y + el.offsetHeight;
 }
 
-function distributeVerically(items) {
+function distributeVerically(items, nudge = -8.5) {
   Array.from(items).reduce((prevY, item, index) => {
     const MAGIC = 44;
     item.style.top =
-      Math.max(prevY - MAGIC, parseInt(item.style.top, 10)) + 'px';
-    console.log('distributeVerically', item, {
-      prevY,
-      currentStyleTop: parseInt(item.style.top, 10),
-      getBottom: getBottom(item),
-    });
-    return Math.max(parseInt(item.style.top, 10), getBottom(item));
+      Math.max(prevY - MAGIC, parseInt(item.style.top, 10)) + nudge + 'px';
+    // console.log('distributeVerically', item, {
+    //   prevY,
+    //   currentStyleTop: parseInt(item.style.top, 10),
+    //   getBottom: getBottom(item),
+    // });
+    // return Math.max(parseInt(item.style.top, 10), getBottom(item)) + nudge;
+    return getBottom(item);
   }, 0);
 }
 

@@ -1,5 +1,10 @@
+html {
+  margin: 0;
+  padding: 0;
+}
 body {
-  margin: 3.5em 1em 1em 1em;
+  margin: 3.5em 0 0 0;
+  padding: 0;
 
   font-family: 'Helvetica Neue', Helvetica, sans-serif;
   font-size: 10pt;
@@ -62,30 +67,41 @@ main {
 }
 #Annotations .annotation-detail {
   position: absolute;
-  right: 0.75em;
-  left: 1em;
+  right: 0;
+  left: 0;
 
   box-sizing: border-box;
+  padding: 0.5em 1em;
 }
-#Annotations .annotation-detail textarea {
+#Annotations .annotation-detail.active {
+  background: #eee;
+}
+#Annotations .annotation-detail .user,
+#Annotations .annotation-detail .controls {
+  /**/
+}
+#Annotations .annotation-detail .user {
+  /**/
+}
+#Annotations .annotation-detail .annotation-comment {
   box-sizing: border-box;
   width: 100%;
   margin: 0.5em 0;
-  margin-right: 0.5em;
+}
+#Annotations .annotation-detail textarea {
+  min-height: 8em;
   padding: 0.25em;
 
   font-family: inherit;
   font-size: inherit;
 }
 #Annotations .annotation-detail .annotation-timestamp {
-  margin: 0.25em 0;
+  margin-bottom: 1em;
 
   color: #999;
-  font-size: 85%;
+  font-size: 80%;
 }
-#Annotations .annotation-detail .annotation-comment {
-  margin: 0.5em 0;
-}
+
 #Content table {
   max-width: 8.5in;
 
@@ -98,16 +114,11 @@ main {
   padding: 0.1em 0.25em;
   padding-left: 0;
 
-  border-bottom: solid 0.5px #eee;
-
   vertical-align: top;
   white-space: pre-wrap;
 }
 .line td.content {
   border-right: solid 4px transparent;
-}
-.line.has-annotation td.content {
-  border-right: solid 4px rgba(255, 255, 0, 0.5);
 }
 .line-number {
   min-width: 3em;
@@ -125,7 +136,9 @@ main {
 .line-number:before {
   content: attr(data-line) '.';
 }
-
+.annotation-highlight.active {
+  box-shadow: 5px 5px 10px 0 rgba(0,0,0,0.5);
+}
 #SelectAnnotation > div {
   padding: 0.25em;
 

@@ -1898,14 +1898,13 @@ function childTextNodeOrSelf(node) {
  * @param {function} dispatch
  * @return {Array<{id:Node}>} - An array highlight nodes, keyed on annotation id
  */
-function render$5(annotations, relativeY = 0, dispatch) {
+function render$5(annotations, relativeY = 0, ui, dispatch) {
   // Highlight annotations. Requires that DOM is already committed above
   return annotations.reduce((markers, annotation) => {
     return _extends$1({}, markers, {
       [annotation.id]: renderAnnotationHighlight(annotation,
       // state.model.annotations.mine().some(a => annotation.id === a.id),
-      // state.ui.activeAnnotationID === annotation.id
-      false, false, relativeY, dispatch)
+      false, ui.activeAnnotationID === annotation.id, relativeY, dispatch)
     });
   }, {});
 }
@@ -1919,7 +1918,7 @@ function renderAnnotationHighlight(annotation, isMine = false, isActive = false,
     index = parseInt(index, 10);
 
     const mark = document.createElement('mark');
-    mark.classList.add('annotation');
+    mark.classList.add('annotation-highlight');
     mark.dataset.annotationId = annotation.id;
     if (isMine) {
       mark.classList.add('mine');
@@ -1950,9 +1949,15 @@ function render$7(annotation, isActive = false, isEditing = false, user, markers
   if (!annotation) return empty();
 
   const props = {
-    className: 'annotation-detail',
-    dataset: { annotationID: annotation.id },
-    style: { top: `${markers[annotation.id]}px` }
+    classList: ['annotation-detail', isActive ? 'active' : undefined],
+    dataset: { annotationId: annotation.id },
+    style: { top: `${markers[annotation.id]}px` },
+    tabIndex: 0,
+    onclick: evt => {
+      if (!isActive) {
+        dispatch(annotationSelect(evt.currentTarget.dataset.annotationId));
+      }
+    }
   };
 
   if (isActive) {
@@ -1961,13 +1966,13 @@ function render$7(annotation, isActive = false, isEditing = false, user, markers
       oninput: evt => console.log('textarea#input')
     });
 
-    return div(props, render$1(annotation.user), isEditing ? commentEl : div(comm, annotation.comment, { id: 'AnnotationComment' }), div(formatTimestamp(annotation.timestamp), {
+    return div(props, render$1(annotation.user), div({ className: 'annotation-editor' }, isEditing ? commentEl : div(comm, annotation.comment, { id: 'AnnotationComment' }), div(formatTimestamp(annotation.timestamp), {
       className: 'annotation-timestamp',
       dataset: { timestamp: annotation.timestamp }
     }), renderEditAffordance(annotation, isEditing, user, {
       dispatch,
       getComment: () => commentEl.value
-    }), {
+    })), {
       [onComponentDidMount]: () => {
         commentEl.focus();
       }
@@ -1997,7 +2002,10 @@ function formatTimestamp(timestamp) {
 
 function renderEditAffordance(annotation, isEditing, user, { dispatch, getComment }) {
   return div(annotation.user === user ? button('Edit', {
-    onclick: evt => dispatch(editActiveAnnotation())
+    onclick: evt => {
+      dispatch(editActiveAnnotation());
+      // evt.stopPropagation();
+    }
   }) : empty(), isEditing ? [button('Save', {
     onclick: evt => dispatch(saveAnnotation(annotation.id, getComment()))
   }), button('Cancel', {
@@ -2006,7 +2014,7 @@ function renderEditAffordance(annotation, isEditing, user, { dispatch, getCommen
 }
 
 function render$4(state, relativeY = 0, dispatcher) {
-  const annotationNodes = render$5(state.model.annotations, relativeY, dispatcher);
+  const annotationNodes = render$5(state.model.annotations, relativeY, state.ui, dispatcher);
   const annotationEls = state.model.annotations.map(annotation => render$7(annotation, //annotationByID(state, state.ui.activeAnnotationID),
   annotation.id === state.ui.activeAnnotationID, state.ui.isEditing, state.ui.user, annotationNodes, dispatcher // https://github.com/reactjs/redux/blob/628928e3108df9725f07689e3785b5a2a226baa8/src/bindActionCreators.js#L26
   ));
@@ -2032,16 +2040,17 @@ function getBottom(el) {
   return getPosition(el).y + el.offsetHeight;
 }
 
-function distributeVerically(items) {
+function distributeVerically(items, nudge = -8.5) {
   Array.from(items).reduce((prevY, item, index) => {
     const MAGIC = 44;
-    item.style.top = Math.max(prevY - MAGIC, parseInt(item.style.top, 10)) + 'px';
-    console.log('distributeVerically', item, {
-      prevY,
-      currentStyleTop: parseInt(item.style.top, 10),
-      getBottom: getBottom(item)
-    });
-    return Math.max(parseInt(item.style.top, 10), getBottom(item));
+    item.style.top = Math.max(prevY - MAGIC, parseInt(item.style.top, 10)) + nudge + 'px';
+    // console.log('distributeVerically', item, {
+    //   prevY,
+    //   currentStyleTop: parseInt(item.style.top, 10),
+    //   getBottom: getBottom(item),
+    // });
+    // return Math.max(parseInt(item.style.top, 10), getBottom(item)) + nudge;
+    return getBottom(item);
   }, 0);
 }
 
