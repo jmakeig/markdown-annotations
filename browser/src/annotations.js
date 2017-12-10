@@ -23,65 +23,22 @@ export default function render(state, relativeY = 0, dispatcher) {
   );
   return toFragment(annotationEls, {
     [onComponentDidMount]: () => {
-      distributeVerically(annotationEls);
+      distributeVerically(annotationEls, 10, -8);
     },
   });
 }
 
-// <https://stackoverflow.com/a/23892252/563324>
-function getPosition(el) {
-  let x = 0,
-    y = 0;
-  while (el) {
-    x += el.offsetLeft - el.scrollLeft + el.clientLeft;
-    y += el.offsetTop - el.scrollTop + el.clientTop;
-    el = el.offsetParent;
-  }
-  return { x: x, y: y };
-}
-function getBottom(el) {
-  return getPosition(el).y + el.offsetHeight;
-}
-
-function distributeVerically(items, nudge = -8.5) {
-  Array.from(items).reduce((prevY, item, index) => {
-    const MAGIC = 44;
-    item.style.top =
-      Math.max(prevY - MAGIC, parseInt(item.style.top, 10)) + nudge + 'px';
-    // console.log('distributeVerically', item, {
-    //   prevY,
-    //   currentStyleTop: parseInt(item.style.top, 10),
-    //   getBottom: getBottom(item),
-    // });
-    // return Math.max(parseInt(item.style.top, 10), getBottom(item)) + nudge;
-    return getBottom(item);
-  }, 0);
-}
-
-/*
-// <https://jsfiddle.net/qubo7ajo/3/>
-const items = distributeVerically(document.querySelectorAll('.item'));
-
-Array.from(document.querySelectorAll('.item')).forEach(item => {
-  const div = document.createElement('div');
-  div.textContent = String(item.style.top);
-  div.style.position = 'absolute';
-  div.style.top = '0';
-  div.style.right = '0';
-  div.style.background = 'red';
-  div.style.padding = '0.25em';
-  item.appendChild(div);
-});
-
-function distributeVerically(items) {
-  function getBottom(el) {
-    const y = el.getBoundingClientRect().y;
-    const h = el.getBoundingClientRect().height;
-    return y + h;
-  }
+/**
+ * Distribute items vertically within a positioned conainer.
+ *
+ * @param {Iteralbe<HTMLElement>} items - the elements to reposition
+ * @param {number} [spacing = 0] - the number of pixels separating repositioned items
+ * @param {number} [nudge = 0] - the number of pixels to adjust *every* item, whether repositioned or not
+ */
+function distributeVerically(items, spacing = 0, nudge = 0) {
   Array.from(items).reduce((prevY, item) => {
-    item.style.top = Math.max(prevY, parseInt(item.style.top, 10)) + 'px';
-    return getBottom(item);
+    const top = Math.max(prevY, parseInt(item.style.top, 10)) + nudge;
+    item.style.top = `${top}px`;
+    return item.offsetTop - item.scrollTop + item.offsetHeight + spacing;
   }, 0);
 }
-*/
