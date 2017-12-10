@@ -6,7 +6,8 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "rollup -c",
-    "watch": "rollup -c --watch"
+    "watch": "rollup -c --watch",
+    "pages": "rsync -aP --exclude=src ./browser/* ../markdown-annotations-PAGES/"
   },
   "author": "Justin Makeig <jmpublic+github@makeig.com> (https://github.com/jmakeig)",
   "license": "UNLICENSED",
