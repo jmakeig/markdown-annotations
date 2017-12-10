@@ -11,7 +11,7 @@ import {
   ANNOTATION_SAVE_RECEIPT,
 } from './actions.js';
 
-import { upsertAnnotation } from './selectors.js';
+import { upsertAnnotation, removeUnsavedAnnotations } from './selectors.js';
 
 const { create, assign } = Object;
 
@@ -73,7 +73,7 @@ export function reducer(state = INITIAL_STATE, action) {
       delete ui.position;
       delete ui.selection;
       return {
-        ...upsertAnnotation(state, action.annotation),
+        ...upsertAnnotation(state, action.annotation, null),
         ui,
       };
     }
@@ -97,7 +97,6 @@ export function reducer(state = INITIAL_STATE, action) {
         },
       };
     case ANNOTATION_EDIT_BEGIN:
-    case ANNOTATION_EDIT_CANCEL:
       return {
         ...state,
         ui: {
@@ -105,8 +104,16 @@ export function reducer(state = INITIAL_STATE, action) {
           isEditing: action.isEditing,
         },
       };
+    case ANNOTATION_EDIT_CANCEL:
+      return {
+        ...removeUnsavedAnnotations(state),
+        ui: {
+          ...state.ui,
+          isEditing: action.isEditing,
+        },
+      };
     case ANNOTATION_SAVE_RECEIPT:
-      return upsertAnnotation(state, action.annotation);
+      return upsertAnnotation(state, action.annotation, action.timestamp);
     default:
       return state;
   }

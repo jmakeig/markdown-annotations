@@ -17,7 +17,7 @@ export function isMyAnnotation(state, id) {
     a => id === a.id && state.ui.user === a.user
   );
 }
-export function upsertAnnotation(state, annotation) {
+export function upsertAnnotation(state, annotation, timestamp) {
   if (!annotation) throw new ReferenceError(`Missing annotation`);
   if (!annotation.id) throw new ReferenceError(`Missing annotation.id`);
 
@@ -29,7 +29,7 @@ export function upsertAnnotation(state, annotation) {
   }
   arr.push({
     ...annotation,
-    timestamp: new Date().toISOString(),
+    timestamp: timestamp,
     isDirty: undefined,
   });
 
@@ -55,6 +55,23 @@ export function deleteAnnotation(state, id) {
     arr.splice(existingIndex, 1);
   }
   return arr;
+}
+
+/**
+ * Copy the state, removing any unsaved annotations, i.e. those
+ * without a timestamp.
+ *
+ * @param {Object} state - the whole state
+ * @return {Object} - a new copy of the whole state
+ */
+export function removeUnsavedAnnotations(state) {
+  return {
+    ...state,
+    model: {
+      ...state.model,
+      annotations: state.model.annotations.filter(a => a.timestamp),
+    },
+  };
 }
 
 /**

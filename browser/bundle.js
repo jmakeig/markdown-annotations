@@ -840,7 +840,7 @@ function annotationByID(state, id) {
 function isMyAnnotation(state, id) {
   return state.model.annotations.some(a => id === a.id && state.ui.user === a.user);
 }
-function upsertAnnotation(state, annotation) {
+function upsertAnnotation(state, annotation, timestamp) {
   if (!annotation) throw new ReferenceError(`Missing annotation`);
   if (!annotation.id) throw new ReferenceError(`Missing annotation.id`);
 
@@ -851,7 +851,7 @@ function upsertAnnotation(state, annotation) {
     arr.splice(existingIndex, 1);
   }
   arr.push(_extends$1({}, annotation, {
-    timestamp: new Date().toISOString(),
+    timestamp: timestamp,
     isDirty: undefined
   }));
 
@@ -869,6 +869,21 @@ function upsertAnnotation(state, annotation) {
   });
 }
 
+
+/**
+ * Copy the state, removing any unsaved annotations, i.e. those
+ * without a timestamp.
+ *
+ * @param {Object} state - the whole state
+ * @return {Object} - a new copy of the whole state
+ */
+function removeUnsavedAnnotations(state) {
+  return _extends$1({}, state, {
+    model: _extends$1({}, state.model, {
+      annotations: state.model.annotations.filter(a => a.timestamp)
+    })
+  });
+}
 
 /**
  *
@@ -1066,7 +1081,7 @@ function reducer(state = INITIAL_STATE, action) {
         const ui = _extends$1({}, state.ui);
         delete ui.position;
         delete ui.selection;
-        return _extends$1({}, upsertAnnotation(state, action.annotation), {
+        return _extends$1({}, upsertAnnotation(state, action.annotation, null), {
           ui
         });
       }
@@ -1086,14 +1101,19 @@ function reducer(state = INITIAL_STATE, action) {
         })
       });
     case ANNOTATION_EDIT_BEGIN:
-    case ANNOTATION_EDIT_CANCEL:
       return _extends$1({}, state, {
         ui: _extends$1({}, state.ui, {
           isEditing: action.isEditing
         })
       });
+    case ANNOTATION_EDIT_CANCEL:
+      return _extends$1({}, removeUnsavedAnnotations(state), {
+        ui: _extends$1({}, state.ui, {
+          isEditing: action.isEditing
+        })
+      });
     case ANNOTATION_SAVE_RECEIPT:
-      return upsertAnnotation(state, action.annotation);
+      return upsertAnnotation(state, action.annotation, action.timestamp);
     default:
       return state;
   }
