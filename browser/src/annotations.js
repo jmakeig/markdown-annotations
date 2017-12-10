@@ -29,7 +29,11 @@ export default function render(state, relativeY = 0, dispatcher) {
 }
 
 /**
- * Distribute items vertically within a positioned conainer.
+ * Distribute items vertically within a positioned conainer. Requires items to be
+ * absolutely positioned (usually within a relatively positioned container).
+ * The calling application should position the items according to its own logic.
+ * `distributeVertically` will detect overlaps and move items vertially downward 
+ * until there is adequate space to avoid overlaps.
  *
  * @param {Iteralbe<HTMLElement>} items - the elements to reposition
  * @param {number} [spacing = 0] - the number of pixels separating repositioned items
