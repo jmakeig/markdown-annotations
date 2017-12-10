@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <title>Vertical Distribution</title>
+  <style type="text/css">
+    body {
+      padding: 2em;
+      font-family: 'Georgia', serif;
+      font-size: 11pt;
+      line-height: 1.45;
+    }
+
+    .container {
+      position: relative;
+      width: 40em;
+      height: 4000px;
+      box-sizing: border-box;
+      padding: 0.5em;
+      margin: auto;
+      border: solid 4px #eee;
+    }
+
+    .item {
+      position: absolute;
+      box-sizing: border-box;
+
+      border: solid 1px orange;
+      padding: 0.5em;
+    }
+
+    .marker {
+      position: absolute;
+      box-sizing: border-box;
+      height: 0.25em;
+      left: 0;
+      right: 0;
+      background: red;
+    }
+
+    #Controls {
+      position: fixed;
+      top: 1em;
+      right: 1em;
+    }
+
+  </style>
+  <script type="application/javascript">
+    function distributeVerically(items, nudge = 0) {
+      Array.from(items).reduce((prevY, item, index) => {
+        item.style.top =
+          `${Math.max(prevY, parseInt(item.style.top, 10))}px`;
+        return item.offsetTop - item.scrollTop + item.offsetHeight + nudge;
+      }, 0);
+    }
+
+    document.addEventListener('DOMContentLoaded', evt => {
+      document.querySelector('#Controls>button').addEventListener('click', evt => {
+        const items = document.querySelectorAll('.item');
+        distributeVerically(items, 10);
+      });
+    });
+  </script>
+</head>
+
+<body>
+  <p>Raw denim actually photo booth, next level palo santo bicycle rights tumblr trust fund distillery activated charcoal 3 wolf moon. Gastropub cardigan vexillologist heirloom pug normcore kale chips, pour-over taxidermy kinfolk godard migas knausgaard scenester. Lo-fi humblebrag hot chicken neutra YOLO lumbersexual typewriter hashtag street art, pitchfork VHS blog whatever. Truffaut prism pickled bespoke vaporware everyday carry vice literally. Viral fixie live-edge, neutra adaptogen flexitarian drinking vinegar woke af pinterest affogato PBR&B poutine. Pabst kinfolk bushwick vexillologist DIY celiac snackwave ugh taiyaki. Snackwave keytar microdosing irony literally.</p>
+  <p>Snackwave ennui try-hard cliche PBR&B tumeric. Woke dreamcatcher kinfolk VHS, pour-over next level banjo brunch ethical distillery everyday carry drinking vinegar put a bird on it. Pug tilde paleo coloring book art party kinfolk meh occupy you probably haven't heard of them health goth hot chicken small batch. Taiyaki palo santo sustainable hexagon gentrify sriracha.</p>
+  <p>Cardigan truffaut sriracha lumbersexual yuccie gastropub. Ugh raw denim ethical leggings try-hard sustainable mustache flexitarian ennui. Raclette organic selvage copper mug, tilde occupy pabst normcore pickled prism pop-up authentic street art letterpress you probably haven't heard of them. Heirloom vexillologist craft beer, tattooed flexitarian organic lo-fi cardigan. Organic ugh street art mlkshk viral humblebrag master cleanse post-ironic green juice.</p>
+  <div class="container">
+    <div class="marker" style="top: 40px"></div>
+    <div class="item" style="top: 40px">Lorem ipsum dolor amet viral chartreuse pinterest, freegan semiotics bespoke hexagon mlkshk ethical fam poutine. Coloring book poke tacos, vexillologist marfa brunch raclette fashion axe prism crucifix four dollar toast retro post-ironic fixie quinoa. Poutine chillwave kickstarter prism butcher, selvage pok pok helvetica authentic cronut hella tbh four loko. Authentic meh sustainable tofu skateboard godard unicorn kogi yr four loko pop-up butcher. Kale chips thundercats fanny pack, squid shabby chic ethical aesthetic cornhole food truck PBR&B beard umami freegan roof party. Activated charcoal banjo selvage, subway tile pok pok vinyl fashion axe. DIY occupy gochujang poutine migas, sartorial pinterest air plant 90's plaid stumptown truffaut.</div>
+    <div class="marker" style="top: 80px"></div>
+    <div class="item" style="top: 80px">Forage ugh slow-carb, kale chips venmo hoodie listicle viral skateboard jianbing portland hexagon heirloom. PBR&B twee you probably haven't heard of them, fanny pack post-ironic gochujang glossier chia forage roof party swag. Retro poutine kickstarter trust fund thundercats letterpress. Letterpress banh mi cred vexillologist, post-ironic vaporware stumptown. Irony craft beer locavore, blue bottle hella scenester subway tile. Cold-pressed pour-over meggings trust fund freegan four loko, activated charcoal pinterest yr beard seitan shabby chic farm-to-table iceland.</div>
+    <div class="marker" style="top: 2000px"></div>
+    <div class="item" style="top: 2000px">Fingerstache bitters prism williamsburg kitsch chillwave hashtag hella thundercats mlkshk XOXO organic 90's. Copper mug wolf slow-carb af pabst, live-edge sriracha health goth. Flexitarian put a bird on it distillery, twee cold-pressed green juice whatever squid. Put a bird on it vinyl franzen, DIY VHS retro copper mug swag blue bottle. Portland fashion axe chia, selfies tofu wayfarers pitchfork sriracha deep v health goth small batch vegan tousled farm-to-table migas. Echo park listicle church-key seitan humblebrag craft beer.</div>
+    <div class="marker" style="top: 2222px"></div>
+    <div class="item" style="top: 2222px">Wayfarers la croix iceland master cleanse, distillery four loko lomo activated charcoal cloud bread typewriter ramps truffaut echo park leggings edison bulb. Brooklyn farm-to-table artisan slow-carb literally actually pop-up chillwave bicycle rights paleo gastropub cardigan meditation la croix offal. Banjo drinking vinegar poutine fashion axe, pok pok brunch 90's four dollar toast portland truffaut vaporware direct trade taiyaki ethical. Kombucha kitsch freegan fanny pack copper mug neutra ugh mixtape tacos whatever post-ironic letterpress.</div>
+  </div>
+  <p>Raw denim actually photo booth, next level palo santo bicycle rights tumblr trust fund distillery activated charcoal 3 wolf moon. Gastropub cardigan vexillologist heirloom pug normcore kale chips, pour-over taxidermy kinfolk godard migas knausgaard scenester. Lo-fi humblebrag hot chicken neutra YOLO lumbersexual typewriter hashtag street art, pitchfork VHS blog whatever. Truffaut prism pickled bespoke vaporware everyday carry vice literally. Viral fixie live-edge, neutra adaptogen flexitarian drinking vinegar woke af pinterest affogato PBR&B poutine. Pabst kinfolk bushwick vexillologist DIY celiac snackwave ugh taiyaki. Snackwave keytar microdosing irony literally.</p>
+  <p>Snackwave ennui try-hard cliche PBR&B tumeric. Woke dreamcatcher kinfolk VHS, pour-over next level banjo brunch ethical distillery everyday carry drinking vinegar put a bird on it. Pug tilde paleo coloring book art party kinfolk meh occupy you probably haven't heard of them health goth hot chicken small batch. Taiyaki palo santo sustainable hexagon gentrify sriracha.</p>
+  <p>Cardigan truffaut sriracha lumbersexual yuccie gastropub. Ugh raw denim ethical leggings try-hard sustainable mustache flexitarian ennui. Raclette organic selvage copper mug, tilde occupy pabst normcore pickled prism pop-up authentic street art letterpress you probably haven't heard of them. Heirloom vexillologist craft beer, tattooed flexitarian organic lo-fi cardigan. Organic ugh street art mlkshk viral humblebrag master cleanse post-ironic green juice.</p>
+  <p>Raw denim actually photo booth, next level palo santo bicycle rights tumblr trust fund distillery activated charcoal 3 wolf moon. Gastropub cardigan vexillologist heirloom pug normcore kale chips, pour-over taxidermy kinfolk godard migas knausgaard scenester. Lo-fi humblebrag hot chicken neutra YOLO lumbersexual typewriter hashtag street art, pitchfork VHS blog whatever. Truffaut prism pickled bespoke vaporware everyday carry vice literally. Viral fixie live-edge, neutra adaptogen flexitarian drinking vinegar woke af pinterest affogato PBR&B poutine. Pabst kinfolk bushwick vexillologist DIY celiac snackwave ugh taiyaki. Snackwave keytar microdosing irony literally.</p>
+  <p>Snackwave ennui try-hard cliche PBR&B tumeric. Woke dreamcatcher kinfolk VHS, pour-over next level banjo brunch ethical distillery everyday carry drinking vinegar put a bird on it. Pug tilde paleo coloring book art party kinfolk meh occupy you probably haven't heard of them health goth hot chicken small batch. Taiyaki palo santo sustainable hexagon gentrify sriracha.</p>
+  <p>Cardigan truffaut sriracha lumbersexual yuccie gastropub. Ugh raw denim ethical leggings try-hard sustainable mustache flexitarian ennui. Raclette organic selvage copper mug, tilde occupy pabst normcore pickled prism pop-up authentic street art letterpress you probably haven't heard of them. Heirloom vexillologist craft beer, tattooed flexitarian organic lo-fi cardigan. Organic ugh street art mlkshk viral humblebrag master cleanse post-ironic green juice.</p>
+  <p>Raw denim actually photo booth, next level palo santo bicycle rights tumblr trust fund distillery activated charcoal 3 wolf moon. Gastropub cardigan vexillologist heirloom pug normcore kale chips, pour-over taxidermy kinfolk godard migas knausgaard scenester. Lo-fi humblebrag hot chicken neutra YOLO lumbersexual typewriter hashtag street art, pitchfork VHS blog whatever. Truffaut prism pickled bespoke vaporware everyday carry vice literally. Viral fixie live-edge, neutra adaptogen flexitarian drinking vinegar woke af pinterest affogato PBR&B poutine. Pabst kinfolk bushwick vexillologist DIY celiac snackwave ugh taiyaki. Snackwave keytar microdosing irony literally.</p>
+  <p>Snackwave ennui try-hard cliche PBR&B tumeric. Woke dreamcatcher kinfolk VHS, pour-over next level banjo brunch ethical distillery everyday carry drinking vinegar put a bird on it. Pug tilde paleo coloring book art party kinfolk meh occupy you probably haven't heard of them health goth hot chicken small batch. Taiyaki palo santo sustainable hexagon gentrify sriracha.</p>
+  <p>Cardigan truffaut sriracha lumbersexual yuccie gastropub. Ugh raw denim ethical leggings try-hard sustainable mustache flexitarian ennui. Raclette organic selvage copper mug, tilde occupy pabst normcore pickled prism pop-up authentic street art letterpress you probably haven't heard of them. Heirloom vexillologist craft beer, tattooed flexitarian organic lo-fi cardigan. Organic ugh street art mlkshk viral humblebrag master cleanse post-ironic green juice.</p>
+  <p>Raw denim actually photo booth, next level palo santo bicycle rights tumblr trust fund distillery activated charcoal 3 wolf moon. Gastropub cardigan vexillologist heirloom pug normcore kale chips, pour-over taxidermy kinfolk godard migas knausgaard scenester. Lo-fi humblebrag hot chicken neutra YOLO lumbersexual typewriter hashtag street art, pitchfork VHS blog whatever. Truffaut prism pickled bespoke vaporware everyday carry vice literally. Viral fixie live-edge, neutra adaptogen flexitarian drinking vinegar woke af pinterest affogato PBR&B poutine. Pabst kinfolk bushwick vexillologist DIY celiac snackwave ugh taiyaki. Snackwave keytar microdosing irony literally.</p>
+  <p>Snackwave ennui try-hard cliche PBR&B tumeric. Woke dreamcatcher kinfolk VHS, pour-over next level banjo brunch ethical distillery everyday carry drinking vinegar put a bird on it. Pug tilde paleo coloring book art party kinfolk meh occupy you probably haven't heard of them health goth hot chicken small batch. Taiyaki palo santo sustainable hexagon gentrify sriracha.</p>
+  <p>Cardigan truffaut sriracha lumbersexual yuccie gastropub. Ugh raw denim ethical leggings try-hard sustainable mustache flexitarian ennui. Raclette organic selvage copper mug, tilde occupy pabst normcore pickled prism pop-up authentic street art letterpress you probably haven't heard of them. Heirloom vexillologist craft beer, tattooed flexitarian organic lo-fi cardigan. Organic ugh street art mlkshk viral humblebrag master cleanse post-ironic green juice.</p>
+  <div id="Controls">
+    <button>Distribute</button>
+  </div>
+</body>
+
+</html>
