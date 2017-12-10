@@ -23,7 +23,7 @@ export default function render(state, relativeY = 0, dispatcher) {
   );
   return toFragment(annotationEls, {
     [onComponentDidMount]: () => {
-      distributeVerically(annotationEls, 10, -8);
+      distributeVerically(annotationEls, 10, -10);
     },
   });
 }

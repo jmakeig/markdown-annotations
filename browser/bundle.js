@@ -709,14 +709,14 @@ function applyToElement(param, el) {
         case 'style':
         case 'dataset':
           for (let item in param[p]) {
-            el[p][item] = param[p][item];
+            if (exists(item)) el[p][item] = param[p][item];
           }
           break;
         case 'class':
         case 'className':
         case 'classList':
           for (const cls of toIterable(param[p])) {
-            el.classList.add(cls);
+            if (exists(cls)) el.classList.add(cls);
           }
           break;
         default:
@@ -2048,7 +2048,7 @@ function render$4(state, relativeY = 0, dispatcher) {
   ));
   return toFragment(annotationEls, {
     [onComponentDidMount]: () => {
-      distributeVerically(annotationEls, 10, -8);
+      distributeVerically(annotationEls, 10, -10);
     }
   });
 }
