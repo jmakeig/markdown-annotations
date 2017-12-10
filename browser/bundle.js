@@ -704,7 +704,10 @@ function applyToElement(param, el) {
   }
 
   if (exists(param) && 'object' === typeof param) {
-    for (const p of [...Object.getOwnPropertyNames(param), ...Object.getOwnPropertySymbols(param)]) {
+    for (const p of [
+      ...Object.getOwnPropertyNames(param),
+      ...Object.getOwnPropertySymbols(param),
+    ]) {
       switch (p) {
         case 'style':
         case 'dataset':
@@ -733,7 +736,7 @@ function applyToElement(param, el) {
  * @param {Iterable} rest
  * @return {Node}
  */
-function _el(name, ...rest) {
+function element(name, ...rest) {
   const el = createElement(name);
   for (const param of rest) {
     applyToElement(param, el);
@@ -741,17 +744,15 @@ function _el(name, ...rest) {
   return el;
 }
 
-const toFragment = (...rest) => _el(null, ...rest);
+const toFragment = (...rest) => element(null, ...rest);
 const empty = () => toFragment();
 
 
 
 
-const div = (...rest) => _el('div', ...rest);
+const div = (...rest) => element('div', ...rest);
 
-const h1 = (...rest) => _el('h1', ...rest);
-
-
+const h1 = (...rest) => element('h1', ...rest);
 
 
 
@@ -763,31 +764,33 @@ const h1 = (...rest) => _el('h1', ...rest);
 
 
 
-const table = (...rest) => _el('table', ...rest);
 
 
-const tbody = (...rest) => _el('tbody', ...rest);
-const tr = (...rest) => _el('tr', ...rest);
-
-const td = (...rest) => _el('td', ...rest);
-
-const span = (...rest) => _el('span', ...rest);
-const a = (...rest) => _el('a', ...rest);
+const table = (...rest) => element('table', ...rest);
 
 
+const tbody = (...rest) => element('tbody', ...rest);
+const tr = (...rest) => element('tr', ...rest);
 
+const td = (...rest) => element('td', ...rest);
 
-
-const button = (...rest) => _el('button', ...rest);
-
-const textarea = (...rest) => _el('textarea', ...rest);
+const span = (...rest) => element('span', ...rest);
+const a = (...rest) => element('a', ...rest);
 
 
 
 
-const file = (...rest) => _el('input', { type: 'file' }, ...rest);
 
-const br = (...rest) => _el('br', ...rest);
+const button = (...rest) => element('button', ...rest);
+
+const textarea = (...rest) => element('textarea', ...rest);
+
+
+
+
+const file = (...rest) => element('input', { type: 'file' }, ...rest);
+
+const br = (...rest) => element('br', ...rest);
 
 
 /**
@@ -806,7 +809,9 @@ function replaceChildren(oldNode, newChild) {
     if (newChild instanceof Node) {
       tmpParent.appendChild(newChild);
     } else {
-      Array.prototype.forEach.call(newChild, child => tmpParent.appendChild(child));
+      Array.prototype.forEach.call(newChild, child =>
+        tmpParent.appendChild(child)
+      );
     }
   }
   oldNode.parentNode.replaceChild(tmpParent, oldNode);

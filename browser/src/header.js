@@ -1,4 +1,4 @@
-import { h1, toFragment } from './dom-helper.js';
+import { h1, toFragment } from 'dom-helper';
 import { default as User } from './user.js';
 import { default as Download } from './download.js';
 

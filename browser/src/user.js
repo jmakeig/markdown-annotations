@@ -1,4 +1,4 @@
-import { div, span, button, empty } from './dom-helper.js';
+import { div, span, button, empty } from 'dom-helper';
 import ColorHash from 'color-hash';
 
 export default function render(user, withLogout = false) {

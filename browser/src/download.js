@@ -1,4 +1,4 @@
-import { a, empty } from './dom-helper.js';
+import { a, empty } from 'dom-helper';
 import * as Base64 from './base64.js';
 import { serializeAnnotatedMarkdown } from './selectors.js';
 

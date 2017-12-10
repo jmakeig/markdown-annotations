@@ -1,4 +1,4 @@
-import { toFragment } from './dom-helper.js';
+import { toFragment } from 'dom-helper';
 import { onComponentDidMount } from './component.js';
 import { annotationByID } from './selectors.js';
 import { default as AnnotationHighlights } from './annotation-highlight.js';

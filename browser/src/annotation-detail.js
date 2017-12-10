@@ -1,4 +1,4 @@
-import { div, button, textarea, br, toFragment, empty } from './dom-helper.js';
+import { div, button, textarea, br, toFragment, empty } from 'dom-helper';
 import { onComponentDidMount } from './component.js';
 import {
   editActiveAnnotation,

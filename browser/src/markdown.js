@@ -1,4 +1,4 @@
-import { table, tbody, tr, td, empty } from './dom-helper.js';
+import { table, tbody, tr, td, empty } from 'dom-helper';
 
 function lineProps(line) {
   const props = {};

@@ -1,7 +1,7 @@
 import { createStore, applyMiddleware } from 'redux';
 import thunk from 'redux-thunk';
 import { onComponentDidMount } from './component.js';
-import { replaceChildren } from './dom-helper.js';
+import { replaceChildren } from 'dom-helper';
 import { reducer } from './reducer.js';
 import { login } from './actions.js';
 import { default as _Header } from './header.js';
