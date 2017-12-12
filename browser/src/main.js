@@ -42,7 +42,6 @@ document.addEventListener('DOMContentLoaded', evt => {
       document.querySelector('#Content').getBoundingClientRect().y,
       dispatcher
     );
-
     Selection(
       state.ui.position,
       state.ui.selection,
@@ -73,13 +72,34 @@ function renderInto(renderer, parent = document.body) {
   let ref = parent;
   return function(...args) {
     const tree = renderer(...args);
-    ref = replaceChildren(ref, tree);
-    if (tree && tree[onComponentDidMount]) {
-      tree[onComponentDidMount]();
-      // FIXME: Does this eliminate the possibility of a memory
-      //        leak with DOM expando properties?
-      delete tree[onComponentDidMount];
-    }
-    return ref;
+    return (ref = doOnComponentDidMount(replaceChildren(ref, tree)));
   };
+}
+
+function doOnComponentDidMount(root) {
+  const treeWalker = document.createTreeWalker(
+    root,
+    NodeFilter.SHOW_ELEMENT,
+    {
+      acceptNode: node => {
+        if ('function' === typeof node[onComponentDidMount]) {
+          return NodeFilter.FILTER_ACCEPT;
+        }
+        return NodeFilter.FILTER_REJECT;
+      },
+    },
+    false
+  );
+
+  while (treeWalker.nextNode()) {
+    if (treeWalker.currentNode[onComponentDidMount]) {
+      console.log(
+        'onComponentDidMount',
+        String(treeWalker.currentNode[onComponentDidMount])
+      );
+      treeWalker.currentNode[onComponentDidMount]();
+      delete treeWalker.currentNode[onComponentDidMount];
+    }
+  }
+  return root;
 }

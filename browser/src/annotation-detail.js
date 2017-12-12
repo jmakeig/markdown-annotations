@@ -36,6 +36,19 @@ export default function render(
         dispatch(annotationSelect(evt.currentTarget.dataset.annotationId));
       }
     },
+    // Need a function becuase arrow functions can’t be
+    // re-bound and inherit the scope of the calling context
+    onkeypress: function(evt) {
+      // console.log('this', this);
+      // console.log('document.activeElement', document.activeElement, evt.target);
+      if ('Space' === evt.code && document.activeElement === this) {
+        evt.preventDefault();
+        dispatch(annotationSelect(evt.currentTarget.dataset.annotationId));
+        this.focus();
+      } else {
+        console.log('nope');
+      }
+    },
   };
   const comm = { className: 'annotation-comment' };
   const commentText = div(comm, toFormattedNodes(trim(annotation.comment)));
@@ -64,7 +77,7 @@ export default function render(
       ),
       {
         [onComponentDidMount]: () => {
-          commentEl.focus();
+          if (isEditing) commentEl.focus();
         },
       }
     );

@@ -1984,6 +1984,19 @@ function render$7(annotation, isActive = false, isEditing = false, user, markers
       if (!isActive) {
         dispatch(annotationSelect(evt.currentTarget.dataset.annotationId));
       }
+    },
+    // Need a function becuase arrow functions can’t be
+    // re-bound and inherit the scope of the calling context
+    onkeypress: function (evt) {
+      // console.log('this', this);
+      // console.log('document.activeElement', document.activeElement, evt.target);
+      if ('Space' === evt.code && document.activeElement === this) {
+        evt.preventDefault();
+        dispatch(annotationSelect(evt.currentTarget.dataset.annotationId));
+        this.focus();
+      } else {
+        console.log('nope');
+      }
     }
   };
   const comm = { className: 'annotation-comment' };
@@ -2001,7 +2014,7 @@ function render$7(annotation, isActive = false, isEditing = false, user, markers
       dataset: { timestamp: annotation.timestamp }
     })), {
       [onComponentDidMount]: () => {
-        commentEl.focus();
+        if (isEditing) commentEl.focus();
       }
     });
   } else {
@@ -2070,7 +2083,10 @@ function render$4(state, relativeY = 0, dispatcher) {
   const annotationEls = state.model.annotations.map(annotation => render$7(annotation, //annotationByID(state, state.ui.activeAnnotationID),
   annotation.id === state.ui.activeAnnotationID, state.ui.isEditing, state.ui.user, annotationNodes, dispatcher // https://github.com/reactjs/redux/blob/628928e3108df9725f07689e3785b5a2a226baa8/src/bindActionCreators.js#L26
   ));
-  return toFragment(annotationEls, {
+  // FIXME: This should really be `toFragment` to avoid an extra div,
+  //        but the `DocumentFragment` instance disappears when it’s
+  //        appended to the actual DOM.
+  return div(annotationEls, {
     [onComponentDidMount]: () => {
       distributeVerically(annotationEls, 10, -10);
     }
@@ -2081,7 +2097,7 @@ function render$4(state, relativeY = 0, dispatcher) {
  * Distribute items vertically within a positioned conainer. Requires items to be
  * absolutely positioned (usually within a relatively positioned container).
  * The calling application should position the items according to its own logic.
- * `distributeVertically` will detect overlaps and move items vertially downward 
+ * `distributeVertically` will detect overlaps and move items vertially downward
  * until there is adequate space to avoid overlaps.
  *
  * @param {Iteralbe<HTMLElement>} items - the elements to reposition
@@ -2125,7 +2141,6 @@ document.addEventListener('DOMContentLoaded', evt => {
     Header(state.model, state.ui, dispatcher);
     Document(state.model, state.ui, dispatcher);
     Annotations(state, document.querySelector('#Content').getBoundingClientRect().y, dispatcher);
-
     Selection(state.ui.position, state.ui.selection, state.ui.user, dispatcher, () => store.getState().ui.selection);
 
     console.timeEnd('render');
@@ -2150,15 +2165,28 @@ function renderInto(renderer, parent = document.body) {
   let ref = parent;
   return function (...args) {
     const tree = renderer(...args);
-    ref = replaceChildren(ref, tree);
-    if (tree && tree[onComponentDidMount]) {
-      tree[onComponentDidMount]();
-      // FIXME: Does this eliminate the possibility of a memory
-      //        leak with DOM expando properties?
-      delete tree[onComponentDidMount];
-    }
-    return ref;
+    return ref = doOnComponentDidMount(replaceChildren(ref, tree));
   };
+}
+
+function doOnComponentDidMount(root) {
+  const treeWalker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT, {
+    acceptNode: node => {
+      if ('function' === typeof node[onComponentDidMount]) {
+        return NodeFilter.FILTER_ACCEPT;
+      }
+      return NodeFilter.FILTER_REJECT;
+    }
+  }, false);
+
+  while (treeWalker.nextNode()) {
+    if (treeWalker.currentNode[onComponentDidMount]) {
+      console.log('onComponentDidMount', String(treeWalker.currentNode[onComponentDidMount]));
+      treeWalker.currentNode[onComponentDidMount]();
+      delete treeWalker.currentNode[onComponentDidMount];
+    }
+  }
+  return root;
 }
 
 }());

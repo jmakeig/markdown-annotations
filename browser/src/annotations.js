@@ -1,4 +1,4 @@
-import { toFragment } from 'dom-helper';
+import { div } from 'dom-helper';
 import { onComponentDidMount } from './component.js';
 import { annotationByID } from './selectors.js';
 import { default as AnnotationHighlights } from './annotation-highlight.js';
@@ -21,7 +21,10 @@ export default function render(state, relativeY = 0, dispatcher) {
       dispatcher // https://github.com/reactjs/redux/blob/628928e3108df9725f07689e3785b5a2a226baa8/src/bindActionCreators.js#L26
     )
   );
-  return toFragment(annotationEls, {
+  // FIXME: This should really be `toFragment` to avoid an extra div,
+  //        but the `DocumentFragment` instance disappears when it’s
+  //        appended to the actual DOM.
+  return div(annotationEls, {
     [onComponentDidMount]: () => {
       distributeVerically(annotationEls, 10, -10);
     },
@@ -32,7 +35,7 @@ export default function render(state, relativeY = 0, dispatcher) {
  * Distribute items vertically within a positioned conainer. Requires items to be
  * absolutely positioned (usually within a relatively positioned container).
  * The calling application should position the items according to its own logic.
- * `distributeVertically` will detect overlaps and move items vertially downward 
+ * `distributeVertically` will detect overlaps and move items vertially downward
  * until there is adequate space to avoid overlaps.
  *
  * @param {Iteralbe<HTMLElement>} items - the elements to reposition
