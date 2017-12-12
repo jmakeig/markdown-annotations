@@ -55,6 +55,7 @@ main {
   align-items: stretch;
 }
 #Content {
+  min-width: 4in;
   max-width: 8in;
   padding: 1em;
 }
