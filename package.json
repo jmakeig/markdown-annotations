@@ -26,6 +26,6 @@
     "dom-highlight-range": "git+ssh://git@github.com/jmakeig/dom-highlight-range.git#57cc9c1",
     "redux": "^3.7.2",
     "redux-thunk": "^2.2.0",
-    "dom-helper": "git+ssh://git@github.com/jmakeig/dom-helper.git#ecc00e5"
+    "dom-helper": "git+ssh://git@github.com/jmakeig/dom-helper.git#2d26052"
   }
 }
