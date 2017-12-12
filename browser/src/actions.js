@@ -123,7 +123,6 @@ export function saveAnnotation(id, comment) {
         annotation: {
           ...annotationByID(state, id),
           comment,
-          timestamp: new Date().toISOString(),
         },
       });
     }

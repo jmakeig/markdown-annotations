@@ -856,7 +856,7 @@ function upsertAnnotation(state, annotation, timestamp) {
     arr.splice(existingIndex, 1);
   }
   arr.push(_extends$1({}, annotation, {
-    timestamp: timestamp,
+    timestamp,
     isDirty: undefined
   }));
 
@@ -1022,8 +1022,7 @@ function saveAnnotation(id, comment) {
       dispatch({
         type: ANNOTATION_SAVE_RECEIPT,
         annotation: _extends$1({}, annotationByID(state, id), {
-          comment,
-          timestamp: new Date().toISOString()
+          comment
         })
       });
     }
@@ -1118,7 +1117,7 @@ function reducer(state = INITIAL_STATE, action) {
         })
       });
     case ANNOTATION_SAVE_RECEIPT:
-      return upsertAnnotation(state, action.annotation, action.timestamp);
+      return upsertAnnotation(state, action.annotation, new Date().toISOString());
     default:
       return state;
   }

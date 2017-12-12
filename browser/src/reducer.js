@@ -113,7 +113,11 @@ export function reducer(state = INITIAL_STATE, action) {
         },
       };
     case ANNOTATION_SAVE_RECEIPT:
-      return upsertAnnotation(state, action.annotation, action.timestamp);
+      return upsertAnnotation(
+        state,
+        action.annotation,
+        new Date().toISOString()
+      );
     default:
       return state;
   }

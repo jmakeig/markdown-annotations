@@ -29,7 +29,7 @@ export function upsertAnnotation(state, annotation, timestamp) {
   }
   arr.push({
     ...annotation,
-    timestamp: timestamp,
+    timestamp,
     isDirty: undefined,
   });
 
