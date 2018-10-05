@@ -1,0 +1,9 @@
+# caddy -conf ./Caddyfile -root ./browser
+
+localhost:2021 {
+  bind {$ADDRESS}
+  tls self_signed
+  
+  # Relative to current working directory, not location of this file
+  # root .
+}

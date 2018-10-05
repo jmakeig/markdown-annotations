@@ -12,7 +12,8 @@ import { default as _Selection } from './selection.js';
 const logger = store => next => action => {
   console.log('Dispatching', action);
   const result = next(action);
-  console.log('Next state', store.getState());
+  // console.log('Next state', store.getState());
+  console.log('Next state', JSON.stringify(store.getState()));
   return result;
 };
 const store = createStore(reducer, applyMiddleware(thunk, logger));
@@ -93,10 +94,6 @@ function doOnComponentDidMount(root) {
 
   while (treeWalker.nextNode()) {
     if (treeWalker.currentNode[onComponentDidMount]) {
-      console.log(
-        'onComponentDidMount',
-        String(treeWalker.currentNode[onComponentDidMount])
-      );
       treeWalker.currentNode[onComponentDidMount]();
       delete treeWalker.currentNode[onComponentDidMount];
     }
