@@ -1,0 +1,43 @@
+<!doctype html>
+<html>
+
+<head>
+  <title>GitHub Authentication Example</title>
+
+  <script src="https://code.jquery.com/jquery-1.11.2.js"></script>
+  <script src="https://unpkg.com/netlify-auth-providers"></script>
+
+  <script>
+    $(function () {
+      $("#login").on("click", function (e) {
+        e.preventDefault();
+        var authenticator = new netlify.default({});
+        authenticator.authenticate({ provider: "github", scope: "user" }, function (err, data) {
+          if (err) {
+            return $("#output").text("Error Authenticating with GitHub: " + err);
+          }
+          console.log(data);
+          $("#output").text("Authenticated with GitHub. Access Token: " + data.token);
+          // curl -i -H "Accept: application/vnd.github.v3+json" -H "Authorization: token 214e9643bd61c661fdd2d7c4392ef83d8b387480" https://api.github.com/user
+          fetch('https://api.github.com/user', {
+            headers: {
+              'User-Agent': 'markdown-annotations',
+              'Accept': 'application/vnd.github.v3+json',
+              'Authorization': 'token ' + data.token
+            }
+          }).then(response => {
+            console.log(response.json());
+          }).catch(err => console.error(err));
+        });
+      });
+    });
+  </script>
+</head>
+
+<body>
+  <h1>GitHub Auth Demo:</h1>
+  <p><a href="#" id="login">Authenticate</a></p>
+  <p id="output"></p>
+</body>
+
+</html>
