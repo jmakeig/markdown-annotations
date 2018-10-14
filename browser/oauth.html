@@ -18,7 +18,7 @@
           }
           console.log(data);
           $("#output").text("Authenticated with GitHub. Access Token: " + data.token);
-          // curl -i -H "Accept: application/vnd.github.v3+json" -H "Authorization: token 214e9643bd61c661fdd2d7c4392ef83d8b387480" https://api.github.com/user
+          // curl -i -H "Accept: application/vnd.github.v3+json" -H "Authorization: token ########################################" https://api.github.com/user
           fetch('https://api.github.com/user', {
             headers: {
               'User-Agent': 'markdown-annotations',
