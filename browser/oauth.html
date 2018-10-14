@@ -11,7 +11,9 @@
     $(function () {
       $("#login").on("click", function (e) {
         e.preventDefault();
-        var authenticator = new netlify.default({});
+        var authenticator = new netlify.default({
+          site_id: "blissful-hoover-86ebd6.netlify.com"
+        });
         authenticator.authenticate({ provider: "github", scope: "user" }, function (err, data) {
           if (err) {
             return $("#output").text("Error Authenticating with GitHub: " + err);
