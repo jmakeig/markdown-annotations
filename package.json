@@ -4,7 +4,7 @@
   "description": "",
   "main": "main.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "pushd browser/test; rollup -c rollup.config.js | tape-run | tap-diff; popd",
     "build": "rollup -c",
     "watch": "rollup -c --watch",
     "pages": "rsync -aP --exclude=src ./browser/* ../markdown-annotations-PAGES/",
@@ -16,16 +16,20 @@
     "babel-core": "^6.26.3",
     "babel-plugin-external-helpers": "^6.22.0",
     "babel-plugin-transform-object-rest-spread": "^6.26.0",
-    "rollup": "^0.59.4",
-    "rollup-plugin-babel": "^3.0.4",
-    "rollup-plugin-commonjs": "^9.1.3",
-    "rollup-plugin-node-resolve": "^3.3.0",
-    "rollup-plugin-replace": "^2.0.0"
+    "rollup": "^0.66.6",
+    "rollup-plugin-babel": "^4.0.3",
+    "rollup-plugin-commonjs": "^9.2.0",
+    "rollup-plugin-node-resolve": "^3.4.0",
+    "rollup-plugin-replace": "^2.1.0",
+    "tap-diff": "^0.1.1",
+    "tape-run": "^4.0.0",
+    "zora": "^2.0.1"
   },
   "dependencies": {
     "color-hash": "^1.0.3",
     "dom-helper": "git+ssh://git@github.com/jmakeig/dom-helper.git#2d26052",
     "dom-highlight-range": "git+ssh://git@github.com/jmakeig/dom-highlight-range.git#57cc9c1",
+    "netlify-auth-providers": "^1.0.0-alpha5",
     "redux": "^3.7.2",
     "redux-thunk": "^2.2.0"
   }
