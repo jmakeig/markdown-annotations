@@ -1,7 +1,7 @@
 import nodeResolve from 'rollup-plugin-node-resolve';
 import commonjs from 'rollup-plugin-commonjs';
 import replace from 'rollup-plugin-replace';
-// import babel from 'rollup-plugin-babel';
+import babel from 'rollup-plugin-babel';
 
 export default {
   input: 'browser/src/main.js',
@@ -20,10 +20,9 @@ export default {
     }),
     commonjs({
       include: 'node_modules/**'
+    }),
+    babel({
+      exclude: 'node_modules/**'
     })
-    //,
-    // babel({
-    //   exclude: 'node_modules/**',
-    // }),
   ]
 };
