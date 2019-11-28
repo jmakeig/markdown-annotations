@@ -671,40 +671,6 @@
 	  return tmpParent;
 	}
 
-	function _defineProperty$1(obj, key, value) {
-	  if (key in obj) {
-	    Object.defineProperty(obj, key, {
-	      value: value,
-	      enumerable: true,
-	      configurable: true,
-	      writable: true
-	    });
-	  } else {
-	    obj[key] = value;
-	  }
-
-	  return obj;
-	}
-
-	function _objectSpread$1(target) {
-	  for (var i = 1; i < arguments.length; i++) {
-	    var source = arguments[i] != null ? arguments[i] : {};
-	    var ownKeys = Object.keys(source);
-
-	    if (typeof Object.getOwnPropertySymbols === 'function') {
-	      ownKeys = ownKeys.concat(Object.getOwnPropertySymbols(source).filter(function (sym) {
-	        return Object.getOwnPropertyDescriptor(source, sym).enumerable;
-	      }));
-	    }
-
-	    ownKeys.forEach(function (key) {
-	      _defineProperty$1(target, key, source[key]);
-	    });
-	  }
-
-	  return target;
-	}
-
 	function annotationByID(state, id) {
 	  return state.model.annotations.find(a => id === a.id);
 	}
@@ -715,42 +681,43 @@
 	 * @param {string} id
 	 * @return {boolean}
 	 */
-
 	function isMyAnnotation(state, id) {
-	  return state.model.annotations.some(a => id === a.id && state.ui.user === a.user);
+	  return state.model.annotations.some(
+	    a => id === a.id && state.ui.user === a.user
+	  );
 	}
 	function upsertAnnotation(state, annotation, timestamp) {
 	  if (!annotation) throw new ReferenceError(`Missing annotation`);
 	  if (!annotation.id) throw new ReferenceError(`Missing annotation.id`);
+
 	  const annotations = state.model.annotations;
 	  const arr = [...annotations];
 	  const existingIndex = arr.findIndex(a => annotation.id === a.id);
-
 	  if (existingIndex > -1) {
 	    arr.splice(existingIndex, 1);
 	  }
-
-	  arr.push(_objectSpread$1({}, annotation, {
+	  arr.push({
+	    ...annotation,
 	    timestamp,
-	    isDirty: undefined
-	  }));
+	    isDirty: undefined,
+	  });
 
 	  const documentOrder = (a, b) => {
 	    if (a.range.start.line > b.range.start.line) return true;
-
 	    if (a.range.start.line === b.range.start.line) {
 	      return a.range.start.column > b.range.start.column;
 	    }
-
 	    return false;
 	  };
-
-	  return _objectSpread$1({}, state, {
-	    model: _objectSpread$1({}, state.model, {
-	      annotations: arr.sort(documentOrder)
-	    })
-	  });
+	  return {
+	    ...state,
+	    model: {
+	      ...state.model,
+	      annotations: arr.sort(documentOrder),
+	    },
+	  };
 	}
+
 	/**
 	 * Copy the state, removing any unsaved annotations, i.e. those
 	 * without a timestamp.
@@ -758,14 +725,16 @@
 	 * @param {Object} state - the whole state
 	 * @return {Object} - a new copy of the whole state
 	 */
-
 	function removeUnsavedAnnotations(state) {
-	  return _objectSpread$1({}, state, {
-	    model: _objectSpread$1({}, state.model, {
-	      annotations: state.model.annotations.filter(a => a.timestamp)
-	    })
-	  });
+	  return {
+	    ...state,
+	    model: {
+	      ...state.model,
+	      annotations: state.model.annotations.filter(a => a.timestamp),
+	    },
+	  };
 	}
+
 	/**
 	 *
 	 *
@@ -773,26 +742,29 @@
 	 * @param {Array<Annotation*>} annotations - `model.annotations`
 	 * @return {string}
 	 */
-
 	function serializeAnnotatedMarkdown(content, annotations = []) {
 	  const serializedAnnotations = serializeAnnotations(annotations);
-	  return content + ('' === serializedAnnotations ? '' : '\n\n' + serializedAnnotations);
+	  return (
+	    content +
+	    ('' === serializedAnnotations ? '' : '\n\n' + serializedAnnotations)
+	  );
 	}
 	serializeAnnotatedMarkdown.NAMESPACE = 'http://marklogic.com/annotations';
+
 	/**
 	 * Serialize annotations as JSON in a Markdown comment.
 	 *
 	 * @param {Array<Annotation*>} annotations
 	 * @return {string} - Markdown comment wrapping serialized JSON
 	 */
-
 	function serializeAnnotations(annotations) {
 	  if (!annotations || 0 === annotations.length) {
 	    return '';
 	  }
-
 	  const annotationsJSON = JSON.stringify(annotations, null, 2);
-	  return `<!--- ${serializeAnnotatedMarkdown.NAMESPACE}\n\n${annotationsJSON}\n\n--->`;
+	  return `<!--- ${serializeAnnotatedMarkdown.NAMESPACE}\n\n${
+    annotationsJSON
+  }\n\n--->`;
 	}
 
 	const USER_LOGIN = 'USER_LOGIN';
@@ -803,12 +775,13 @@
 	const ANNOTATION_SELECT = 'ANNOTATION_SELECT';
 	const ANNOTATION_EDIT_BEGIN = 'ANNOTATION_EDIT_BEGIN';
 	const ANNOTATION_EDIT_CANCEL = 'ANNOTATION_EDIT_CHANGE';
-	const ANNOTATION_SAVE_RECEIPT = 'ANNOTATION_SAVE'; // TODO: Async?
+	const ANNOTATION_SAVE_RECEIPT = 'ANNOTATION_SAVE';
 
+	// TODO: Async?
 	function login(user) {
 	  return {
 	    type: USER_LOGIN,
-	    user
+	    user,
 	  };
 	}
 	/**
@@ -817,29 +790,35 @@
 	 * @param {string} mime = 'text/markdown'
 	 * @return {Action}
 	 */
-
-	function documentLoad({
-	  content,
-	  annotations
-	}, href, mime = 'text/markdown') {
+	function documentLoad(
+	  { content, annotations },
+	  href,
+	  mime = 'text/markdown'
+	) {
 	  // console.log('documentLoad', content, annotations, href, mime);
 	  return {
 	    type: DOCUMENT_LOAD,
 	    content,
 	    annotations,
 	    href,
-	    mime
+	    mime,
 	  };
 	}
 	function annotationSelect(id) {
 	  return {
 	    type: ANNOTATION_SELECT,
-	    id
+	    id,
 	  };
-	} // <https://stackoverflow.com/a/2117523/563324>
+	}
 
+	// <https://stackoverflow.com/a/2117523/563324>
 	function uuidv4() {
-	  return ([1e7] + -1e3 + -4e3 + -8e3 + -1e11).replace(/[018]/g, c => (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16));
+	  return ([1e7] + -1e3 + -4e3 + -8e3 + -1e11).replace(/[018]/g, c =>
+	    (
+	      c ^
+	      (crypto.getRandomValues(new Uint8Array(1))[0] & (15 >> (c / 4)))
+	    ).toString(16)
+	  );
 	}
 
 	function annotationCreate(user, selection) {
@@ -857,35 +836,37 @@
 	        range: {
 	          start: {
 	            line: selection.start.line,
-	            column: selection.start.column
+	            column: selection.start.column,
 	          },
 	          end: {
 	            line: selection.end.line,
-	            column: selection.end.column
-	          }
-	        }
-	      }
+	            column: selection.end.column,
+	          },
+	        },
+	      },
 	    });
 	    dispatch(annotationSelect(id));
 	    dispatch(editActiveAnnotation());
 	  };
 	}
+
 	function editActiveAnnotation() {
 	  return (dispatch, getState) => {
 	    if (isMyAnnotation(getState(), getState().ui.activeAnnotationID)) {
 	      dispatch({
 	        type: ANNOTATION_EDIT_BEGIN,
-	        isEditing: true
+	        isEditing: true,
 	      });
 	    }
 	  };
 	}
+
 	function cancelEditActiveAnnotation() {
 	  return (dispatch, getState) => {
 	    if (getState().ui.activeAnnotationID && getState().ui.isEditing) {
 	      dispatch({
 	        type: ANNOTATION_EDIT_CANCEL,
-	        isEditing: false
+	        isEditing: false,
 	      });
 	    }
 	  };
@@ -895,30 +876,28 @@
 	  console.log('saveAnnotation', id, comment);
 	  return (dispatch, getState) => {
 	    const state = getState();
-
-	    if (id === state.ui.activeAnnotationID && isMyAnnotation(state, state.ui.activeAnnotationID)) {
+	    if (
+	      id === state.ui.activeAnnotationID &&
+	      isMyAnnotation(state, state.ui.activeAnnotationID)
+	    ) {
 	      dispatch({
 	        type: ANNOTATION_SAVE_RECEIPT,
-	        annotation: _objectSpread$1({}, annotationByID(state, id), {
-	          comment
-	        })
+	        annotation: {
+	          ...annotationByID(state, id),
+	          comment,
+	        },
 	      });
 	    }
 	  };
 	}
 
-	const {
-	  create,
-	  assign
-	} = Object;
+	const { create, assign } = Object;
 
 	function shallowCopy(input, ...others) {
 	  if (Array.isArray(input)) return [...input];
-
 	  switch (typeof input) {
 	    case 'object':
 	      return assign(create(null), input, ...others);
-
 	    default:
 	      return input;
 	  }
@@ -930,119 +909,112 @@
 	    currentSelection: null,
 	    activeAnnotationID: null,
 	    isEditing: null,
-	    isRendering: null
+	    isRendering: null,
 	  },
-	  model: {
-	    content: null,
-	    href: null,
-	    annotations: []
-	  }
+	  model: { content: null, href: null, annotations: [] },
 	});
+
 	/**
 	 *
 	 * @param {Object} state
 	 * @param {Object} action
 	 * @return {Object}
 	 */
-
 	function reducer(state = INITIAL_STATE, action) {
 	  switch (action.type) {
 	    case USER_LOGIN:
 	      return login$1(state, action);
-
 	    case DOCUMENT_LOAD:
 	      return documentLoad$1(state, action);
-
 	    case SELECTION_CHANGE:
-	      return _objectSpread$1({}, state, {
-	        ui: _objectSpread$1({}, state.ui, {
+	      return {
+	        ...state,
+	        ui: {
+	          ...state.ui,
 	          selection: action.selection,
-	          position: action.position
-	        })
-	      });
-
-	    case SELECTION_CANCEL:
-	      {
-	        const ui = _objectSpread$1({}, state.ui);
-
-	        delete ui.selection;
-	        delete ui.position;
-	        return _objectSpread$1({}, state, {
-	          ui
-	        });
-	      }
-
-	    case ANNOTATION_CREATE:
-	      {
-	        const ui = _objectSpread$1({}, state.ui);
-
-	        delete ui.position;
-	        delete ui.selection;
-	        return _objectSpread$1({}, upsertAnnotation(state, action.annotation, null), {
-	          ui
-	        });
-	      }
-
+	          position: action.position,
+	        },
+	      };
+	    case SELECTION_CANCEL: {
+	      const ui = { ...state.ui };
+	      delete ui.selection;
+	      delete ui.position;
+	      return {
+	        ...state,
+	        ui,
+	      };
+	    }
+	    case ANNOTATION_CREATE: {
+	      const ui = {
+	        ...state.ui,
+	      };
+	      delete ui.position;
+	      delete ui.selection;
+	      return {
+	        ...upsertAnnotation(state, action.annotation, null),
+	        ui,
+	      };
+	    }
 	    case ANNOTATION_SELECT:
 	      // const ui = shallowCopy(state.ui, { activeAnnotationID: action.id });
 	      // return shallowCopy(state, { ui });
-	      return _objectSpread$1({}, state, {
-	        ui: _objectSpread$1({}, state.ui, {
+	      return {
+	        ...state,
+	        ui: {
+	          ...state.ui,
 	          activeAnnotationID: action.id,
-	          isEditing: false
-	        })
-	      });
-
+	          isEditing: false,
+	        },
+	      };
 	    case ANNOTATION_EDIT_BEGIN:
-	      return _objectSpread$1({}, state, {
-	        ui: _objectSpread$1({}, state.ui, {
-	          isEditing: action.isEditing
-	        })
-	      });
-
+	      return {
+	        ...state,
+	        ui: {
+	          ...state.ui,
+	          isEditing: action.isEditing,
+	        },
+	      };
 	    case ANNOTATION_EDIT_BEGIN:
-	      return _objectSpread$1({}, state, {
-	        ui: _objectSpread$1({}, state.ui, {
-	          isEditing: action.isEditing
-	        })
-	      });
-
+	      return {
+	        ...state,
+	        ui: {
+	          ...state.ui,
+	          isEditing: action.isEditing,
+	        },
+	      };
 	    case ANNOTATION_EDIT_CANCEL:
-	      return _objectSpread$1({}, removeUnsavedAnnotations(state), {
-	        ui: _objectSpread$1({}, state.ui, {
-	          isEditing: action.isEditing
-	        })
-	      });
-
+	      return {
+	        ...removeUnsavedAnnotations(state),
+	        ui: {
+	          ...state.ui,
+	          isEditing: action.isEditing,
+	        },
+	      };
 	    case ANNOTATION_SAVE_RECEIPT:
-	      return upsertAnnotation(state, action.annotation, new Date().toISOString());
-
+	      return upsertAnnotation(
+	        state,
+	        action.annotation,
+	        new Date().toISOString()
+	      );
 	    default:
 	      return state;
 	  }
 	}
 	/** @private */
-
 	function login$1(state, action) {
-	  const ui = shallowCopy(state.ui, {
-	    user: action.user
-	  });
-	  return shallowCopy(state, {
-	    ui
-	  });
-	} // TODO: This probably needs to happen async
+	  const ui = shallowCopy(state.ui, { user: action.user });
+	  return shallowCopy(state, { ui });
+	}
 
-
+	// TODO: This probably needs to happen async
 	function documentLoad$1(state, action) {
 	  const model = shallowCopy(state.model, {
 	    content: action.content,
 	    annotations: action.annotations,
 	    href: action.href,
-	    mime: action.mime
+	    mime: action.mime,
 	  });
-	  return shallowCopy(state, {
-	    model
-	  });
+	  return shallowCopy(state, { model });
 	}
 
 	/**
@@ -1189,35 +1161,40 @@
 	function render(user, withLogout = false) {
 	  if (!user) return empty();
 	  const style = {
-	    backgroundColor: `rgba(${new colorHash().rgb(user).join(', ')}, 0.5)`
+	    backgroundColor: `rgba(${new colorHash().rgb(user).join(', ')}, 0.5)`,
 	  };
-	  return div({
-	    className: 'user'
-	  }, span({
-	    className: 'user-color'
-	  }, {
-	    style
-	  }), span(user), withLogout ? button('Logout', {
-	    id: 'Logout',
-	    onclick: evt => console.log('logout')
-	  }) : empty());
+	  return div(
+	    { className: 'user' },
+	    span({ className: 'user-color' }, { style }),
+	    span(user),
+	    withLogout
+	      ? button('Logout', {
+	          id: 'Logout',
+	          onclick: evt => console.log('logout'),
+	        })
+	      : empty()
+	  );
 	}
 
 	// <https://jsfiddle.net/gabrieleromanato/qAGHT/>
-	const _keyStr = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+	const _keyStr =
+	  'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+
 	function encode(input) {
 	  var output = '';
 	  var chr1, chr2, chr3, enc1, enc2, enc3, enc4;
 	  var i = 0;
+
 	  input = _utf8_encode(input);
 
 	  while (i < input.length) {
 	    chr1 = input.charCodeAt(i++);
 	    chr2 = input.charCodeAt(i++);
 	    chr3 = input.charCodeAt(i++);
+
 	    enc1 = chr1 >> 2;
-	    enc2 = (chr1 & 3) << 4 | chr2 >> 4;
-	    enc3 = (chr2 & 15) << 2 | chr3 >> 6;
+	    enc2 = ((chr1 & 3) << 4) | (chr2 >> 4);
+	    enc3 = ((chr2 & 15) << 2) | (chr3 >> 6);
 	    enc4 = chr3 & 63;
 
 	    if (isNaN(chr2)) {
@@ -1226,7 +1203,12 @@
 	      enc4 = 64;
 	    }
 
-	    output = output + _keyStr.charAt(enc1) + _keyStr.charAt(enc2) + _keyStr.charAt(enc3) + _keyStr.charAt(enc4);
+	    output =
+	      output +
+	      _keyStr.charAt(enc1) +
+	      _keyStr.charAt(enc2) +
+	      _keyStr.charAt(enc3) +
+	      _keyStr.charAt(enc4);
 	  }
 
 	  return output;
@@ -1242,12 +1224,12 @@
 	    if (c < 128) {
 	      utftext += String.fromCharCode(c);
 	    } else if (c > 127 && c < 2048) {
-	      utftext += String.fromCharCode(c >> 6 | 192);
-	      utftext += String.fromCharCode(c & 63 | 128);
+	      utftext += String.fromCharCode((c >> 6) | 192);
+	      utftext += String.fromCharCode((c & 63) | 128);
 	    } else {
-	      utftext += String.fromCharCode(c >> 12 | 224);
-	      utftext += String.fromCharCode(c >> 6 & 63 | 128);
-	      utftext += String.fromCharCode(c & 63 | 128);
+	      utftext += String.fromCharCode((c >> 12) | 224);
+	      utftext += String.fromCharCode(((c >> 6) & 63) | 128);
+	      utftext += String.fromCharCode((c & 63) | 128);
 	    }
 	  }
 
@@ -1256,43 +1238,48 @@
 
 	function render$1(content, annotations, fileName, mime) {
 	  if (content && content.length > 0) {
-	    const href = `data:${mime};charset=utf-8;base64,${encode(serializeAnnotatedMarkdown(content, annotations))}`;
+	    const href = `data:${mime};charset=utf-8;base64,${encode(
+      serializeAnnotatedMarkdown(content, annotations)
+    )}`;
 	    return a('Download', {
 	      href,
-	      download: decodeURIComponent(fileName.split('/').pop())
+	      download: decodeURIComponent(fileName.split('/').pop()),
 	    });
 	  }
-
 	  return empty();
 	}
 
 	function render$2(model, ui, dispatcher) {
-	  return toFragment(h1(model.href, render$1(model.content, model.annotations, model.href, model.mime)), render(ui.user, true));
+	  return toFragment(
+	    h1(
+	      model.href,
+	      render$1(model.content, model.annotations, model.href, model.mime)
+	    ),
+	    render(ui.user, true)
+	  );
 	}
 
 	function lineProps(line) {
 	  const props = {};
+
 	  const listMatcher = /^(\s*)(\*|\-|\d+\.|>) /; // matches list items and quotes
-
 	  const matches = line.match(listMatcher);
-
 	  if (matches) {
 	    const indent = matches[1].length + matches[2].length + 1;
-	    props.style = _objectSpread$1({}, props.style, {
+	    props.style = {
+	      ...props.style,
 	      paddingLeft: `${indent}ch`,
-	      textIndent: `-${indent}ch`
-	    });
+	      textIndent: `-${indent}ch`,
+	    };
 	  }
 
 	  const headingMatcher = /^#+ /;
-
 	  if (line.match(headingMatcher)) {
 	    // content.classList.add('heading');
 	    props.classList = [...(props.classList || []), 'heading'];
 	  }
 
 	  const quoteMatcher = /^>+ /;
-
 	  if (line.match(quoteMatcher)) {
 	    // content.classList.add('quote');
 	    props.classList = [...(props.classList || []), 'quote'];
@@ -1306,33 +1293,36 @@
 	 * @param {string} md  - Markdown
 	 * @returns {HTMLTableElement|DocumentFragment}
 	 */
-
-
 	function renderMarkdown(md) {
 	  if (!md) return empty();
-	  return table(tbody(md.split(/\n/).map((line, index) => tr(td('', {
-	    className: 'line-number',
-	    dataset: {
-	      line: index + 1
-	    }
-	  }), td('' === line ? '\n' : line, {
-	    className: 'content'
-	  }, lineProps(line)), {
-	    id: `L${index + 1}`,
-	    className: 'line',
-	    dataset: {
-	      line: index + 1
-	    }
-	  }))));
+
+	  return table(
+	    tbody(
+	      md.split(/\n/).map((line, index) =>
+	        tr(
+	          td('', { className: 'line-number', dataset: { line: index + 1 } }),
+	          td(
+	            '' === line ? '\n' : line,
+	            { className: 'content' },
+	            lineProps(line)
+	          ),
+	          {
+	            id: `L${index + 1}`,
+	            className: 'line',
+	            dataset: { line: index + 1 },
+	          }
+	        )
+	      )
+	    )
+	  );
 	}
 
 	function render$3(model, ui, dispatch) {
 	  if (model.content) {
 	    document.title = `Annotating ${model.href}`;
 	    return renderMarkdown(model.content);
-	  } // <input type="file" id="Upload" accept="text/markdown" />
-
-
+	  }
+	  // <input type="file" id="Upload" accept="text/markdown" />
 	  return file({
 	    id: 'Upload',
 	    accept: 'text/markdown',
@@ -1340,12 +1330,15 @@
 	      const file = evt.target.files[0];
 	      const reader = new FileReader();
 	      reader.addEventListener('load', () => {
-	        dispatch(documentLoad(parseAnnotatedMarkdown(reader.result), file.name));
+	        dispatch(
+	          documentLoad(parseAnnotatedMarkdown(reader.result), file.name)
+	        );
 	      });
 	      reader.readAsText(file);
-	    }
+	    },
 	  });
 	}
+
 	/**
 	 * Converse of `serializeAnnotatedMarkdown()`.
 	 *
@@ -1353,24 +1346,18 @@
 	 *                               block of annotations serialized as JSON
 	 * @return {Object} - `{ content: string, annotations: Array<Annotation*> }`
 	 */
-
 	function parseAnnotatedMarkdown(rawMarkdown) {
-	  if (!rawMarkdown) return; // const NAMESPACE = 'http://marklogic.com/annotations'.replace(/\//g, '\\/');
-
+	  if (!rawMarkdown) return;
+	  // const NAMESPACE = 'http://marklogic.com/annotations'.replace(/\//g, '\\/');
 	  const matcher = /([\s\S]+)\n\n<!--- http:\/\/marklogic.com\/annotations\n\n([\s\S]+)\n\n--->([\s\S]*)/;
 	  const matches = rawMarkdown.match(matcher);
-	  if (null === matches) return {
-	    content: rawMarkdown,
-	    annotations: []
-	  };
-
+	  if (null === matches) return { content: rawMarkdown, annotations: [] };
 	  if (4 !== matches.length) {
 	    throw new Error(matches.length);
 	  }
-
 	  return {
 	    content: matches[1] + matches[3],
-	    annotations: JSON.parse(matches[2])
+	    annotations: JSON.parse(matches[2]),
 	  };
 	}
 
@@ -1623,16 +1610,20 @@
 	});
 
 	let isInitialized = false;
-	function render$4(position, selection, user, dispatch, getSelection) {
+
+	function render$4(
+	  position,
+	  selection,
+	  user,
+	  dispatch,
+	  getSelection
+	) {
 	  if (!isInitialized) {
 	    initialize(dispatch, getSelection);
 	    isInitialized = true;
 	  }
 
-	  const style = {
-	    position: 'absolute'
-	  };
-
+	  const style = { position: 'absolute' };
 	  if (position) {
 	    style.display = 'unset';
 	    style.top = `${position.y}px`;
@@ -1643,19 +1634,20 @@
 	    style.top = `-100px`;
 	    style.left = `-100px`;
 	  }
-
 	  const b = button('🖍', {
-	    onclick: evt => dispatch(annotationCreate(user, getSelection()))
+	    onclick: evt => dispatch(annotationCreate(user, getSelection())),
 	  });
-	  return div({
-	    style,
-	    [onComponentDidMount]: () => b.focus()
-	  }, b);
+	  return div({ style, [onComponentDidMount]: () => b.focus() }, b);
 	}
 
 	function restoreSelection(range) {
 	  if (!range) return;
-	  const r = rangeFromOffsets(document.querySelector(`#L${range.start.line}>td.content`), range.start.column, document.querySelector(`#L${range.end.line}>td.content`), range.end.column);
+	  const r = rangeFromOffsets(
+	    document.querySelector(`#L${range.start.line}>td.content`),
+	    range.start.column,
+	    document.querySelector(`#L${range.end.line}>td.content`),
+	    range.end.column
+	  );
 	  const selection = window.getSelection();
 	  selection.removeAllRanges();
 	  selection.addRange(r);
@@ -1663,35 +1655,32 @@
 
 	function initialize(dispatch, getSelection) {
 	  let isSelecting = false;
+
 	  document.addEventListener('selectionchange', evt => {
 	    isSelecting = !window.getSelection().isCollapsed;
 	  });
+
 	  document.addEventListener('mouseup', evt => {
 	    // FIXME: UGLY!
 	    if ('BUTTON' === evt.target.nodeName) {
 	      evt.preventDefault();
 	      return;
 	    }
-
 	    if (isSelecting) {
 	      dispatch({
 	        type: SELECTION_CHANGE,
 	        selection: getRange(window.getSelection()),
-	        position: {
-	          x: evt.pageX,
-	          y: evt.pageY
-	        }
+	        position: { x: evt.pageX, y: evt.pageY },
 	      });
 	      isSelecting = false;
 	    } else {
 	      if (getSelection()) {
-	        dispatch({
-	          type: SELECTION_CANCEL
-	        });
+	        dispatch({ type: SELECTION_CANCEL });
 	      }
 	    }
 	  });
 	}
+
 	/**
 	 * The number of characters from the start of the parent node
 	 * to the child node, flattening all intervening children,
@@ -1704,30 +1693,28 @@
 	 * @param {Node} child
 	 * @param {number} [childOffset = 0]
 	 */
-
-
 	function textOffsetFromNode(parent, child, childOffset = 0) {
 	  if (!parent) return;
-	  if (!child) return offset; // console.log('textOffsetFromNode', parent, child, childOffset);
-
+	  if (!child) return offset;
+	  // console.log('textOffsetFromNode', parent, child, childOffset);
 	  const iter = document.createNodeIterator(parent, NodeFilter.SHOW_TEXT);
+
 	  let node;
 	  let offset = 0;
-
 	  while (iter.nextNode()) {
 	    node = iter.referenceNode;
-
 	    if (node === child) {
 	      return offset + childOffset;
 	    }
-
 	    if (Node.TEXT_NODE === node.nodeType) {
 	      offset += node.textContent.length;
 	    }
 	  }
-
-	  throw new Error(`Couldn’t find ${String(child)} as a child of ${String(parent)}`);
+	  throw new Error(
+	    `Couldn’t find ${String(child)} as a child of ${String(parent)}`
+	  );
 	}
+
 	/**
 	 * Given a node, find its parent line number,
 	 * delegating to `getLine()`.
@@ -1736,28 +1723,25 @@
 	 * @param {string} [matcher = 'tr.line']
 	 * @return {number}
 	 */
-
-
 	function getLineNumber(node, matcher = 'tr.line') {
 	  return parseInt(getLine(node, matcher).dataset.line, 10);
 	}
+
 	/**
 	 * Given a node, find its parent line.
 	 *
 	 * @param {Node} node
 	 * @param {string} [matcher = 'tr.line']
 	 */
-
-
 	function getLine(node, matcher = 'tr.line') {
 	  do {
 	    if (node.matches && node.matches(matcher)) {
 	      return node;
 	    }
-	  } while (node = node.parentNode);
-
+	  } while ((node = node.parentNode));
 	  return undefined;
 	}
+
 	/**
 	 * Given a `Selection`, determine the `Range`, where
 	 * `start` is always before `end`, regardless
@@ -1766,32 +1750,44 @@
 	 * @param {Selection} selection
 	 * @returns {Object} - `{ start: number, end: number };
 	 */
-
-
 	function getRange(selection) {
 	  if (!selection) return;
-	  if (!(selection instanceof Selection)) throw new TypeError(String(selection.constructor.name));
+	  if (!(selection instanceof Selection))
+	    throw new TypeError(String(selection.constructor.name));
+
 	  const anchor = {
 	    line: getLineNumber(selection.anchorNode),
-	    column: textOffsetFromNode(getLine(selection.anchorNode), selection.anchorNode, selection.anchorOffset)
+	    column: textOffsetFromNode(
+	      getLine(selection.anchorNode),
+	      selection.anchorNode,
+	      selection.anchorOffset
+	    ),
 	  };
 	  const focus = {
 	    line: getLineNumber(selection.focusNode),
-	    column: textOffsetFromNode(getLine(selection.focusNode), selection.focusNode, selection.focusOffset)
-	  }; // console.log('getRange', anchor, focus);
-
-	  if (anchor.line < focus.line || anchor.line === focus.line && anchor.column <= focus.column) {
+	    column: textOffsetFromNode(
+	      getLine(selection.focusNode),
+	      selection.focusNode,
+	      selection.focusOffset
+	    ),
+	  };
+	  // console.log('getRange', anchor, focus);
+	  if (
+	    anchor.line < focus.line ||
+	    (anchor.line === focus.line && anchor.column <= focus.column)
+	  ) {
 	    return {
 	      start: anchor,
-	      end: focus
+	      end: focus,
 	    };
 	  } else {
 	    return {
 	      start: focus,
-	      end: anchor
+	      end: anchor,
 	    };
 	  }
 	}
+
 	/**
 	 *
 	 * @param {Node} parentStart
@@ -1800,47 +1796,49 @@
 	 * @param {number} end
 	 * @return {Range}
 	 */
-
-
-	function rangeFromOffsets(parentStart, start = 0, parentEnd = parentStart, end = 0) {
+	function rangeFromOffsets(
+	  parentStart,
+	  start = 0,
+	  parentEnd = parentStart,
+	  end = 0
+	) {
 	  // console.log('rangeFromOffsets', parentStart, start, parentEnd, end);
 	  const range = document.createRange();
 	  const s = nodeFromTextOffset(parentStart, start);
-	  const e = nodeFromTextOffset(parentEnd, end); // console.log('rangeFromOffsets#nodeFromTextOffset', s, e);
-
+	  const e = nodeFromTextOffset(parentEnd, end);
+	  // console.log('rangeFromOffsets#nodeFromTextOffset', s, e);
 	  range.setStart(childTextNodeOrSelf(s.node), s.offset);
 	  range.setEnd(childTextNodeOrSelf(e.node), e.offset);
+
 	  return range;
 	}
+
 	/**
 	 *
 	 * @param {Node} parent
 	 * @param {number} offset
 	 * @return {Object} - `{ node: Node, offset: number }`
 	 */
-
 	function nodeFromTextOffset(parent, offset = 0) {
-	  if (!parent) return; // console.log('nodeFromTextOffset', parent, offset);
+	  if (!parent) return;
+	  // console.log('nodeFromTextOffset', parent, offset);
 
 	  const iter = document.createNodeIterator(parent, NodeFilter.SHOW_TEXT);
+
 	  let counter = -1;
 	  let node;
-	  let last; // Find the start node (could we somehow skip this seemingly needless search?)
-
+	  let last;
+	  // Find the start node (could we somehow skip this seemingly needless search?)
 	  while (counter < offset && iter.nextNode()) {
 	    node = iter.referenceNode;
-
 	    if (node.nodeType === Node.TEXT_NODE) {
 	      last = offset - counter - 1;
 	      counter += node.textContent.length;
 	    }
 	  }
-
-	  return {
-	    node: node,
-	    offset: last
-	  };
+	  return { node: node, offset: last };
 	}
+
 	/**
 	 * Descendent-or-self until you get a `TextNode`
 	 *
@@ -1848,8 +1846,6 @@
 	 * @return {TextNode} - Or `undefined` if there are not text
 	 *                      children, e.g. `<br/>`
 	 */
-
-
 	function childTextNodeOrSelf(node) {
 	  if (!node) return;
 	  if (!(node instanceof Node)) throw new TypeError(node.constructor.name);
@@ -1857,11 +1853,9 @@
 	  if (Node.TEXT_NODE === node.nodeType) {
 	    return node;
 	  }
-
 	  if (node.firstChild) {
 	    return childTextNodeOrSelf(node.firstChild);
 	  }
-
 	  return undefined;
 	}
 
@@ -1873,46 +1867,61 @@
 	 * @param {function} dispatch
 	 * @return {Array<{id:Node}>} - An array highlight nodes, keyed on annotation id
 	 */
-
 	function render$5(annotations, relativeY = 0, ui, dispatch) {
 	  // Highlight annotations. Requires that DOM is already committed above
 	  return annotations.reduce((markers, annotation) => {
-	    return _objectSpread$1({}, markers, {
-	      [annotation.id]: renderAnnotationHighlight(annotation, // state.model.annotations.mine().some(a => annotation.id === a.id),
-	      false, ui.activeAnnotationID === annotation.id, relativeY, dispatch)
-	    });
+	    return {
+	      ...markers,
+	      [annotation.id]: renderAnnotationHighlight(
+	        annotation,
+	        // state.model.annotations.mine().some(a => annotation.id === a.id),
+	        false,
+	        ui.activeAnnotationID === annotation.id,
+	        relativeY,
+	        dispatch
+	      ),
+	    };
 	  }, {});
 	}
 
-	function renderAnnotationHighlight(annotation, isMine = false, isActive = false, relativeY = 0, dispatch) {
+	function renderAnnotationHighlight(
+	  annotation,
+	  isMine = false,
+	  isActive = false,
+	  relativeY = 0,
+	  dispatch
+	) {
 	  if (!annotation) return;
-	  const r = rangeFromOffsets(document.querySelector(`#L${annotation.range.start.line}>td.content`), annotation.range.start.column, document.querySelector(`#L${annotation.range.end.line}>td.content`), annotation.range.end.column);
+	  const r = rangeFromOffsets(
+	    document.querySelector(`#L${annotation.range.start.line}>td.content`),
+	    annotation.range.start.column,
+	    document.querySelector(`#L${annotation.range.end.line}>td.content`),
+	    annotation.range.end.column
+	  );
 	  let first;
 	  highlightRange_1(r, (node, index) => {
 	    // FIXME: Fix this in highlight-range.js
 	    index = parseInt(index, 10);
+
 	    const mark = document.createElement('mark');
 	    mark.classList.add('annotation-highlight');
 	    mark.dataset.annotationId = annotation.id;
-
 	    if (isMine) {
 	      mark.classList.add('mine');
 	    }
-
 	    if (isActive) {
 	      mark.classList.add('active');
 	    }
-
-	    mark.style.backgroundColor = `rgba(${new colorHash().rgb(annotation.user).join(', ')}, 0.5)`;
-
+	    mark.style.backgroundColor = `rgba(${new colorHash()
+      .rgb(annotation.user)
+      .join(', ')}, 0.5)`;
 	    mark.onclick = evt => {
 	      dispatch(annotationSelect(evt.target.dataset.annotationId));
 	    };
-
 	    if (0 === index) first = mark;
 	    return mark;
-	  }); // The offset from the container
-
+	  });
+	  // The offset from the container
 	  return first.getBoundingClientRect().y - relativeY;
 	}
 
@@ -1924,17 +1933,20 @@
 	 * @param {function} dispatch
 	 * @return {HTMLElement}
 	 */
-
-	function render$6(annotation, isActive = false, isEditing = false, user, markers, dispatch) {
+	function render$6(
+	  annotation,
+	  isActive = false,
+	  isEditing = false,
+	  user,
+	  markers,
+	  dispatch
+	) {
 	  if (!annotation) return empty();
+
 	  const props = {
 	    classList: ['annotation-detail', isActive ? 'active' : undefined],
-	    dataset: {
-	      annotationId: annotation.id
-	    },
-	    style: {
-	      top: `${markers[annotation.id]}px`
-	    },
+	    dataset: { annotationId: annotation.id },
+	    style: { top: `${markers[annotation.id]}px` },
 	    tabIndex: 0,
 	    onclick: evt => {
 	      if (!isActive) {
@@ -1943,7 +1955,7 @@
 	    },
 	    // Need a function becuase arrow functions can’t be
 	    // re-bound and inherit the scope of the calling context
-	    onkeypress: function (evt) {
+	    onkeypress: function(evt) {
 	      // console.log('this', this);
 	      // console.log('document.activeElement', document.activeElement, evt.target);
 	      if ('Space' === evt.code && document.activeElement === this) {
@@ -1953,38 +1965,46 @@
 	      } else {
 	        console.log('nope');
 	      }
-	    }
+	    },
 	  };
-	  const comm = {
-	    className: 'annotation-comment'
-	  };
+	  const comm = { className: 'annotation-comment' };
 	  const commentText = div(comm, toFormattedNodes(trim(annotation.comment)));
-
 	  if (isActive) {
 	    const commentEl = textarea(comm, annotation.comment || '', {
-	      oninput: evt => console.log('textarea#input')
+	      oninput: evt => console.log('textarea#input'),
 	    });
-	    return div(props, div({
-	      className: 'annotation-toolbar'
-	    }, render(annotation.user), EditAffordance(annotation, isEditing, user, {
-	      dispatch,
-	      getComment: () => commentEl.value
-	    })), div({
-	      className: 'annotation-editor'
-	    }, isEditing ? commentEl : commentText, div(formatTimestamp(annotation.timestamp), {
-	      className: 'annotation-timestamp',
-	      dataset: {
-	        timestamp: annotation.timestamp
+
+	    return div(
+	      props,
+	      div(
+	        { className: 'annotation-toolbar' },
+	        render(annotation.user),
+	        EditAffordance(annotation, isEditing, user, {
+	          dispatch,
+	          getComment: () => commentEl.value,
+	        })
+	      ),
+	      div(
+	        { className: 'annotation-editor' },
+	        isEditing ? commentEl : commentText,
+	        div(formatTimestamp(annotation.timestamp), {
+	          className: 'annotation-timestamp',
+	          dataset: { timestamp: annotation.timestamp },
+	        })
+	      ),
+	      {
+	        [onComponentDidMount]: () => {
+	          if (isEditing) commentEl.focus();
+	        },
 	      }
-	    })), {
-	      [onComponentDidMount]: () => {
-	        if (isEditing) commentEl.focus();
-	      }
-	    });
+	    );
 	  } else {
-	    return div(props, {
-	      classList: 'collapsed'
-	    }, render(annotation.user), commentText);
+	    return div(
+	      props,
+	      { classList: 'collapsed' },
+	      render(annotation.user),
+	      commentText
+	    );
 	  }
 	}
 
@@ -1994,15 +2014,15 @@
 	    a.splice(-1, 1);
 	    return a;
 	  }
-
 	  return arr;
 	}
 
 	function toFormattedNodes(str) {
 	  if ('string' === typeof str) {
-	    return removeLast(str.split(/\n/).reduce((acc, item, index) => [...acc, item, br()], []));
+	    return removeLast(
+	      str.split(/\n/).reduce((acc, item, index) => [...acc, item, br()], [])
+	    );
 	  }
-
 	  return str;
 	}
 
@@ -2012,7 +2032,6 @@
 	      return str.substr(0, length) + trailer;
 	    }
 	  }
-
 	  return str;
 	}
 
@@ -2020,10 +2039,13 @@
 	  if (!timestamp) return timestamp;
 	  if ('string' === typeof timestamp) timestamp = new Date(timestamp);
 	  return timestamp.toLocaleString();
-	} // function isCallable(f) {
+	}
+
+	// function isCallable(f) {
 	//   if (!f) return false;
 	//   return 'function' === typeof f.call && 'function' === typeof f.apply;
 	// }
+
 	// function iif(bool, t, f) {
 	//   if (bool) {
 	//     return isCallable(t) ? t() : t;
@@ -2031,38 +2053,58 @@
 	//   return isCallable(f) ? f() : f;
 	// }
 
-
-	function EditAffordance(annotation, isEditing, user, {
-	  dispatch,
-	  getComment
-	}) {
-	  return div(annotation.user === user && !isEditing ? button('Edit', {
-	    onclick: evt => {
-	      dispatch(editActiveAnnotation()); // evt.stopPropagation();
-	    }
-	  }) : empty(), isEditing ? [button('Save', {
-	    onclick: evt => dispatch(saveAnnotation(annotation.id, getComment()))
-	  }), button('Cancel', {
-	    onclick: evt => dispatch(cancelEditActiveAnnotation())
-	  })] : empty(), {
-	    className: 'controls'
-	  });
+	function EditAffordance(annotation, isEditing, user, { dispatch, getComment }) {
+	  return div(
+	    annotation.user === user && !isEditing
+	      ? button('Edit', {
+	          onclick: evt => {
+	            dispatch(editActiveAnnotation());
+	            // evt.stopPropagation();
+	          },
+	        })
+	      : empty(),
+	    isEditing
+	      ? [
+	          button('Save', {
+	            onclick: evt =>
+	              dispatch(saveAnnotation(annotation.id, getComment())),
+	          }),
+	          button('Cancel', {
+	            onclick: evt => dispatch(cancelEditActiveAnnotation()),
+	          }),
+	        ]
+	      : empty(),
+	    { className: 'controls' }
+	  );
 	}
 
 	function render$7(state, relativeY = 0, dispatcher) {
-	  const annotationNodes = render$5(state.model.annotations, relativeY, state.ui, dispatcher);
-	  const annotationEls = state.model.annotations.map(annotation => render$6(annotation, //annotationByID(state, state.ui.activeAnnotationID),
-	  annotation.id === state.ui.activeAnnotationID, state.ui.isEditing, state.ui.user, annotationNodes, dispatcher // https://github.com/reactjs/redux/blob/628928e3108df9725f07689e3785b5a2a226baa8/src/bindActionCreators.js#L26
-	  )); // FIXME: This should really be `toFragment` to avoid an extra div,
+	  const annotationNodes = render$5(
+	    state.model.annotations,
+	    relativeY,
+	    state.ui,
+	    dispatcher
+	  );
+	  const annotationEls = state.model.annotations.map(annotation =>
+	    render$6(
+	      annotation, //annotationByID(state, state.ui.activeAnnotationID),
+	      annotation.id === state.ui.activeAnnotationID,
+	      state.ui.isEditing,
+	      state.ui.user,
+	      annotationNodes,
+	      dispatcher // https://github.com/reactjs/redux/blob/628928e3108df9725f07689e3785b5a2a226baa8/src/bindActionCreators.js#L26
+	    )
+	  );
+	  // FIXME: This should really be `toFragment` to avoid an extra div,
 	  //        but the `DocumentFragment` instance disappears when it’s
 	  //        appended to the actual DOM.
-
 	  return div(annotationEls, {
 	    [onComponentDidMount]: () => {
 	      distributeVerically(annotationEls, 10, -10);
-	    }
+	    },
 	  });
 	}
+
 	/**
 	 * Distribute items vertically within a positioned conainer. Requires items to be
 	 * absolutely positioned (usually within a relatively positioned container).
@@ -2074,7 +2116,6 @@
 	 * @param {number} [spacing = 0] - the number of pixels separating repositioned items
 	 * @param {number} [nudge = 0] - the number of pixels to adjust *every* item, whether repositioned or not
 	 */
-
 	function distributeVerically(items, spacing = 0, nudge = 0) {
 	  Array.from(items).reduce((prevY, item) => {
 	    const top = Math.max(prevY, parseInt(item.style.top, 10)) + nudge;
@@ -2085,72 +2126,86 @@
 
 	const logger = store => next => action => {
 	  console.log('Dispatching', action);
-	  const result = next(action); // console.log('Next state', store.getState());
-
-	  console.log('Next state', JSON.stringify(store.getState()));
+	  const result = next(action);
+	  console.log('Next state', store.getState());
+	  // console.log('Next state', JSON.stringify(store.getState()));
 	  return result;
 	};
-
 	const store = createStore(reducer, applyMiddleware(thunk, logger));
+
 	document.addEventListener('DOMContentLoaded', evt => {
 	  const Header = renderInto(render$2, 'header');
 	  const Document = renderInto(render$3, '#Content');
-	  const Annotations = renderInto(render$7, '#Annotations'); // const AnnotationDetail = renderInto(_AnnotationDetail, '#AnnotationDetail');
-
+	  const Annotations = renderInto(render$7, '#Annotations');
+	  // const AnnotationDetail = renderInto(_AnnotationDetail, '#AnnotationDetail');
 	  const Selection = renderInto(render$4, '#SelectAnnotation');
+
 	  store.subscribe(render);
 	  const dispatcher = store.dispatch.bind(store);
 	  store.dispatch(login('jmakeig'));
+
 	  /**
 	   * Gets its delegated renderers via closure. This has to be done at load-time
 	   * to correctly bind to DOM elements.
 	   */
-
-	  function render()
-	  /**/
-	  {
+	  function render(/**/) {
 	    const state = store.getState();
 	    console.time('render');
 	    Header(state.model, state.ui, dispatcher);
 	    Document(state.model, state.ui, dispatcher);
-	    Annotations(state, document.querySelector('#Content').getBoundingClientRect().y, dispatcher);
-	    Selection(state.ui.position, state.ui.selection, state.ui.user, dispatcher, () => store.getState().ui.selection);
+	    Annotations(
+	      state,
+	      document.querySelector('#Content').getBoundingClientRect().y,
+	      dispatcher
+	    );
+	    Selection(
+	      state.ui.position,
+	      state.ui.selection,
+	      state.ui.user,
+	      dispatcher,
+	      () => store.getState().ui.selection
+	    );
+
 	    console.timeEnd('render');
 	  }
 	});
+
 	/**
 	 *
 	 * @param {function} renderer
 	 * @param {HTMLElement|string} [parent = document.body]
 	 * @return {function} - a function with the same signature as `renderer`
 	 */
-
 	function renderInto(renderer, parent = document.body) {
 	  if ('function' !== typeof renderer) throw new TypeError();
 	  if ('string' === typeof parent) parent = document.querySelector(parent);
 	  if (!(parent instanceof HTMLElement)) throw new ReferenceError();
+
 	  /**
 	   * Holds a reference to a parent `Node` into which to render the
 	   * `Node` returned by the `renderer` function.
 	   */
-
 	  let ref = parent;
-	  return function (...args) {
+	  return function(...args) {
 	    const tree = renderer(...args);
-	    return ref = doOnComponentDidMount(replaceChildren(ref, tree));
+	    return (ref = doOnComponentDidMount(replaceChildren(ref, tree)));
 	  };
 	}
 
 	function doOnComponentDidMount(root) {
-	  const treeWalker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT, {
-	    acceptNode: node => {
-	      if ('function' === typeof node[onComponentDidMount]) {
-	        return NodeFilter.FILTER_ACCEPT;
+	  const treeWalker = document.createTreeWalker(
+	    root,
+	    NodeFilter.SHOW_ELEMENT,
+	    {
+	      acceptNode: node => {
+	        if ('function' === typeof node[onComponentDidMount]) {
+	          return NodeFilter.FILTER_ACCEPT;
+	        }
+	        return NodeFilter.FILTER_REJECT;
 	      }
-
-	      return NodeFilter.FILTER_REJECT;
-	    }
-	  }, false);
+	    },
+	    false
+	  );
 
 	  while (treeWalker.nextNode()) {
 	    if (treeWalker.currentNode[onComponentDidMount]) {
@@ -2158,7 +2213,6 @@
 	      delete treeWalker.currentNode[onComponentDidMount];
 	    }
 	  }
-
 	  return root;
 	}
 
