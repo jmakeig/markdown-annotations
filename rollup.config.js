@@ -13,10 +13,7 @@ export default {
     replace({
       "process.env.NODE_ENV": JSON.stringify("development")
     }),
-    nodeResolve({
-      jsnext: true,
-      main: true
-    }),
+    nodeResolve(),
     commonjs({
       include: "node_modules/**"
     })
