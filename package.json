@@ -28,7 +28,7 @@
     "dom-helper": "git+ssh://git@github.com/jmakeig/dom-helper.git#2d26052",
     "dom-highlight-range": "git+ssh://git@github.com/jmakeig/dom-highlight-range.git#57cc9c1",
     "netlify-auth-providers": "^1.0.0-alpha5",
-    "redux": "^4.0.1",
+    "redux": "^4.0.4",
     "redux-thunk": "^2.3.0"
   }
 }

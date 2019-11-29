@@ -100,7 +100,7 @@
 	  var _ref2;
 
 	  if (typeof preloadedState === 'function' && typeof enhancer === 'function' || typeof enhancer === 'function' && typeof arguments[3] === 'function') {
-	    throw new Error('It looks like you are passing several store enhancers to ' + 'createStore(). This is not supported. Instead, compose them ' + 'together to a single function');
+	    throw new Error('It looks like you are passing several store enhancers to ' + 'createStore(). This is not supported. Instead, compose them ' + 'together to a single function.');
 	  }
 
 	  if (typeof preloadedState === 'function' && typeof enhancer === 'undefined') {
@@ -125,6 +125,13 @@
 	  var currentListeners = [];
 	  var nextListeners = currentListeners;
 	  var isDispatching = false;
+	  /**
+	   * This makes a shallow copy of currentListeners so we can use
+	   * nextListeners as a temporary list while dispatching.
+	   *
+	   * This prevents any bugs around consumers calling
+	   * subscribe/unsubscribe in the middle of a dispatch.
+	   */
 
 	  function ensureCanMutateNextListeners() {
 	    if (nextListeners === currentListeners) {
@@ -270,7 +277,11 @@
 	      throw new Error('Expected the nextReducer to be a function.');
 	    }
 
-	    currentReducer = nextReducer;
+	    currentReducer = nextReducer; // This action has a similiar effect to ActionTypes.INIT.
+	    // Any reducers that existed in both the new and old rootReducer
+	    // will receive the previous state. This effectively populates
+	    // the new state tree with any relevant data from the old one.
+
 	    dispatch({
 	      type: ActionTypes.REPLACE
 	    });
@@ -370,20 +381,34 @@
 	  return obj;
 	}
 
-	function _objectSpread(target) {
+	function ownKeys(object, enumerableOnly) {
+	  var keys = Object.keys(object);
+
+	  if (Object.getOwnPropertySymbols) {
+	    keys.push.apply(keys, Object.getOwnPropertySymbols(object));
+	  }
+
+	  if (enumerableOnly) keys = keys.filter(function (sym) {
+	    return Object.getOwnPropertyDescriptor(object, sym).enumerable;
+	  });
+	  return keys;
+	}
+
+	function _objectSpread2(target) {
 	  for (var i = 1; i < arguments.length; i++) {
 	    var source = arguments[i] != null ? arguments[i] : {};
-	    var ownKeys = Object.keys(source);
 
-	    if (typeof Object.getOwnPropertySymbols === 'function') {
-	      ownKeys = ownKeys.concat(Object.getOwnPropertySymbols(source).filter(function (sym) {
-	        return Object.getOwnPropertyDescriptor(source, sym).enumerable;
-	      }));
+	    if (i % 2) {
+	      ownKeys(source, true).forEach(function (key) {
+	        _defineProperty(target, key, source[key]);
+	      });
+	    } else if (Object.getOwnPropertyDescriptors) {
+	      Object.defineProperties(target, Object.getOwnPropertyDescriptors(source));
+	    } else {
+	      ownKeys(source).forEach(function (key) {
+	        Object.defineProperty(target, key, Object.getOwnPropertyDescriptor(source, key));
+	      });
 	    }
-
-	    ownKeys.forEach(function (key) {
-	      _defineProperty(target, key, source[key]);
-	    });
 	  }
 
 	  return target;
@@ -448,7 +473,7 @@
 	      var store = createStore.apply(void 0, arguments);
 
 	      var _dispatch = function dispatch() {
-	        throw new Error("Dispatching while constructing your middleware is not allowed. " + "Other middleware would not be applied to this dispatch.");
+	        throw new Error('Dispatching while constructing your middleware is not allowed. ' + 'Other middleware would not be applied to this dispatch.');
 	      };
 
 	      var middlewareAPI = {
@@ -461,7 +486,7 @@
 	        return middleware(middlewareAPI);
 	      });
 	      _dispatch = compose.apply(void 0, chain)(store.dispatch);
-	      return _objectSpread({}, store, {
+	      return _objectSpread2({}, store, {
 	        dispatch: _dispatch
 	      });
 	    };
@@ -2127,8 +2152,8 @@
 	const logger = store => next => action => {
 	  console.log('Dispatching', action);
 	  const result = next(action);
-	  console.log('Next state', store.getState());
-	  // console.log('Next state', JSON.stringify(store.getState()));
+	  // console.log('Next state', store.getState());
+	  console.log('Next state', JSON.stringify(store.getState()));
 	  return result;
 	};
 	const store = createStore(reducer, applyMiddleware(thunk, logger));
@@ -2202,7 +2227,7 @@
 	          return NodeFilter.FILTER_ACCEPT;
 	        }
 	        return NodeFilter.FILTER_REJECT;
-	      }
+	      },
 	    },
 	    false
 	  );
