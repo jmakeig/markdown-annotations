@@ -1,33 +1,33 @@
-import { createStore, applyMiddleware } from 'redux';
-import thunk from 'redux-thunk';
-import { onComponentDidMount } from './component.js';
-import { replaceChildren } from 'dom-helper';
-import { reducer } from './reducer.js';
-import { login } from './actions.js';
-import { default as _Header } from './header.js';
-import { default as _Document } from './document.js';
-import { default as _Annotations } from './annotations.js';
-import { default as _Selection } from './selection.js';
+import { createStore, applyMiddleware } from "redux";
+import thunk from "redux-thunk";
+import { onComponentDidMount } from "./component.js";
+import { replaceChildren } from "dom-helper";
+import { reducer } from "./reducer.js";
+import { login } from "./actions.js";
+import { default as _Header } from "./header.js";
+import { default as _Document } from "./document.js";
+import { default as _Annotations } from "./annotations.js";
+import { default as _Selection } from "./selection.js";
 
 const logger = store => next => action => {
-  console.log('Dispatching', action);
+  console.log("Dispatching", action);
   const result = next(action);
   // console.log('Next state', store.getState());
-  console.log('Next state', JSON.stringify(store.getState()));
+  console.log("Next state", JSON.stringify(store.getState()));
   return result;
 };
 const store = createStore(reducer, applyMiddleware(thunk, logger));
 
-document.addEventListener('DOMContentLoaded', evt => {
-  const Header = renderInto(_Header, 'header');
-  const Document = renderInto(_Document, '#Content');
-  const Annotations = renderInto(_Annotations, '#Annotations');
+document.addEventListener("DOMContentLoaded", evt => {
+  const Header = renderInto(_Header, "header");
+  const Document = renderInto(_Document, "#Content");
+  const Annotations = renderInto(_Annotations, "#Annotations");
   // const AnnotationDetail = renderInto(_AnnotationDetail, '#AnnotationDetail');
-  const Selection = renderInto(_Selection, '#SelectAnnotation');
+  const Selection = renderInto(_Selection, "#SelectAnnotation");
 
   store.subscribe(render);
   const dispatcher = store.dispatch.bind(store);
-  store.dispatch(login('jmakeig'));
+  store.dispatch(login("jmakeig"));
 
   /**
    * Gets its delegated renderers via closure. This has to be done at load-time
@@ -35,12 +35,12 @@ document.addEventListener('DOMContentLoaded', evt => {
    */
   function render(/**/) {
     const state = store.getState();
-    console.time('render');
+    console.time("render");
     Header(state.model, state.ui, dispatcher);
     Document(state.model, state.ui, dispatcher);
     Annotations(
       state,
-      document.querySelector('#Content').getBoundingClientRect().y,
+      document.querySelector("#Content").getBoundingClientRect().y,
       dispatcher
     );
     Selection(
@@ -51,7 +51,7 @@ document.addEventListener('DOMContentLoaded', evt => {
       () => store.getState().ui.selection
     );
 
-    console.timeEnd('render');
+    console.timeEnd("render");
   }
 });
 
@@ -61,9 +61,9 @@ document.addEventListener('DOMContentLoaded', evt => {
  * @param {HTMLElement|string} [parent = document.body]
  * @return {function} - a function with the same signature as `renderer`
  */
-function renderInto(renderer, parent = document.body) {
-  if ('function' !== typeof renderer) throw new TypeError();
-  if ('string' === typeof parent) parent = document.querySelector(parent);
+function renderInto(renderer, parent = document.body, ...middleware) {
+  if ("function" !== typeof renderer) throw new TypeError();
+  if ("string" === typeof parent) parent = document.querySelector(parent);
   if (!(parent instanceof HTMLElement)) throw new ReferenceError();
 
   /**
@@ -83,11 +83,11 @@ function doOnComponentDidMount(root) {
     NodeFilter.SHOW_ELEMENT,
     {
       acceptNode: node => {
-        if ('function' === typeof node[onComponentDidMount]) {
+        if ("function" === typeof node[onComponentDidMount]) {
           return NodeFilter.FILTER_ACCEPT;
         }
         return NodeFilter.FILTER_REJECT;
-      },
+      }
     },
     false
   );

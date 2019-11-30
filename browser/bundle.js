@@ -538,138 +538,6 @@
 	 * @param {boolean} [ignoreStrings = true]
 	 * @return {boolean}
 	 */
-	function isIterable(item, ignoreStrings = true) {
-	  if (!exists(item)) return false;
-	  if ('function' === typeof item[Symbol.iterator]) {
-	    return 'string' !== typeof item || !ignoreStrings;
-	  }
-	  return false;
-	}
-	/**
-	 * Whether something is not `undefined` or `null`
-	 *
-	 * @param {*} item
-	 * @return {boolean}
-	 */
-	function exists(item) {
-	  return !('undefined' === typeof item || null === item);
-	}
-	/**
-	 * Whether something doesn’t exist or is *not* an empty `string`
-	 *
-	 * @param {*} item
-	 * @return {boolean}
-	 */
-	function isEmpty(item) {
-	  return !exists(item) || '' === item;
-	}
-	/**
-	 * Guarantees an interable, even if passed a non-iterable,
-	 * except for `undefined` and `null`, which are returned as-is.
-	 *
-	 * @param {*} oneOrMany
-	 * @return {Iterable|Array|null|undefined}
-	 */
-	function toIterable(oneOrMany) {
-	  if (!exists(oneOrMany)) return oneOrMany;
-	  if (isIterable(oneOrMany)) return oneOrMany;
-	  return [oneOrMany];
-	}
-
-	/**
-	 * Creates a `Node` instance.
-	 *
-	 * @param {Node|string|null|undefined} name
-	 * @return {Node}
-	 */
-	function createElement(name) {
-	  if (name instanceof Node) return name;
-	  if (isEmpty(name)) return document.createDocumentFragment();
-	  return document.createElement(String(name));
-	}
-
-	/**
-	 *
-	 * @param {Iterable|Node|string|Object} param
-	 * @param {Node} el
-	 * @return {Node}
-	 */
-	function applyToElement(param, el) {
-	  if (isIterable(param)) {
-	    for (const item of param) {
-	      applyToElement(item, el);
-	    }
-	    return el;
-	  }
-
-	  if (param instanceof Node) {
-	    el.appendChild(param);
-	    return el;
-	  }
-
-	  if ('string' === typeof param) {
-	    el.appendChild(document.createTextNode(param));
-	    return el;
-	  }
-
-	  if (exists(param) && 'object' === typeof param) {
-	    for (const p of [
-	      ...Object.getOwnPropertyNames(param),
-	      ...Object.getOwnPropertySymbols(param),
-	    ]) {
-	      switch (p) {
-	        case 'style':
-	        case 'dataset':
-	          for (let item in param[p]) {
-	            if (exists(item)) el[p][item] = param[p][item];
-	          }
-	          break;
-	        case 'class':
-	        case 'className':
-	        case 'classList':
-	          for (const cls of toIterable(param[p])) {
-	            if (exists(cls)) el.classList.add(cls);
-	          }
-	          break;
-	        default:
-	          el[p] = param[p];
-	      }
-	    }
-	  }
-	  return el;
-	}
-
-	/**
-	 *
-	 * @param {string|Node|undefined|null} name
-	 * @param {Iterable} rest
-	 * @return {Node}
-	 */
-	function element(name, ...rest) {
-	  const el = createElement(name);
-	  for (const param of rest) {
-	    applyToElement(param, el);
-	  }
-	  return el;
-	}
-
-	const toFragment = (...rest) => element(null, ...rest);
-	const empty = () => toFragment();
-	const div = (...rest) => element('div', ...rest);
-	const h1 = (...rest) => element('h1', ...rest);
-
-	const table = (...rest) => element('table', ...rest);
-	const tbody = (...rest) => element('tbody', ...rest);
-	const tr = (...rest) => element('tr', ...rest);
-	const td = (...rest) => element('td', ...rest);
-
-	const span = (...rest) => element('span', ...rest);
-	const a = (...rest) => element('a', ...rest);
-	const button = (...rest) => element('button', ...rest);
-	const textarea = (...rest) => element('textarea', ...rest);
-	const file = (...rest) => element('input', { type: 'file' }, ...rest);
-
-	const br = (...rest) => element('br', ...rest);
 
 	/**
 	 * Replaces the entire contents of `oldNode` with `newChild`.
@@ -1041,6 +909,146 @@
 	  });
 	  return shallowCopy(state, { model });
 	}
+
+	/**
+	 * Whether something is iterable, not including `string` instances.
+	 *
+	 * @param {*} item
+	 * @param {boolean} [ignoreStrings = true]
+	 * @return {boolean}
+	 */
+	function isIterable(item, ignoreStrings = true) {
+	  if (!exists(item)) return false;
+	  if ('function' === typeof item[Symbol.iterator]) {
+	    return 'string' !== typeof item || !ignoreStrings;
+	  }
+	  return false;
+	}
+	/**
+	 * Whether something is not `undefined` or `null`
+	 *
+	 * @param {*} item
+	 * @return {boolean}
+	 */
+	function exists(item) {
+	  return !('undefined' === typeof item || null === item);
+	}
+	/**
+	 * Whether something doesn’t exist or is *not* an empty `string`
+	 *
+	 * @param {*} item
+	 * @return {boolean}
+	 */
+	function isEmpty(item) {
+	  return !exists(item) || '' === item;
+	}
+	/**
+	 * Guarantees an interable, even if passed a non-iterable,
+	 * except for `undefined` and `null`, which are returned as-is.
+	 *
+	 * @param {*} oneOrMany
+	 * @return {Iterable|Array|null|undefined}
+	 */
+	function toIterable(oneOrMany) {
+	  if (!exists(oneOrMany)) return oneOrMany;
+	  if (isIterable(oneOrMany)) return oneOrMany;
+	  return [oneOrMany];
+	}
+
+	/**
+	 * Creates a `Node` instance.
+	 *
+	 * @param {Node|string|null|undefined} name
+	 * @return {Node}
+	 */
+	function createElement(name) {
+	  if (name instanceof Node) return name;
+	  if (isEmpty(name)) return document.createDocumentFragment();
+	  return document.createElement(String(name));
+	}
+
+	/**
+	 *
+	 * @param {Iterable|Node|string|Object} param
+	 * @param {Node} el
+	 * @return {Node}
+	 */
+	function applyToElement(param, el) {
+	  if (isIterable(param)) {
+	    for (const item of param) {
+	      applyToElement(item, el);
+	    }
+	    return el;
+	  }
+
+	  if (param instanceof Node) {
+	    el.appendChild(param);
+	    return el;
+	  }
+
+	  if ('string' === typeof param) {
+	    el.appendChild(document.createTextNode(param));
+	    return el;
+	  }
+
+	  if (exists(param) && 'object' === typeof param) {
+	    for (const p of [
+	      ...Object.getOwnPropertyNames(param),
+	      ...Object.getOwnPropertySymbols(param),
+	    ]) {
+	      switch (p) {
+	        case 'style':
+	        case 'dataset':
+	          for (let item in param[p]) {
+	            if (exists(item)) el[p][item] = param[p][item];
+	          }
+	          break;
+	        case 'class':
+	        case 'className':
+	        case 'classList':
+	          for (const cls of toIterable(param[p])) {
+	            if (exists(cls)) el.classList.add(cls);
+	          }
+	          break;
+	        default:
+	          el[p] = param[p];
+	      }
+	    }
+	  }
+	  return el;
+	}
+
+	/**
+	 *
+	 * @param {string|Node|undefined|null} name
+	 * @param {Iterable} rest
+	 * @return {Node}
+	 */
+	function element(name, ...rest) {
+	  const el = createElement(name);
+	  for (const param of rest) {
+	    applyToElement(param, el);
+	  }
+	  return el;
+	}
+
+	const toFragment = (...rest) => element(null, ...rest);
+	const empty = () => toFragment();
+	const div = (...rest) => element('div', ...rest);
+	const h1 = (...rest) => element('h1', ...rest);
+
+	const table = (...rest) => element('table', ...rest);
+	const tbody = (...rest) => element('tbody', ...rest);
+	const tr = (...rest) => element('tr', ...rest);
+	const td = (...rest) => element('td', ...rest);
+
+	const span = (...rest) => element('span', ...rest);
+	const a = (...rest) => element('a', ...rest);
+	const button = (...rest) => element('button', ...rest);
+	const textarea = (...rest) => element('textarea', ...rest);
+	const file = (...rest) => element('input', { type: 'file' }, ...rest);
+
+	const br = (...rest) => element('br', ...rest);
 
 	/**
 	 * BKDR Hash (modified version)
@@ -1969,7 +1977,7 @@
 	  if (!annotation) return empty();
 
 	  const props = {
-	    classList: ['annotation-detail', isActive ? 'active' : undefined],
+	    classList: ["annotation-detail", isActive ? "active" : undefined],
 	    dataset: { annotationId: annotation.id },
 	    style: { top: `${markers[annotation.id]}px` },
 	    tabIndex: 0,
@@ -1983,50 +1991,50 @@
 	    onkeypress: function(evt) {
 	      // console.log('this', this);
 	      // console.log('document.activeElement', document.activeElement, evt.target);
-	      if ('Space' === evt.code && document.activeElement === this) {
+	      if ("Space" === evt.code && document.activeElement === this) {
 	        evt.preventDefault();
 	        dispatch(annotationSelect(evt.currentTarget.dataset.annotationId));
 	        this.focus();
 	      } else {
-	        console.log('nope');
+	        console.log("nope");
 	      }
-	    },
+	    }
 	  };
-	  const comm = { className: 'annotation-comment' };
+	  const comm = { className: "annotation-comment" };
 	  const commentText = div(comm, toFormattedNodes(trim(annotation.comment)));
 	  if (isActive) {
-	    const commentEl = textarea(comm, annotation.comment || '', {
-	      oninput: evt => console.log('textarea#input'),
+	    const commentEl = textarea(comm, annotation.comment || "", {
+	      oninput: evt => console.log("textarea#input")
 	    });
 
 	    return div(
 	      props,
 	      div(
-	        { className: 'annotation-toolbar' },
+	        { className: "annotation-toolbar" },
 	        render(annotation.user),
 	        EditAffordance(annotation, isEditing, user, {
 	          dispatch,
-	          getComment: () => commentEl.value,
+	          getComment: () => commentEl.value
 	        })
 	      ),
 	      div(
-	        { className: 'annotation-editor' },
+	        { className: "annotation-editor" },
 	        isEditing ? commentEl : commentText,
 	        div(formatTimestamp(annotation.timestamp), {
-	          className: 'annotation-timestamp',
-	          dataset: { timestamp: annotation.timestamp },
+	          className: "annotation-timestamp",
+	          dataset: { timestamp: annotation.timestamp }
 	        })
 	      ),
 	      {
 	        [onComponentDidMount]: () => {
 	          if (isEditing) commentEl.focus();
-	        },
+	        }
 	      }
 	    );
 	  } else {
 	    return div(
 	      props,
-	      { classList: 'collapsed' },
+	      { classList: "collapsed" },
 	      render(annotation.user),
 	      commentText
 	    );
@@ -2043,7 +2051,7 @@
 	}
 
 	function toFormattedNodes(str) {
-	  if ('string' === typeof str) {
+	  if ("string" === typeof str) {
 	    return removeLast(
 	      str.split(/\n/).reduce((acc, item, index) => [...acc, item, br()], [])
 	    );
@@ -2051,8 +2059,8 @@
 	  return str;
 	}
 
-	function trim(str, length = 100, trailer = '…') {
-	  if ('string' === typeof str) {
+	function trim(str, length = 100, trailer = "…") {
+	  if ("string" === typeof str) {
 	    if (str.length > length) {
 	      return str.substr(0, length) + trailer;
 	    }
@@ -2062,7 +2070,7 @@
 
 	function formatTimestamp(timestamp) {
 	  if (!timestamp) return timestamp;
-	  if ('string' === typeof timestamp) timestamp = new Date(timestamp);
+	  if ("string" === typeof timestamp) timestamp = new Date(timestamp);
 	  return timestamp.toLocaleString();
 	}
 
@@ -2081,25 +2089,25 @@
 	function EditAffordance(annotation, isEditing, user, { dispatch, getComment }) {
 	  return div(
 	    annotation.user === user && !isEditing
-	      ? button('Edit', {
+	      ? button("Edit", {
 	          onclick: evt => {
 	            dispatch(editActiveAnnotation());
 	            // evt.stopPropagation();
-	          },
+	          }
 	        })
 	      : empty(),
 	    isEditing
 	      ? [
-	          button('Save', {
+	          button("Save", {
 	            onclick: evt =>
-	              dispatch(saveAnnotation(annotation.id, getComment())),
+	              dispatch(saveAnnotation(annotation.id, getComment()))
 	          }),
-	          button('Cancel', {
-	            onclick: evt => dispatch(cancelEditActiveAnnotation()),
-	          }),
+	          button("Cancel", {
+	            onclick: evt => dispatch(cancelEditActiveAnnotation())
+	          })
 	        ]
 	      : empty(),
-	    { className: 'controls' }
+	    { className: "controls" }
 	  );
 	}
 
@@ -2150,24 +2158,24 @@
 	}
 
 	const logger = store => next => action => {
-	  console.log('Dispatching', action);
+	  console.log("Dispatching", action);
 	  const result = next(action);
 	  // console.log('Next state', store.getState());
-	  console.log('Next state', JSON.stringify(store.getState()));
+	  console.log("Next state", JSON.stringify(store.getState()));
 	  return result;
 	};
 	const store = createStore(reducer, applyMiddleware(thunk, logger));
 
-	document.addEventListener('DOMContentLoaded', evt => {
-	  const Header = renderInto(render$2, 'header');
-	  const Document = renderInto(render$3, '#Content');
-	  const Annotations = renderInto(render$7, '#Annotations');
+	document.addEventListener("DOMContentLoaded", evt => {
+	  const Header = renderInto(render$2, "header");
+	  const Document = renderInto(render$3, "#Content");
+	  const Annotations = renderInto(render$7, "#Annotations");
 	  // const AnnotationDetail = renderInto(_AnnotationDetail, '#AnnotationDetail');
-	  const Selection = renderInto(render$4, '#SelectAnnotation');
+	  const Selection = renderInto(render$4, "#SelectAnnotation");
 
 	  store.subscribe(render);
 	  const dispatcher = store.dispatch.bind(store);
-	  store.dispatch(login('jmakeig'));
+	  store.dispatch(login("jmakeig"));
 
 	  /**
 	   * Gets its delegated renderers via closure. This has to be done at load-time
@@ -2175,12 +2183,12 @@
 	   */
 	  function render(/**/) {
 	    const state = store.getState();
-	    console.time('render');
+	    console.time("render");
 	    Header(state.model, state.ui, dispatcher);
 	    Document(state.model, state.ui, dispatcher);
 	    Annotations(
 	      state,
-	      document.querySelector('#Content').getBoundingClientRect().y,
+	      document.querySelector("#Content").getBoundingClientRect().y,
 	      dispatcher
 	    );
 	    Selection(
@@ -2191,7 +2199,7 @@
 	      () => store.getState().ui.selection
 	    );
 
-	    console.timeEnd('render');
+	    console.timeEnd("render");
 	  }
 	});
 
@@ -2201,9 +2209,9 @@
 	 * @param {HTMLElement|string} [parent = document.body]
 	 * @return {function} - a function with the same signature as `renderer`
 	 */
-	function renderInto(renderer, parent = document.body) {
-	  if ('function' !== typeof renderer) throw new TypeError();
-	  if ('string' === typeof parent) parent = document.querySelector(parent);
+	function renderInto(renderer, parent = document.body, ...middleware) {
+	  if ("function" !== typeof renderer) throw new TypeError();
+	  if ("string" === typeof parent) parent = document.querySelector(parent);
 	  if (!(parent instanceof HTMLElement)) throw new ReferenceError();
 
 	  /**
@@ -2223,11 +2231,11 @@
 	    NodeFilter.SHOW_ELEMENT,
 	    {
 	      acceptNode: node => {
-	        if ('function' === typeof node[onComponentDidMount]) {
+	        if ("function" === typeof node[onComponentDidMount]) {
 	          return NodeFilter.FILTER_ACCEPT;
 	        }
 	        return NodeFilter.FILTER_REJECT;
-	      },
+	      }
 	    },
 	    false
 	  );

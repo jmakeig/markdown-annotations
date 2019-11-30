@@ -1,4 +1,4 @@
-import { div } from 'dom-helper';
+import { div } from './dom-helper.js';
 import { onComponentDidMount } from './component.js';
 import { annotationByID } from './selectors.js';
 import { default as AnnotationHighlights } from './annotation-highlight.js';

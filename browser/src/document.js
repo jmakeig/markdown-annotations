@@ -1,4 +1,4 @@
-import { file } from 'dom-helper';
+import { file } from './dom-helper.js';
 import { documentLoad } from './actions.js';
 import Markdown from './markdown.js';
 

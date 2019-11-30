@@ -3,7 +3,7 @@ import {
   SELECTION_CANCEL,
   annotationCreate,
 } from './actions.js';
-import { div, button } from 'dom-helper';
+import { div, button } from './dom-helper.js';
 import { onComponentDidMount } from './component.js';
 
 let isInitialized = false;

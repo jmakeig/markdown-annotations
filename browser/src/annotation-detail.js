@@ -1,12 +1,12 @@
-import { div, button, textarea, br, toFragment, empty } from 'dom-helper';
-import { onComponentDidMount } from './component.js';
+import { div, button, textarea, br, empty } from "./dom-helper.js";
+import { onComponentDidMount } from "./component.js";
 import {
   editActiveAnnotation,
   cancelEditActiveAnnotation,
   saveAnnotation,
-  annotationSelect,
-} from './actions.js';
-import { default as User } from './user.js';
+  annotationSelect
+} from "./actions.js";
+import { default as User } from "./user.js";
 
 /**
  *
@@ -27,7 +27,7 @@ export default function render(
   if (!annotation) return empty();
 
   const props = {
-    classList: ['annotation-detail', isActive ? 'active' : undefined],
+    classList: ["annotation-detail", isActive ? "active" : undefined],
     dataset: { annotationId: annotation.id },
     style: { top: `${markers[annotation.id]}px` },
     tabIndex: 0,
@@ -41,50 +41,50 @@ export default function render(
     onkeypress: function(evt) {
       // console.log('this', this);
       // console.log('document.activeElement', document.activeElement, evt.target);
-      if ('Space' === evt.code && document.activeElement === this) {
+      if ("Space" === evt.code && document.activeElement === this) {
         evt.preventDefault();
         dispatch(annotationSelect(evt.currentTarget.dataset.annotationId));
         this.focus();
       } else {
-        console.log('nope');
+        console.log("nope");
       }
-    },
+    }
   };
-  const comm = { className: 'annotation-comment' };
+  const comm = { className: "annotation-comment" };
   const commentText = div(comm, toFormattedNodes(trim(annotation.comment)));
   if (isActive) {
-    const commentEl = textarea(comm, annotation.comment || '', {
-      oninput: evt => console.log('textarea#input'),
+    const commentEl = textarea(comm, annotation.comment || "", {
+      oninput: evt => console.log("textarea#input")
     });
 
     return div(
       props,
       div(
-        { className: 'annotation-toolbar' },
+        { className: "annotation-toolbar" },
         User(annotation.user),
         EditAffordance(annotation, isEditing, user, {
           dispatch,
-          getComment: () => commentEl.value,
+          getComment: () => commentEl.value
         })
       ),
       div(
-        { className: 'annotation-editor' },
+        { className: "annotation-editor" },
         isEditing ? commentEl : commentText,
         div(formatTimestamp(annotation.timestamp), {
-          className: 'annotation-timestamp',
-          dataset: { timestamp: annotation.timestamp },
+          className: "annotation-timestamp",
+          dataset: { timestamp: annotation.timestamp }
         })
       ),
       {
         [onComponentDidMount]: () => {
           if (isEditing) commentEl.focus();
-        },
+        }
       }
     );
   } else {
     return div(
       props,
-      { classList: 'collapsed' },
+      { classList: "collapsed" },
       User(annotation.user),
       commentText
     );
@@ -101,7 +101,7 @@ function removeLast(arr) {
 }
 
 function toFormattedNodes(str) {
-  if ('string' === typeof str) {
+  if ("string" === typeof str) {
     return removeLast(
       str.split(/\n/).reduce((acc, item, index) => [...acc, item, br()], [])
     );
@@ -109,8 +109,8 @@ function toFormattedNodes(str) {
   return str;
 }
 
-function trim(str, length = 100, trailer = '…') {
-  if ('string' === typeof str) {
+function trim(str, length = 100, trailer = "…") {
+  if ("string" === typeof str) {
     if (str.length > length) {
       return str.substr(0, length) + trailer;
     }
@@ -120,7 +120,7 @@ function trim(str, length = 100, trailer = '…') {
 
 function formatTimestamp(timestamp) {
   if (!timestamp) return timestamp;
-  if ('string' === typeof timestamp) timestamp = new Date(timestamp);
+  if ("string" === typeof timestamp) timestamp = new Date(timestamp);
   return timestamp.toLocaleString();
 }
 
@@ -139,24 +139,24 @@ function formatTimestamp(timestamp) {
 function EditAffordance(annotation, isEditing, user, { dispatch, getComment }) {
   return div(
     annotation.user === user && !isEditing
-      ? button('Edit', {
+      ? button("Edit", {
           onclick: evt => {
             dispatch(editActiveAnnotation());
             // evt.stopPropagation();
-          },
+          }
         })
       : empty(),
     isEditing
       ? [
-          button('Save', {
+          button("Save", {
             onclick: evt =>
-              dispatch(saveAnnotation(annotation.id, getComment())),
+              dispatch(saveAnnotation(annotation.id, getComment()))
           }),
-          button('Cancel', {
-            onclick: evt => dispatch(cancelEditActiveAnnotation()),
-          }),
+          button("Cancel", {
+            onclick: evt => dispatch(cancelEditActiveAnnotation())
+          })
         ]
       : empty(),
-    { className: 'controls' }
+    { className: "controls" }
   );
 }
